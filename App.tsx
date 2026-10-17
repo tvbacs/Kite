@@ -92,7 +92,7 @@ const GOOGLE_AUTH_USER_AGENT =
   Platform.OS === 'ios'
     ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
     : 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36';
-const MAX_ACTIVE_WEBVIEWS = 2; // Giữ tối đa 1 đến 2 WebView trong RAM để tránh Jetsam kill trên iOS
+const MAX_ACTIVE_WEBVIEWS = 8; // Giữ tối đa 8 WebView gần nhất trong RAM để không reload khi chuyển tab qua lại
 
 /**
  * Kiểm tra xem một URL có phải là OAuth Callback trả về từ Supabase không
@@ -306,7 +306,6 @@ function BrowserMain() {
     visible: boolean;
     url: string;
     fileName: string;
-    isDownloading?: boolean;
   } | null>(null);
   const [passwordSavePrompt, setPasswordSavePrompt] = useState<{
     visible: boolean;
@@ -1704,14 +1703,16 @@ function BrowserMain() {
     const target = tabs.find((t) => t.id === id);
     const now = Date.now();
 
-    // Cập nhật trạng thái: Đóng băng tab cũ (unmount) và kích hoạt tab mới
+    // Cập nhật trạng thái: Giữ tab cũ trong RAM (chỉ pause media nền) và kích hoạt tab mới
     setTabs((prev) => {
       const updated = prev.map((t) => {
         if (t.id === previousId) {
+          try {
+            webViewRefs.current[previousId]?.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+          } catch (e) {}
           return {
             ...t,
             snapshotUri: capturedSnapshot || t.snapshotUri,
-            isSleeping: true,
           };
         }
         if (t.id === id) {
@@ -1721,8 +1722,7 @@ function BrowserMain() {
             lastActiveAt: now,
           };
         }
-        // Giữ tối đa 1 đến 2 WebView trong RAM: mọi tab nền khác đều ở trạng thái ngủ
-        return { ...t, isSleeping: true };
+        return t;
       });
       persistTabsState(updated, id);
       return updated;
@@ -2504,16 +2504,55 @@ function BrowserMain() {
     const { downloadUrl } = nativeEvent;
     if (!downloadUrl) return;
 
-    let cleanName = downloadUrl.split('/').pop()?.split('?')[0] || `tep_${Date.now()}`;
+    let cleanName = '';
+    // 1. Tìm tên tệp trong query parameters (filename, file, title, name)
+    const paramMatch = downloadUrl.match(/[?&](?:filename|file|title|name)=([^&]+)/i);
+    if (paramMatch && paramMatch[1]) {
+      try {
+        cleanName = decodeURIComponent(paramMatch[1]);
+      } catch (e) {
+        cleanName = paramMatch[1];
+      }
+    }
+
+    // 2. Nếu URL chứa url lồng nhau (như proxy?url=https://.../video.mp4)
+    if (!cleanName || cleanName.toLowerCase() === 'proxy') {
+      const innerUrlMatch = downloadUrl.match(/[?&]url=([^&]+)/i);
+      if (innerUrlMatch && innerUrlMatch[1]) {
+        try {
+          const decodedInner = decodeURIComponent(innerUrlMatch[1]);
+          const innerName = decodedInner.split('/').pop()?.split('?')[0];
+          if (innerName && innerName.length > 2 && innerName.includes('.')) {
+            cleanName = innerName;
+          }
+        } catch (e) {}
+      }
+    }
+
+    // 3. Nếu vẫn chưa có, lấy từ đoạn cuối URL
+    if (!cleanName) {
+      cleanName = downloadUrl.split('/').pop()?.split('?')[0] || '';
+    }
+
     try {
       cleanName = decodeURIComponent(cleanName);
     } catch (e) {}
+
+    // 4. Nếu tên vô nghĩa (như 'proxy', 'download', 'index', hoặc không có đuôi)
+    const isGeneric = !cleanName || ['proxy', 'download', 'index', 'api', 'media', 'stream'].includes(cleanName.toLowerCase());
+    if (isGeneric || !cleanName.includes('.')) {
+      const pageTitle = (currentTab?.title || 'Tep_tai_ve')
+        .replace(/[/\\?%*:|"<>]/g, '_')
+        .replace(/\s+/g, '_')
+        .trim();
+      const ext = downloadUrl.toLowerCase().includes('mp3') ? 'mp3' : 'mp4';
+      cleanName = `${pageTitle}_${Date.now().toString().slice(-4)}.${ext}`;
+    }
 
     setDownloadPrompt({
       visible: true,
       url: downloadUrl,
       fileName: cleanName,
-      isDownloading: false,
     });
   };
 
@@ -2542,7 +2581,6 @@ function BrowserMain() {
       visible: true,
       url: media.url,
       fileName: cleanName,
-      isDownloading: false,
     });
   };
 
@@ -2621,16 +2659,58 @@ function BrowserMain() {
     }
   };
 
-  // Người dùng chọn: Chọn nơi lưu... (Mở hộp thoại Save to Files / Save Video của iOS)
+  // Người dùng chọn: Chọn nơi lưu... (Tải với thanh tiến trình gần thanh nav, sau đó mở hộp thoại Lưu tệp/Chia sẻ của iOS)
   const handleConfirmChooseLocation = async () => {
     if (!downloadPrompt) return;
-    const { url } = downloadPrompt;
-    setDownloadPrompt((prev) => (prev ? { ...prev, isDownloading: true } : null));
+    const { url, fileName } = downloadPrompt;
+    const taskId = `task-${Date.now()}`;
+    const cleanFileName = fileName || `file_${Date.now()}`;
+
+    // 1. Thêm ngay vào activeDownloads để thanh tiến trình xuất hiện gần thanh nav
+    const newTask: ActiveDownloadItem = {
+      id: taskId,
+      fileName: cleanFileName,
+      url,
+      progress: 0,
+      bytesWritten: 0,
+      totalBytes: 0,
+      status: 'downloading',
+    };
+    setActiveDownloads((prev) => [newTask, ...prev]);
+
+    // 2. Đóng hộp thoại DownloadPromptModal ngay lập tức, KHÔNG BAO GIỜ hiển thị modal che màn hình
+    setDownloadPrompt(null);
+    showToast(`Đang tải tệp: ${cleanFileName}`);
 
     try {
-      const downloadedFile = await File.downloadFileAsync(url, Paths.cache, { idempotent: true });
-      setDownloadPrompt(null);
+      const destination = new File(Paths.cache, cleanFileName);
+      const downloadedFile = await File.downloadFileAsync(url, destination, {
+        idempotent: true,
+        onProgress: (p) => {
+          setActiveDownloads((prev) =>
+            prev.map((item) => {
+              if (item.id !== taskId) return item;
+              const total = p.totalBytes > 0 ? p.totalBytes : 0;
+              const percent = total > 0 ? Math.round((p.bytesWritten / total) * 100) : 0;
+              return {
+                ...item,
+                bytesWritten: p.bytesWritten,
+                totalBytes: total,
+                progress: percent,
+              };
+            })
+          );
+        },
+      });
 
+      // 3. Xóa khỏi activeDownloads khi tải xong
+      setActiveDownloads((prev) => prev.filter((item) => item.id !== taskId));
+
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (e) {}
+
+      // 4. Mở ngay hộp thoại Lưu vào Tệp / Chia sẻ của iOS để người dùng chọn nơi lưu
       const canShare = await Sharing.isAvailableAsync();
       if (canShare && downloadedFile?.uri) {
         await Sharing.shareAsync(downloadedFile.uri);
@@ -2640,8 +2720,8 @@ function BrowserMain() {
         await Share.share({ url });
       }
     } catch (e) {
-      setDownloadPrompt(null);
-      showToast('Lỗi khi chuẩn bị tệp');
+      setActiveDownloads((prev) => prev.filter((item) => item.id !== taskId));
+      showToast(`Tải thất bại: ${cleanFileName}`);
     }
   };
 
@@ -3295,7 +3375,6 @@ function BrowserMain() {
           visible={downloadPrompt.visible}
           fileName={downloadPrompt.fileName}
           downloadUrl={downloadPrompt.url}
-          isDownloading={downloadPrompt.isDownloading}
           onSaveToKite={handleConfirmSaveToKite}
           onChooseLocation={handleConfirmChooseLocation}
           onCancel={() => setDownloadPrompt(null)}

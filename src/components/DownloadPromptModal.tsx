@@ -13,7 +13,6 @@ interface DownloadPromptModalProps {
   visible: boolean;
   fileName: string;
   downloadUrl: string;
-  isDownloading?: boolean;
   onSaveToKite: () => void;
   onChooseLocation: () => void;
   onCancel: () => void;
@@ -23,7 +22,6 @@ export const DownloadPromptModal: React.FC<DownloadPromptModalProps> = ({
   visible,
   fileName,
   downloadUrl,
-  isDownloading = false,
   onSaveToKite,
   onChooseLocation,
   onCancel,
@@ -55,12 +53,12 @@ export const DownloadPromptModal: React.FC<DownloadPromptModalProps> = ({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={isDownloading ? undefined : onCancel}
+      onRequestClose={onCancel}
     >
       <TouchableOpacity
         style={styles.backdrop}
         activeOpacity={1}
-        onPress={isDownloading ? undefined : onCancel}
+        onPress={onCancel}
       >
         <TouchableOpacity
           style={styles.card}
@@ -69,62 +67,46 @@ export const DownloadPromptModal: React.FC<DownloadPromptModalProps> = ({
         >
           {/* Biểu tượng loại tệp */}
           <View style={[styles.iconCircle, { backgroundColor: fileInfo.bg }]}>
-            {isDownloading ? (
-              <ActivityIndicator size="small" color="#007aff" />
-            ) : (
-              <Feather name={fileInfo.icon as any} size={26} color={fileInfo.color} />
-            )}
+            <Feather name={fileInfo.icon as any} size={26} color={fileInfo.color} />
           </View>
 
           {/* Tiêu đề & Tên tệp */}
-          <Text style={styles.title}>
-            {isDownloading ? 'Đang tải tệp xuống...' : 'Tải xuống tệp'}
-          </Text>
+          <Text style={styles.title}>Tải xuống tệp</Text>
           <Text style={styles.fileName} numberOfLines={2}>
             {fileName}
           </Text>
 
-          {isDownloading ? (
-            <View style={styles.loadingBox}>
-              <Text style={styles.loadingSub}>
-                Vui lòng đợi trong giây lát, tệp đang được tải về...
-              </Text>
-            </View>
-          ) : (
-            <>
-              {/* Các nút lựa chọn nơi lưu */}
-              <View style={styles.buttonCol}>
-                {/* 1. Lưu vào Kite */}
-                <TouchableOpacity
-                  style={styles.primaryBtn}
-                  onPress={onSaveToKite}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="folder" size={17} color="#ffffff" style={{ marginRight: 8 }} />
-                  <Text style={styles.primaryBtnText}>Lưu vào Kite (Tệp đã tải)</Text>
-                </TouchableOpacity>
+          {/* Các nút lựa chọn nơi lưu */}
+          <View style={styles.buttonCol}>
+            {/* 1. Lưu vào Kite */}
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={onSaveToKite}
+              activeOpacity={0.8}
+            >
+              <Feather name="folder" size={17} color="#ffffff" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryBtnText}>Lưu vào Kite (Tệp đã tải)</Text>
+            </TouchableOpacity>
 
-                {/* 2. Chọn nơi lưu (Mở hộp thoại Lưu vào Tệp / Lưu Video / Chia sẻ của iOS) */}
-                <TouchableOpacity
-                  style={styles.secondaryBtn}
-                  onPress={onChooseLocation}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="share" size={17} color="#007aff" style={{ marginRight: 8 }} />
-                  <Text style={styles.secondaryBtnText}>Chọn nơi lưu... (Lưu vào Tệp / Ảnh)</Text>
-                </TouchableOpacity>
+            {/* 2. Chọn nơi lưu (Nút màu xám tinh tế, không còn dấu ngoặc đơn) */}
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={onChooseLocation}
+              activeOpacity={0.7}
+            >
+              <Feather name="share" size={17} color="#52525b" style={{ marginRight: 8 }} />
+              <Text style={styles.secondaryBtnText}>Chọn nơi lưu...</Text>
+            </TouchableOpacity>
 
-                {/* 3. Nút Hủy */}
-                <TouchableOpacity
-                  style={styles.cancelBtn}
-                  onPress={onCancel}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.cancelBtnText}>Hủy bỏ</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
+            {/* 3. Nút Hủy */}
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={onCancel}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelBtnText}>Hủy bỏ</Text>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -206,17 +188,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f0f6ff',
+    backgroundColor: '#f4f4f5',
     borderRadius: 14,
     paddingVertical: 13,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#dbeafe',
+    borderColor: '#e4e4e7',
   },
   secondaryBtnText: {
     fontSize: 14.5,
     fontWeight: '600',
-    color: '#007aff',
+    color: '#18181b',
   },
   cancelBtn: {
     paddingVertical: 10,
