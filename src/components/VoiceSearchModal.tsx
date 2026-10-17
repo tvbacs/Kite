@@ -317,9 +317,8 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
     }
 
     // 4. Nếu là iOS trong Expo Go (chưa compile custom native module):
-    // Tự động focus ô nhập liệu và hướng dẫn bấm Micro trên bàn phím iPhone
+    // Tự động focus ô nhập liệu
     inputRef.current?.focus();
-    setErrorMessage('💡 Bàn phím đã mở! Hãy chạm vào biểu tượng Micro 🎙️ ở góc bàn phím iPhone để nói.');
   };
 
   const handleExecuteSearch = (query: string) => {
@@ -376,30 +375,30 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
                   <Text style={styles.errorText}>{errorMessage}</Text>
                 ) : null}
 
-                {/* Sóng âm 4 màu Google sinh động */}
+                {/* Sóng âm tối giản trắng/xám */}
                 <View style={styles.soundWaveRow}>
                   <Animated.View
                     style={[
                       styles.soundDot,
-                      { backgroundColor: '#4285F4', transform: [{ translateY: dotAnim1 }] },
+                      { backgroundColor: '#ffffff', transform: [{ translateY: dotAnim1 }] },
                     ]}
                   />
                   <Animated.View
                     style={[
                       styles.soundDot,
-                      { backgroundColor: '#EA4335', transform: [{ translateY: dotAnim2 }] },
+                      { backgroundColor: '#e4e4e7', transform: [{ translateY: dotAnim2 }] },
                     ]}
                   />
                   <Animated.View
                     style={[
                       styles.soundDot,
-                      { backgroundColor: '#FBBC05', transform: [{ translateY: dotAnim3 }] },
+                      { backgroundColor: '#a1a1aa', transform: [{ translateY: dotAnim3 }] },
                     ]}
                   />
                   <Animated.View
                     style={[
                       styles.soundDot,
-                      { backgroundColor: '#34A853', transform: [{ translateY: dotAnim4 }] },
+                      { backgroundColor: '#71717a', transform: [{ translateY: dotAnim4 }] },
                     ]}
                   />
                 </View>
@@ -427,48 +426,6 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
                   </TouchableOpacity>
                 </View>
 
-                {/* Nút mở nhanh Google Voice Search chuẩn xác 100% trên Android */}
-                {Platform.OS === 'android' && (
-                  <TouchableOpacity
-                    style={styles.googleVoiceDirectBtn}
-                    onPress={launchGoogleSpeechIntent}
-                    activeOpacity={0.75}
-                  >
-                    <MaterialCommunityIcons
-                      name="google"
-                      size={16}
-                      color="#4285F4"
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={styles.googleVoiceDirectText}>
-                      Chạm để mở hộp thoại Google Voice
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
-                {/* Nút mở bàn phím & bấm micro trực tiếp trên iPhone */}
-                {!SpeechModule && Platform.OS === 'ios' && (
-                  <TouchableOpacity
-                    style={styles.iosDirectVoiceBtn}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      inputRef.current?.focus();
-                      setErrorMessage('💡 Chạm vào biểu tượng Micro 🎙️ ở góc bàn phím iPhone để nói.');
-                    }}
-                    activeOpacity={0.75}
-                  >
-                    <MaterialCommunityIcons
-                      name="microphone"
-                      size={16}
-                      color="#38bdf8"
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={styles.iosDirectVoiceText}>
-                      Chạm để mở bàn phím & bấm Micro 🎙️ để nói
-                    </Text>
-                  </TouchableOpacity>
-                )}
-
                 {/* Nếu đã có kết quả nhận diện, hiển thị nút Tìm kiếm ngay */}
                 {transcript.trim().length > 0 ? (
                   <TouchableOpacity
@@ -476,7 +433,7 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
                     onPress={() => handleExecuteSearch(transcript)}
                     activeOpacity={0.8}
                   >
-                    <Feather name="search" size={17} color="#ffffff" style={{ marginRight: 8 }} />
+                    <Feather name="search" size={17} color="#18181b" style={{ marginRight: 8 }} />
                     <Text style={styles.searchNowBtnText}>Tìm "{transcript}" ngay</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -498,17 +455,13 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
                   </View>
                 </View>
 
-                {/* Hộp nhập từ khóa trực tiếp / nhận diện qua bàn phím iOS */}
+                {/* Hộp nhập từ khóa trực tiếp */}
                 <View style={styles.simulationBanner}>
                   <View style={styles.simInputRow}>
                     <TextInput
                       ref={inputRef}
                       style={styles.simInput}
-                      placeholder={
-                        Platform.OS === 'ios'
-                          ? 'Chạm & bấm Micro 🎙️ trên bàn phím để nói...'
-                          : 'Hoặc gõ nhanh từ khóa tìm kiếm...'
-                      }
+                      placeholder="Nhập từ khóa tìm kiếm..."
                       placeholderTextColor="#71717a"
                       value={transcript}
                       onChangeText={setTranscript}
@@ -595,7 +548,7 @@ const styles = StyleSheet.create({
   transcriptText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#93c5fd',
+    color: '#ffffff',
     textAlign: 'center',
     lineHeight: 25,
   },
@@ -607,7 +560,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 13,
-    color: '#f87171',
+    color: '#a1a1aa',
     marginBottom: 10,
     textAlign: 'center',
     paddingHorizontal: 16,
@@ -638,16 +591,16 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#3b82f6',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   micBigBtn: {
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: '#374151',
+    backgroundColor: '#27272a',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#3b82f6',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
@@ -656,52 +609,20 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   micBigBtnActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#60a5fa',
-  },
-  googleVoiceDirectBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(66, 133, 244, 0.12)',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(66, 133, 244, 0.3)',
-    marginBottom: 14,
-  },
-  googleVoiceDirectText: {
-    color: '#93c5fd',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  iosDirectVoiceBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)',
-    marginBottom: 14,
-  },
-  iosDirectVoiceText: {
-    color: '#7dd3fc',
-    fontSize: 12,
-    fontWeight: '600',
+    backgroundColor: '#3f3f46',
+    borderColor: '#ffffff',
   },
   searchNowBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0284c7',
+    backgroundColor: '#ffffff',
     paddingHorizontal: 22,
     paddingVertical: 10,
     borderRadius: 22,
     marginBottom: 14,
   },
   searchNowBtnText: {
-    color: '#ffffff',
+    color: '#18181b',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -763,7 +684,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#27272a',
     alignItems: 'center',
     justifyContent: 'center',
   },
