@@ -325,8 +325,8 @@ export const TabSheet: React.FC<TabSheetProps> = ({
                       </TouchableOpacity>
                     </View>
 
-                    {/* Vùng xem trước nội dung thẻ: Hiển thị ảnh snapshot tĩnh dạng Image, KHÔNG render mini WebView */}
-                    {tab.snapshotUri ? (
+                    {/* Vùng xem trước nội dung thẻ: Chỉ hiển thị ảnh snapshot khi tab thực sự có URL trang web */}
+                    {Boolean(tab.snapshotUri && tab.url && tab.url.trim().length > 0) ? (
                       <View style={styles.cardSnapshotContainer}>
                         <Image
                           source={{ uri: tab.snapshotUri }}
@@ -675,11 +675,11 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   activeTabCard: {
-    borderWidth: 1.8,
-    borderColor: '#09090b',
-    shadowColor: '#000000',
+    borderWidth: 2,
+    borderColor: '#007aff',
+    shadowColor: '#007aff',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.18,
     shadowRadius: 8,
     elevation: 4,
   },
@@ -687,7 +687,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#09090b',
+    backgroundColor: '#007aff',
     marginRight: 6,
   },
   sleepingBadge: {

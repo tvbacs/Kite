@@ -43,6 +43,9 @@ export async function getGoogleOAuthUrl(): Promise<string | null> {
       options: {
         redirectTo: 'kite://auth-callback',
         skipBrowserRedirect: true,
+        queryParams: {
+          prompt: 'select_account',
+        },
       },
     });
     if (error || !data?.url) {

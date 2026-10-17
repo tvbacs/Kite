@@ -46,6 +46,7 @@ interface BrowserMenuSheetProps {
   onToggleKeepAwake?: () => void;
   isDataSaverActive?: boolean;
   onToggleDataSaver?: () => void;
+  isIncognito?: boolean;
 }
 
 export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
@@ -58,6 +59,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   isDesktop,
   isBookmarked,
   onToggleBookmark,
+  isIncognito = false,
   onToggleDesktop,
   onReload,
   onShare,
@@ -368,20 +370,24 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
 
               <View style={styles.horizontalDivider} />
 
-              {/* 9. LỊCH SỬ DUYỆT WEB */}
-              <TouchableOpacity
-                style={styles.menuRow}
-                onPress={() => {
-                  onClose();
-                  onOpenHistory();
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.menuTitle}>Lịch sử duyệt web</Text>
-                <Feather name="clock" size={20} color="#27272a" />
-              </TouchableOpacity>
+              {/* 9. LỊCH SỬ DUYỆT WEB - ẨN KHI Ở ẨN DANH */}
+              {!isIncognito && (
+                <>
+                  <TouchableOpacity
+                    style={styles.menuRow}
+                    onPress={() => {
+                      onClose();
+                      onOpenHistory();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.menuTitle}>Lịch sử duyệt web</Text>
+                    <Feather name="clock" size={20} color="#27272a" />
+                  </TouchableOpacity>
 
-              <View style={styles.horizontalDivider} />
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
 
               {/* 10. KHIÊN KITE SHIELD */}
               <TouchableOpacity

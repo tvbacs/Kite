@@ -964,12 +964,14 @@ function BrowserMain() {
     scheduleProcessPooling(newId);
   };
 
-  // Đóng tab và giải phóng bộ nhớ webView tương ứng
+  // Đóng tab và giải phóng bộ nhớ webView tương ứng (đảm bảo không bao giờ nhảy lộn xộn giữa tab thường và ẩn danh)
   const handleCloseTab = (id: string) => {
     delete webViewRefs.current[id];
 
     // Lưu lại thẻ vừa đóng vào danh sách có thể khôi phục
     const closingTab = tabs.find((t) => t.id === id);
+    const isClosingIncognito = Boolean(closingTab?.isIncognito);
+
     if (closingTab && closingTab.url && !closingTab.isIncognito) {
       closedTabsRef.current.push({ ...closingTab });
       if (closedTabsRef.current.length > 25) {
@@ -977,50 +979,79 @@ function BrowserMain() {
       }
     }
 
-    // Nếu chỉ còn 1 tab duy nhất: Xoá tab đó và mở ngay màn hình tab mới
-    if (tabs.length <= 1) {
-      Keyboard.dismiss();
-      const newId = `tab-${Date.now()}`;
-      const newTabObj: BrowserTab = {
-        id: newId,
-        url: '',
-        title: 'Trang mới',
-        lastActiveAt: Date.now(),
-        isSleeping: false,
-      };
-      setTabs([newTabObj]);
-      persistTabsState([newTabObj]);
-      setActiveTabId(newId);
-      setInputUrl('');
-      setIsIncognito(false);
-      setIsEditing(false);
-      setIsLoading(false);
-      setStats((prev) => ({
-        ...prev,
-        blockedAds: 0,
-        blockedPopups: 0,
-        blockedOverlays: 0,
-      }));
-      setTabSheetVisible(false); // Mở ngay màn hình tab mới
-      showToast('Đã làm mới sang trang mới');
+    const remaining = tabs.filter((t) => t.id !== id);
+    const remainingSameMode = remaining.filter(
+      (t) => Boolean(t.isIncognito) === isClosingIncognito
+    );
+
+    // Trường hợp 1: Không còn tab nào thuộc cùng chế độ này
+    if (remainingSameMode.length === 0) {
+      if (isClosingIncognito) {
+        // Đóng tab ẩn danh cuối cùng -> Danh sách ẩn danh giờ trống rỗng
+        const remainingNormal = remaining.filter((t) => !t.isIncognito);
+        if (remainingNormal.length > 0) {
+          const nextActive = remainingNormal[remainingNormal.length - 1];
+          setTabs(remaining);
+          persistTabsState(remaining, nextActive.id);
+          setActiveTabId(nextActive.id);
+          setInputUrl(nextActive.url);
+          setIsIncognito(false);
+        } else {
+          const newNormalId = `tab-${Date.now()}`;
+          const newTabObj: BrowserTab = {
+            id: newNormalId,
+            url: '',
+            title: 'Trang mới',
+            lastActiveAt: Date.now(),
+            isSleeping: false,
+            isIncognito: false,
+          };
+          setTabs([newTabObj]);
+          persistTabsState([newTabObj], newNormalId);
+          setActiveTabId(newNormalId);
+          setInputUrl('');
+          setIsIncognito(false);
+        }
+      } else {
+        // Đóng tab thường cuối cùng (trong khi vẫn có thể còn tab ẩn danh)
+        // TUYỆT ĐỐI KHÔNG nhảy sang tab ẩn danh! Tạo ngay tab thường mới:
+        const newNormalId = `tab-${Date.now()}`;
+        const newTabObj: BrowserTab = {
+          id: newNormalId,
+          url: '',
+          title: 'Trang mới',
+          lastActiveAt: Date.now(),
+          isSleeping: false,
+          isIncognito: false,
+        };
+        const updatedTabs = [...remaining, newTabObj];
+        setTabs(updatedTabs);
+        persistTabsState(updatedTabs, newNormalId);
+        setActiveTabId(newNormalId);
+        setInputUrl('');
+        setIsIncognito(false);
+      }
       return;
     }
 
-    const remaining = tabs.filter((t) => t.id !== id);
+    // Trường hợp 2: Vẫn còn tab cùng chế độ
     let nextActiveId = activeTabId;
     if (activeTabId === id) {
-      const nextActive = remaining[remaining.length - 1];
+      // Chỉ chọn tab tiếp theo TRONG CÙNG CHẾ ĐỘ
+      const nextActive = remainingSameMode[remainingSameMode.length - 1];
       nextActiveId = nextActive.id;
       setActiveTabId(nextActive.id);
       setInputUrl(nextActive.url);
-      setIsIncognito(!!nextActive.isIncognito);
+      setIsIncognito(isClosingIncognito);
       if (nextActive.isSleeping) {
         setTabs((prev) => {
-          const updated = prev.map((t) =>
-            t.id === nextActive.id
-              ? { ...t, isSleeping: false, lastActiveAt: Date.now() }
-              : t
-          );
+          const updated = prev
+            .filter((t) => t.id !== id)
+            .map((t) =>
+              t.id === nextActive.id
+                ? { ...t, isSleeping: false, lastActiveAt: Date.now() }
+                : t
+            );
           persistTabsState(updated, nextActiveId);
           return updated;
         });
@@ -1029,6 +1060,7 @@ function BrowserMain() {
       }
       scheduleProcessPooling(nextActive.id);
     }
+
     setTabs(remaining);
     persistTabsState(remaining, nextActiveId);
   };
@@ -2423,12 +2455,29 @@ function BrowserMain() {
                               setUserProfile(profile);
                               AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
                               upsertCloudProfile(profile.email || 'user', profile);
+                              // CỘNG DỒN TÀI KHOẢN MỚI VÀO DANH SÁCH ĐÃ ĐĂNG NHẬP
+                              AsyncStorage.getItem('@kite_saved_accounts').then((res) => {
+                                let list: UserProfile[] = [];
+                                if (res) {
+                                  try { list = JSON.parse(res); } catch (e) {}
+                                }
+                                if (!Array.isArray(list)) list = [];
+                                const existingIdx = list.findIndex(
+                                  (a) => a.email && profile.email && a.email.toLowerCase() === profile.email.toLowerCase()
+                                );
+                                if (existingIdx !== -1) {
+                                  list[existingIdx] = profile;
+                                } else {
+                                  list.push(profile);
+                                }
+                                AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
+                              });
                               showToast(`Đăng nhập Google thành công! (${profile.name})`);
                             }
                           });
                         }
                         setTabs((prev) =>
-                          prev.map((t) => (t.id === tab.id ? { ...t, url: '', title: 'Trang mới' } : t))
+                          prev.map((t) => (t.id === tab.id ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t))
                         );
                         setInputUrl('');
                       }
@@ -2615,6 +2664,7 @@ function BrowserMain() {
         onChangeEngine={handleChangeEngine}
         isDesktop={currentTab?.isDesktop}
         isBookmarked={isCurrentBookmarked}
+        isIncognito={isCurrentIncognito}
         onToggleBookmark={() =>
           handleToggleBookmarkCurrentPage(activeUrl, currentTab?.title)
         }

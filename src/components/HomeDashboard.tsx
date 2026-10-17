@@ -551,6 +551,28 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     }
   }, [propUserProfile]);
 
+  useEffect(() => {
+    if (userModalVisible) {
+      loadSavedData();
+    }
+  }, [userModalVisible]);
+
+  // Tổng hợp tất cả các tài khoản đã đăng nhập tích luỹ
+  const allAccounts: UserProfile[] = React.useMemo(() => {
+    const list = [...savedAccounts];
+    if (userProfile.isLoggedIn && userProfile.email) {
+      const idx = list.findIndex(
+        (a) => a.email?.toLowerCase() === userProfile.email?.toLowerCase()
+      );
+      if (idx === -1) {
+        list.unshift(userProfile);
+      } else {
+        list[idx] = { ...list[idx], ...userProfile };
+      }
+    }
+    return list;
+  }, [savedAccounts, userProfile]);
+
   const isRealGooglePhoto = (url?: string) => {
     if (!url) return false;
     return (
@@ -690,6 +712,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 avatarUrl: isRealGooglePhoto(parsed.avatarUrl) ? parsed.avatarUrl : '',
               };
               setUserProfile(cleanUser);
+              setSavedAccounts((prev) => {
+                if (cleanUser.email && !prev.some((a) => a.email?.toLowerCase() === cleanUser.email?.toLowerCase())) {
+                  const updatedList = [cleanUser, ...prev];
+                  AsyncStorage.setItem(STORAGE_SAVED_ACCOUNTS_KEY, JSON.stringify(updatedList)).catch(() => {});
+                  return updatedList;
+                }
+                return prev;
+              });
             }
           } else {
             setUserProfile({ isLoggedIn: false, name: '', email: '', avatarUrl: '' });
@@ -865,18 +895,39 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const handleLogout = async () => {
-    const reset: UserProfile = { isLoggedIn: false, name: '', email: '', avatarUrl: '' };
-    setUserProfile(reset);
-    setSavedAccounts([]);
-    await AsyncStorage.removeItem(STORAGE_USER_KEY);
-    await AsyncStorage.removeItem(STORAGE_SAVED_ACCOUNTS_KEY);
-    if (onUpdateProfile) onUpdateProfile(reset);
-    setUserModalVisible(false);
-    if (onShowToast) {
-      onShowToast('Đã đăng xuất thành công');
+    // Xóa tài khoản hiện tại khỏi danh sách tài khoản đã lưu
+    const remaining = savedAccounts.filter(
+      (a) => a.email?.toLowerCase() !== userProfile.email?.toLowerCase()
+    );
+    setSavedAccounts(remaining);
+    await AsyncStorage.setItem(STORAGE_SAVED_ACCOUNTS_KEY, JSON.stringify(remaining));
+
+    if (remaining.length > 0) {
+      // Chuyển sang tài khoản kế tiếp trong danh sách
+      const nextAcc = remaining[0];
+      const nextUser: UserProfile = {
+        isLoggedIn: true,
+        name: nextAcc.name,
+        email: nextAcc.email,
+        avatarUrl: nextAcc.avatarUrl || '',
+      };
+      setUserProfile(nextUser);
+      await AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(nextUser));
+      if (onUpdateProfile) onUpdateProfile(nextUser);
+      if (onShowToast) {
+        onShowToast(`Đã chuyển sang: ${nextAcc.name || nextAcc.email}`);
+      }
+    } else {
+      const reset: UserProfile = { isLoggedIn: false, name: '', email: '', avatarUrl: '' };
+      setUserProfile(reset);
+      await AsyncStorage.removeItem(STORAGE_USER_KEY);
+      if (onUpdateProfile) onUpdateProfile(reset);
+      if (onShowToast) {
+        onShowToast('Đã đăng xuất tài khoản');
+      }
+      onSelectUrl('https://accounts.google.com/Logout');
     }
-    // Hủy phiên đăng nhập trên trang web Google
-    onSelectUrl('https://accounts.google.com/Logout');
+    setUserModalVisible(false);
   };
 
   const getFaviconUrl = (url: string) => {
@@ -1582,56 +1633,60 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             <View style={styles.sheetDragHandle} />
 
             <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: Dimensions.get('window').height * 0.72 }}>
-              {/* MỤC 1: CHỦ ĐỀ & MÀU SẮC (THEME) */}
-              <Text style={styles.sheetSubHeader}>Chủ đề & Màu sắc</Text>
+              {/* MỤC 1: CHỦ ĐỀ & MÀU SẮC (THEME) - ẨN KHI Ở ẨN DANH */}
+              {!isIncognito && (
+                <>
+                  <Text style={styles.sheetSubHeader}>Chủ đề & Màu sắc</Text>
 
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.themeScrollContainer}
-              >
-                {Object.values(THEME_PALETTES).map((pal) => {
-                  const isSelected = pal.id === currentThemeId;
-                  return (
-                    <TouchableOpacity
-                      key={pal.id}
-                      style={[
-                        styles.themeCardItem,
-                        isSelected && [styles.themeCardItemSelected, { borderColor: pal.accent }],
-                      ]}
-                      onPress={() => handleSelectTheme(pal.id)}
-                      activeOpacity={0.75}
-                    >
-                      {/* Hộp xem trước màu sắc */}
-                      <View style={[styles.themePreviewBox, { backgroundColor: pal.previewBg }]}>
-                        <View
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.themeScrollContainer}
+                  >
+                    {Object.values(THEME_PALETTES).map((pal) => {
+                      const isSelected = pal.id === currentThemeId;
+                      return (
+                        <TouchableOpacity
+                          key={pal.id}
                           style={[
-                            styles.themePreviewInnerCard,
-                            { backgroundColor: pal.previewCard },
+                            styles.themeCardItem,
+                            isSelected && [styles.themeCardItemSelected, { borderColor: pal.accent }],
                           ]}
+                          onPress={() => handleSelectTheme(pal.id)}
+                          activeOpacity={0.75}
                         >
-                          {isSelected && (
-                            <Feather name="check" size={14} color={pal.accent} />
-                          )}
-                        </View>
-                      </View>
-                      <Text
-                        style={[
-                          styles.themeItemName,
-                          isSelected && { color: pal.accent, fontWeight: '700' },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {pal.name}
-                      </Text>
-                      <Text style={styles.themeItemTag}>{pal.tag}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                          {/* Hộp xem trước màu sắc */}
+                          <View style={[styles.themePreviewBox, { backgroundColor: pal.previewBg }]}>
+                            <View
+                              style={[
+                                styles.themePreviewInnerCard,
+                                { backgroundColor: pal.previewCard },
+                              ]}
+                            >
+                              {isSelected && (
+                                <Feather name="check" size={14} color={pal.accent} />
+                              )}
+                            </View>
+                          </View>
+                          <Text
+                            style={[
+                              styles.themeItemName,
+                              isSelected && { color: pal.accent, fontWeight: '700' },
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {pal.name}
+                          </Text>
+                          <Text style={styles.themeItemTag}>{pal.tag}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </>
+              )}
 
               {/* MỤC 2: CÔNG CỤ TÌM KIẾM (GRID 2x2 TIẾT KIỆM KHÔNG GIAN) */}
-              <Text style={[styles.sheetSubHeader, { marginTop: 14 }]}>Công cụ tìm kiếm</Text>
+              <Text style={[styles.sheetSubHeader, !isIncognito && { marginTop: 14 }]}>Công cụ tìm kiếm</Text>
               <View style={styles.engineGridContainer}>
                 {Object.values(SEARCH_ENGINES).map((eng) => {
                   const isSelected = eng.id === currentEngineId;
@@ -1663,39 +1718,45 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               </View>
 
               {/* MỤC 3: HÌNH NỀN & BẢO MẬT (ĐỒNG BỘ THEO PHONG CÁCH BROWSER MENU SHEET) */}
-              <Text style={[styles.sheetSubHeader, { marginTop: 14 }]}>Tùy chọn & Bảo mật</Text>
+              <Text style={[styles.sheetSubHeader, { marginTop: 14 }]}>
+                {isIncognito ? 'Bảo mật & Tiện ích' : 'Tùy chọn & Bảo mật'}
+              </Text>
               <View style={styles.groupedOptionContainer}>
-                {/* 1. Hình nền trang chủ */}
-                <TouchableOpacity
-                  style={styles.groupedOptionRow}
-                  onPress={() => {
-                    handlePickBgImage();
-                    setEngineModalVisible(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.bgOptionTitle}>Hình nền trang chủ</Text>
-                  <Feather name="image" size={20} color={theme.colors.grayDark} />
-                </TouchableOpacity>
-
-                {bgImage && (
+                {/* 1. Hình nền trang chủ - ẨN KHI Ở ẨN DANH */}
+                {!isIncognito && (
                   <>
-                    <View style={styles.horizontalDivider} />
                     <TouchableOpacity
                       style={styles.groupedOptionRow}
                       onPress={() => {
-                        handleResetBg();
+                        handlePickBgImage();
                         setEngineModalVisible(false);
                       }}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.bgOptionTitle}>Xóa hình nền hiện tại</Text>
-                      <Feather name="trash-2" size={20} color={theme.colors.grayDark} />
+                      <Text style={styles.bgOptionTitle}>Hình nền trang chủ</Text>
+                      <Feather name="image" size={20} color={theme.colors.grayDark} />
                     </TouchableOpacity>
+
+                    {bgImage && (
+                      <>
+                        <View style={styles.horizontalDivider} />
+                        <TouchableOpacity
+                          style={styles.groupedOptionRow}
+                          onPress={() => {
+                            handleResetBg();
+                            setEngineModalVisible(false);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={styles.bgOptionTitle}>Xóa hình nền hiện tại</Text>
+                          <Feather name="trash-2" size={20} color={theme.colors.grayDark} />
+                        </TouchableOpacity>
+                      </>
+                    )}
+
+                    <View style={styles.horizontalDivider} />
                   </>
                 )}
-
-                <View style={styles.horizontalDivider} />
 
                 {/* 2. Mã PIN bảo mật thẻ ẩn danh */}
                 <TouchableOpacity
@@ -1786,8 +1847,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   </>
                 )}
 
-                {/* 7. Lịch sử duyệt web */}
-                {onOpenHistory && (
+                {/* 7. Lịch sử duyệt web - ẨN KHI Ở ẨN DANH */}
+                {!isIncognito && onOpenHistory && (
                   <>
                     <View style={styles.horizontalDivider} />
                     <TouchableOpacity
@@ -1920,79 +1981,104 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
             {/* Khung màu trắng bo tròn chứa danh sách tài khoản hoặc nút đăng nhập */}
             <View style={styles.accountListCard}>
-              {savedAccounts.length > 0 && (
+              {allAccounts.length > 0 && (
                 <ScrollView
                   style={{ maxHeight: 260 }}
                   showsVerticalScrollIndicator={false}
                   bounces={false}
                 >
-                  {savedAccounts
-                    .filter(
-                      (acc) =>
-                        !userProfile.email ||
-                        acc.email?.toLowerCase() !== userProfile.email?.toLowerCase()
-                    )
-                    .map((acc, index, arr) => {
-                      const isEdu =
-                        acc.email?.includes('.edu.') ||
-                        acc.email?.includes('@vku.udn.vn');
-                      return (
-                        <View key={acc.email || `acc-${index}`}>
-                          <TouchableOpacity
-                            style={styles.accountRowItem}
-                            onPress={() => handleSelectAccount(acc)}
-                            activeOpacity={0.65}
-                          >
-                            <View style={styles.accountRowAvatarBox}>
-                              {acc.avatarUrl && isRealGooglePhoto(acc.avatarUrl) ? (
-                                <Image
-                                  source={{ uri: acc.avatarUrl }}
-                                  style={styles.accountRowAvatarImg}
-                                  resizeMode="cover"
-                                />
-                              ) : (
-                                <View
-                                  style={[
-                                    styles.accountRowAvatarFallback,
-                                    { backgroundColor: getAvatarBgColor(acc.email, acc.name) },
-                                  ]}
-                                >
-                                  <Text style={styles.accountRowAvatarLetter}>
-                                    {getLetterForUser(acc.email, acc.name)}
-                                  </Text>
+                  {allAccounts.map((acc, index, arr) => {
+                    const isActive =
+                      userProfile.isLoggedIn &&
+                      userProfile.email?.toLowerCase() === acc.email?.toLowerCase();
+                    const isEdu =
+                      acc.email?.includes('.edu.') ||
+                      acc.email?.includes('@vku.udn.vn');
+
+                    return (
+                      <View key={acc.email || `acc-${index}`}>
+                        <TouchableOpacity
+                          style={[
+                            styles.accountRowItem,
+                            isActive && { backgroundColor: 'rgba(0, 122, 255, 0.05)' },
+                          ]}
+                          onPress={() => {
+                            if (!isActive) {
+                              handleSelectAccount(acc);
+                            }
+                          }}
+                          activeOpacity={isActive ? 1 : 0.65}
+                        >
+                          <View style={styles.accountRowAvatarBox}>
+                            {acc.avatarUrl && isRealGooglePhoto(acc.avatarUrl) ? (
+                              <Image
+                                source={{ uri: acc.avatarUrl }}
+                                style={styles.accountRowAvatarImg}
+                                resizeMode="cover"
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.accountRowAvatarFallback,
+                                  { backgroundColor: getAvatarBgColor(acc.email, acc.name) },
+                                ]}
+                              >
+                                <Text style={styles.accountRowAvatarLetter}>
+                                  {getLetterForUser(acc.email, acc.name)}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+
+                          <View style={styles.accountRowInfo}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Text
+                                style={[
+                                  styles.accountRowName,
+                                  isActive && { color: '#007aff', fontWeight: '700' },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {acc.name || acc.email?.split('@')[0]}
+                              </Text>
+                              {isActive && (
+                                <View style={styles.activeTagBadge}>
+                                  <Text style={styles.activeTagBadgeText}>Đang dùng</Text>
                                 </View>
                               )}
                             </View>
+                            <Text style={styles.accountRowEmail} numberOfLines={1}>
+                              {acc.email}
+                            </Text>
+                          </View>
 
-                            <View style={styles.accountRowInfo}>
-                              <Text style={styles.accountRowName} numberOfLines={1}>
-                                {acc.name || acc.email?.split('@')[0]}
-                              </Text>
-                              <Text style={styles.accountRowEmail} numberOfLines={1}>
-                                {acc.email}
-                              </Text>
-                            </View>
+                          {isActive ? (
+                            <Feather
+                              name="check"
+                              size={18}
+                              color="#007aff"
+                              style={{ marginLeft: 8 }}
+                            />
+                          ) : isEdu ? (
+                            <Feather
+                              name="briefcase"
+                              size={16}
+                              color="#8e8e93"
+                              style={{ marginLeft: 8 }}
+                            />
+                          ) : null}
+                        </TouchableOpacity>
 
-                            {isEdu && (
-                              <Feather
-                                name="briefcase"
-                                size={16}
-                                color="#8e8e93"
-                                style={{ marginLeft: 8 }}
-                              />
-                            )}
-                          </TouchableOpacity>
-
-                          {index < arr.length - 1 && (
-                            <View style={styles.accountRowDivider} />
-                          )}
-                        </View>
-                      );
-                    })}
+                        {index < arr.length - 1 && (
+                          <View style={styles.accountRowDivider} />
+                        )}
+                      </View>
+                    );
+                  })}
                 </ScrollView>
               )}
 
-              {savedAccounts.length > 0 && <View style={styles.accountCardFullDivider} />}
+              {allAccounts.length > 0 && <View style={styles.accountCardFullDivider} />}
 
               {/* Nút Đăng nhập hoặc Thêm tài khoản */}
               <TouchableOpacity
@@ -2007,14 +2093,17 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     }
                   } catch (e) {}
                   onSelectUrl(
-                    'https://ivwnjrugslrvsxssufco.supabase.co/auth/v1/authorize?provider=google&redirect_to=kite%3A%2F%2Fauth-callback'
+                    'https://ivwnjrugslrvsxssufco.supabase.co/auth/v1/authorize?provider=google&redirect_to=kite%3A%2F%2Fauth-callback&prompt=select_account'
                   );
                 }}
                 activeOpacity={0.6}
               >
-                <Text style={styles.addAccountText}>
-                  {userProfile.isLoggedIn ? 'Thêm tài khoản...' : 'Đăng nhập với Google'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Feather name="user-plus" size={17} color="#007aff" style={{ marginRight: 10 }} />
+                  <Text style={styles.addAccountText}>
+                    {allAccounts.length > 0 ? 'Thêm tài khoản khác...' : 'Đăng nhập với Google'}
+                  </Text>
+                </View>
               </TouchableOpacity>
 
               <View style={styles.accountCardFullDivider} />
@@ -2025,9 +2114,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 onPress={handleGuestLogin}
                 activeOpacity={0.6}
               >
-                <Text style={styles.addAccountText}>
-                  Đăng nhập bằng tư cách khách
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Feather name="user-check" size={17} color="#71717a" style={{ marginRight: 10 }} />
+                  <Text style={[styles.addAccountText, { color: '#71717a' }]}>
+                    Duyệt web với tư cách khách
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
 
@@ -2038,7 +2130,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 onPress={handleLogout}
                 activeOpacity={0.7}
               >
-                <Text style={styles.logoutCardText}>Đăng xuất</Text>
+                <Text style={styles.logoutCardText}>
+                  {allAccounts.length > 1 ? 'Đăng xuất tài khoản này' : 'Đăng xuất'}
+                </Text>
               </TouchableOpacity>
             )}
           </TouchableOpacity>
@@ -2778,6 +2872,18 @@ const styles = StyleSheet.create({
   accountRowEmail: {
     fontSize: 13,
     color: '#636366',
+  },
+  activeTagBadge: {
+    backgroundColor: 'rgba(0, 122, 255, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  activeTagBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#007aff',
   },
   accountRowDivider: {
     height: StyleSheet.hairlineWidth,
