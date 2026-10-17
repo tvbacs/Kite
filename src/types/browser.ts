@@ -54,3 +54,15 @@ export interface UserProfile {
   email?: string;
   avatarUrl?: string;
 }
+
+export interface DetectedMedia {
+  id: string;
+  url: string;
+  title: string;
+  format: 'mp4' | 'm3u8' | 'webm' | 'mov' | 'm4v' | 'audio' | 'video';
+  sizeBytes?: number;
+  quality?: string;
+  tabId?: string;
+  detectedAt?: number;
+}
+

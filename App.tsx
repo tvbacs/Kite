@@ -71,9 +71,11 @@ import {
 import * as Haptics from 'expo-haptics';
 import { captureRef } from 'react-native-view-shot';
 import { PullDownBar, PullActionType } from './src/components/PullDownBar';
-import { ShieldStats, BrowserTab, UserProfile, TabFrozenState, DataSaverMode } from './src/types/browser';
+import { ShieldStats, BrowserTab, UserProfile, TabFrozenState, DataSaverMode, DetectedMedia } from './src/types/browser';
 import { PinModal } from './src/components/PinModal';
 import { supabase, handleAuthCallbackUrl, upsertCloudProfile } from './src/services/supabase';
+import { VideoDownloadSheet } from './src/components/VideoDownloadSheet';
+import { VIDEO_SNIFFER_SCRIPT } from './src/services/videoSnifferScript';
 
 const STORAGE_ENGINE_KEY = '@kite_search_engine';
 const STORAGE_PIN_KEY = '@kite_incognito_pin';
@@ -277,6 +279,9 @@ function BrowserMain() {
   const [historySheetVisible, setHistorySheetVisible] = useState<boolean>(false);
   const [bookmarkSheetVisible, setBookmarkSheetVisible] = useState<boolean>(false);
   const [downloadSheetVisible, setDownloadSheetVisible] = useState<boolean>(false);
+  const [videoDownloadSheetVisible, setVideoDownloadSheetVisible] = useState<boolean>(false);
+  const [detectedMediaByTab, setDetectedMediaByTab] = useState<Record<string, DetectedMedia[]>>({});
+  const activeDetectedMedia = detectedMediaByTab[activeTabId] || [];
   const [passwordManagerVisible, setPasswordManagerVisible] = useState<boolean>(false);
   const [storageManagerVisible, setStorageManagerVisible] = useState<boolean>(false);
   const [extensionSheetVisible, setExtensionSheetVisible] = useState<boolean>(false);
@@ -1216,6 +1221,12 @@ function BrowserMain() {
   const handleCloseTab = (id: string) => {
     delete webViewRefs.current[id];
     delete webViewContainerRefs.current[id];
+    setDetectedMediaByTab((prev) => {
+      if (!prev[id]) return prev;
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
 
     // Lưu lại thẻ vừa đóng vào danh sách có thể khôi phục
     const closingTab = tabs.find((t) => t.id === id);
@@ -1795,6 +1806,28 @@ function BrowserMain() {
       } else if (data.type === 'VIDEO_PAUSED') {
         isVideoPlayingRef.current = false;
         updateWakeLock(stats.isKeepAwakeActive, false);
+      } else if (data.type === 'MEDIA_DETECTED') {
+        const media = data.media;
+        if (media && media.url) {
+          setDetectedMediaByTab((prev) => {
+            const currentList = prev[activeTabId] || [];
+            if (currentList.some((m) => m.url === media.url)) {
+              return prev;
+            }
+            const newMedia: DetectedMedia = {
+              id: `media-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+              url: media.url,
+              title: media.title || currentTab?.title || 'Video',
+              format: media.format || 'mp4',
+              tabId: activeTabId,
+              detectedAt: media.detectedAt || Date.now(),
+            };
+            return {
+              ...prev,
+              [activeTabId]: [...currentList, newMedia],
+            };
+          });
+        }
       } else if (data.type === 'KITE_PULL_MOVE') {
         handlePullMove(data.dy, data.dx);
       } else if (data.type === 'KITE_PULL_END') {
@@ -2244,6 +2277,14 @@ function BrowserMain() {
           isReaderMode: false,
         }));
       }
+      if (isUrlDifferent) {
+        setDetectedMediaByTab((prev) => {
+          if (!prev[tabId] || prev[tabId].length === 0) return prev;
+          const copy = { ...prev };
+          delete copy[tabId];
+          return copy;
+        });
+      }
     }
   };
 
@@ -2384,6 +2425,32 @@ function BrowserMain() {
     setDownloadPrompt({
       visible: true,
       url: downloadUrl,
+      fileName: cleanName,
+      isDownloading: false,
+    });
+  };
+
+  // Xử lý tải video được phát hiện trên trang web (Cốc Cốc style)
+  const handleDownloadMedia = (media: DetectedMedia) => {
+    let ext = 'mp4';
+    if (media.format === 'audio') ext = 'mp3';
+    else if (media.format === 'm3u8') ext = 'm3u8';
+    else if (media.format === 'webm') ext = 'webm';
+    else if (media.format === 'mov') ext = 'mov';
+    else if (media.format === 'm4v') ext = 'm4v';
+
+    let cleanName = (media.title || 'Kite_Video')
+      .replace(/[/\\?%*:|"<>]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleanName) cleanName = `video_${Date.now()}`;
+    if (!cleanName.toLowerCase().endsWith(`.${ext}`)) {
+      cleanName = `${cleanName}.${ext}`;
+    }
+
+    setDownloadPrompt({
+      visible: true,
+      url: media.url,
       fileName: cleanName,
       isDownloading: false,
     });
@@ -2754,11 +2821,13 @@ function BrowserMain() {
                     mediaCapturePermissionGrantType="grant"
                     injectedJavaScriptBeforeContentLoaded={
                       ((stats.isShieldActive ? INJECTED_BEFORE_CONTENT : '') +
+                        VIDEO_SNIFFER_SCRIPT +
                         getExtensionsScriptForTab(tab.url, 'document_start')) ||
                       undefined
                     }
                     injectedJavaScript={
                       ((stats.isShieldActive ? INJECTED_AFTER_CONTENT : '') +
+                        VIDEO_SNIFFER_SCRIPT +
                         getExtensionsScriptForTab(tab.url, 'document_end')) ||
                       undefined
                     }
@@ -2905,6 +2974,23 @@ function BrowserMain() {
           </>
         )}
 
+        {/* Nút Floating Tải Video (Cốc Cốc style) */}
+        {!isEditing && activeUrl !== null && activeDetectedMedia.length > 0 && (
+          <TouchableOpacity
+            style={styles.floatingVideoDownloadPill}
+            onPress={() => setVideoDownloadSheetVisible(true)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.floatingVideoIconCircle}>
+              <Feather name="download" size={14} color="#ffffff" />
+            </View>
+            <Text style={styles.floatingVideoText}>Tải Video</Text>
+            <View style={styles.floatingVideoCountBadge}>
+              <Text style={styles.floatingVideoCountText}>{activeDetectedMedia.length}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Thông báo Toast ngắn gọn */}
         {toastMessage && (
           <View style={styles.toastContainer}>
@@ -3024,6 +3110,15 @@ function BrowserMain() {
         />
       )}
 
+      {/* Bảng danh sách Video phát hiện trên trang web (Cốc Cốc style) */}
+      <VideoDownloadSheet
+        visible={videoDownloadSheetVisible}
+        onClose={() => setVideoDownloadSheetVisible(false)}
+        mediaList={activeDetectedMedia}
+        onDownload={handleDownloadMedia}
+        onShowToast={showToast}
+      />
+
       {/* Hộp thoại đề xuất lưu mật khẩu tự động sau khi đăng nhập */}
       {passwordSavePrompt && (
         <PasswordSavePromptModal
@@ -3114,6 +3209,8 @@ function BrowserMain() {
         onToggleKeepAwake={handleToggleKeepAwake}
         isDataSaverActive={Boolean(stats.isDataSaverActive)}
         onToggleDataSaver={handleToggleDataSaver}
+        detectedMediaCount={activeDetectedMedia.length}
+        onOpenVideoDownload={() => setVideoDownloadSheetVisible(true)}
       />
 
       {/* Quản lý Tiện ích mở rộng (Extension Sheet) */}
@@ -3327,5 +3424,53 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: '#22c55e',
+  },
+  floatingVideoDownloadPill: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007aff',
+    paddingVertical: 8,
+    paddingLeft: 10,
+    paddingRight: 12,
+    borderRadius: 24,
+    shadowColor: '#007aff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 998,
+  },
+  floatingVideoIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  floatingVideoText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+    marginRight: 6,
+  },
+  floatingVideoCountBadge: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 10,
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingVideoCountText: {
+    color: '#007aff',
+    fontSize: 11,
+    fontWeight: '800',
   },
 });

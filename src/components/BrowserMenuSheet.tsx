@@ -47,6 +47,8 @@ interface BrowserMenuSheetProps {
   isDataSaverActive?: boolean;
   onToggleDataSaver?: () => void;
   isIncognito?: boolean;
+  detectedMediaCount?: number;
+  onOpenVideoDownload?: () => void;
 }
 
 export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
@@ -80,6 +82,8 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onToggleKeepAwake,
   isDataSaverActive,
   onToggleDataSaver,
+  detectedMediaCount,
+  onOpenVideoDownload,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
@@ -240,6 +244,41 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.menuGroupCard}>
+              {/* 0. TẢI VIDEO PHÁT HIỆN TRÊN TRANG (CỐC CỐC STYLE) */}
+              {detectedMediaCount !== undefined && detectedMediaCount > 0 && (
+                <>
+                  <TouchableOpacity
+                    style={styles.menuRow}
+                    onPress={() => {
+                      onClose();
+                      if (onOpenVideoDownload) onOpenVideoDownload();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[styles.menuTitle, { color: '#007aff', fontWeight: '600' }]}>
+                        Tải video trên trang
+                      </Text>
+                      <View
+                        style={{
+                          backgroundColor: '#007aff',
+                          borderRadius: 10,
+                          paddingHorizontal: 7,
+                          paddingVertical: 1.5,
+                          marginLeft: 8,
+                        }}
+                      >
+                        <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>
+                          {detectedMediaCount}
+                        </Text>
+                      </View>
+                    </View>
+                    <Feather name="download" size={20} color="#007aff" />
+                  </TouchableOpacity>
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
+
               {/* 1. TÌM TRONG TRANG */}
               <TouchableOpacity
                 style={styles.menuRow}
