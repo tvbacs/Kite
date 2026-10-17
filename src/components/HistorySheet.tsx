@@ -230,8 +230,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   clearBtnText: {
-    color: '#71717a',
-    fontSize: 15,
+    color: '#ff3b30',
+    fontSize: 16,
     fontWeight: '600',
   },
   placeholderBtn: {
