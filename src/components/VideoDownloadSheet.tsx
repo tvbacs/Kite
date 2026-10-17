@@ -34,13 +34,13 @@ export const VideoDownloadSheet: React.FC<VideoDownloadSheetProps> = ({
   const getFormatBadge = (format: string) => {
     switch (format.toLowerCase()) {
       case 'm3u8':
-        return { label: 'HLS STREAM', bg: '#fef3c7', color: '#d97706' };
+        return { label: 'HLS STREAM', bg: '#fef3c7', color: '#d97706', isRecommended: false };
       case 'webm':
-        return { label: 'WEBM', bg: '#f3e8ff', color: '#7c3aed' };
+        return { label: 'WEBM', bg: '#f3e8ff', color: '#7c3aed', isRecommended: false };
       case 'audio':
-        return { label: 'AUDIO MP3', bg: '#fdf2f8', color: '#db2777' };
+        return { label: 'AUDIO MP3', bg: '#fdf2f8', color: '#db2777', isRecommended: false };
       default:
-        return { label: 'MP4 VIDEO', bg: '#dcfce7', color: '#16a34a' };
+        return { label: 'MP4 VIDEO', bg: '#dcfce7', color: '#16a34a', isRecommended: true };
     }
   };
 
@@ -82,15 +82,10 @@ export const VideoDownloadSheet: React.FC<VideoDownloadSheetProps> = ({
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
-              <View style={styles.headerIconBox}>
-                <Feather name="video" size={18} color="#007aff" />
-              </View>
-              <View>
-                <Text style={styles.sheetTitle}>Video tìm thấy trên trang</Text>
-                <Text style={styles.sheetSubtitle}>
-                  Phát hiện {mediaList.length} luồng media sẵn sàng tải về
-                </Text>
-              </View>
+              <Text style={styles.sheetTitle}>Tải video xuống</Text>
+              <Text style={styles.sheetSubtitle}>
+                Phát hiện {mediaList.length} luồng media sẵn sàng tải về
+              </Text>
             </View>
             <TouchableOpacity
               style={styles.closeBtn}
@@ -131,6 +126,13 @@ export const VideoDownloadSheet: React.FC<VideoDownloadSheetProps> = ({
                             {badge.label}
                           </Text>
                         </View>
+                        {badge.isRecommended && (
+                          <View style={[styles.formatBadge, { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0', borderWidth: 1 }]}>
+                            <Text style={[styles.formatBadgeText, { color: '#059669', fontWeight: '700' }]}>
+                              ★ KHUYÊN DÙNG
+                            </Text>
+                          </View>
+                        )}
                         {mediaList.length > 1 && (
                           <View style={[styles.formatBadge, { backgroundColor: '#f1f5f9' }]}>
                             <Text style={[styles.formatBadgeText, { color: '#475569' }]}>
@@ -209,27 +211,17 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f4f4f5',
   },
   headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
     flex: 1,
-  },
-  headerIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#e8f0fe',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   sheetTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: '#09090b',
     letterSpacing: -0.2,
   },
   sheetSubtitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#71717a',
     marginTop: 2,
   },
