@@ -229,7 +229,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               </View>
               <View style={styles.menuTextContainer}>
                 <Text style={styles.menuTitle}>Tệp đã tải xuống</Text>
-                <Text style={styles.menuSubtitle}>Xem danh sách tài liệu, hình ảnh đã tải</Text>
+                <Text style={styles.menuSubtitle}>Mở thư mục Kite trong ứng dụng Tệp</Text>
               </View>
               <Feather name="chevron-right" size={18} color="#a1a1aa" />
             </TouchableOpacity>

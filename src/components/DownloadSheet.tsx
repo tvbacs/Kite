@@ -10,6 +10,7 @@ import {
   Alert,
   TextInput,
   Image,
+  Linking,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -218,6 +219,17 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
             </View>
 
             <View style={styles.headerRightActions}>
+              <TouchableOpacity
+                style={styles.openFilesBtn}
+                onPress={() => {
+                  Linking.openURL('shareddocuments://').catch(() => {});
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="folder" size={13} color="#007aff" />
+                <Text style={styles.openFilesBtnText}>Mở app Tệp</Text>
+              </TouchableOpacity>
+
               {downloads.length > 0 && (
                 <TouchableOpacity
                   style={styles.clearAllBtn}
@@ -435,7 +447,21 @@ const styles = StyleSheet.create({
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+  },
+  openFilesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: '#eff6ff',
+  },
+  openFilesBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#007aff',
   },
   clearAllBtn: {
     paddingVertical: 5,

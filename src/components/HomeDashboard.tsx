@@ -1750,7 +1750,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bgOptionTitle}>Tệp đã tải xuống</Text>
-                        <Text style={styles.bgOptionSub}>Quản lý tài liệu và hình ảnh đã tải</Text>
+                        <Text style={styles.bgOptionSub}>Mở thư mục Kite trong ứng dụng Tệp</Text>
                       </View>
                       <View style={styles.rightCircleBtn}>
                         <Feather name="download" size={18} color="#000000" />

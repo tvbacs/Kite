@@ -16,6 +16,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.workspace.kite",
       "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "LSApplicationQueriesSchemes": [
+          "shareddocuments"
+        ],
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }

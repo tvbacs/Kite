@@ -427,6 +427,17 @@ function BrowserMain() {
       }
     });
 
+    // Đảm bảo thư mục "Kite" được iOS kích hoạt và hiển thị trong ứng dụng Tệp (Files) dưới mục "Trên iPhone"
+    try {
+      const welcomeFile = new File(Paths.document, 'Kite_Downloads.txt');
+      if (!welcomeFile.exists) {
+        welcomeFile.create();
+        welcomeFile.write('Trình duyệt Kite - Thư mục lưu trữ tải xuống.\nTất cả tài liệu và hình ảnh bạn tải về từ Kite sẽ được lưu trữ tự động tại đây.');
+      }
+    } catch (e) {
+      console.log('Init Kite Documents directory error:', e);
+    }
+
     // Khôi phục danh sách thẻ, URL và mở chính xác thẻ người dùng đang xem trước khi reload
     Promise.all([
       AsyncStorage.getItem(STORAGE_PERSISTED_TABS_KEY),
@@ -1810,13 +1821,14 @@ function BrowserMain() {
     }
   };
 
-  // Xử lý tải tệp xuống trên iOS và kết hợp Share Sheet để người dùng lưu vào Files & Lưu vào danh sách tải xuống
+  // Xử lý tải tệp xuống trên iOS và lưu trực tiếp vào thư mục Kite trong ứng dụng Tệp (Files)
   const handleFileDownload = async ({ nativeEvent }: { nativeEvent: { downloadUrl: string } }) => {
     const { downloadUrl } = nativeEvent;
     if (!downloadUrl) return;
     showToast('Đang tải tệp xuống...');
     try {
-      const downloadedFile = await File.downloadFileAsync(downloadUrl, Paths.cache, { idempotent: true });
+      // Tải trực tiếp vào Paths.document để xuất hiện ngay trong thư mục "Kite" trên ứng dụng Tệp (Files) của iPhone
+      const downloadedFile = await File.downloadFileAsync(downloadUrl, Paths.document, { idempotent: true });
       const cleanName =
         downloadedFile?.name ||
         downloadUrl.split('/').pop()?.split('?')[0] ||
@@ -1838,6 +1850,8 @@ function BrowserMain() {
         await AsyncStorage.setItem(STORAGE_DOWNLOADS_KEY, JSON.stringify(updated));
       } catch (e) {}
 
+      showToast(`Đã lưu vào Tệp > Kite: ${cleanName}`);
+
       const canShare = await Sharing.isAvailableAsync();
       if (canShare && downloadedFile?.uri) {
         await Sharing.shareAsync(downloadedFile.uri);
@@ -1846,10 +1860,29 @@ function BrowserMain() {
       } else {
         await Share.share({ url: downloadUrl });
       }
-      showToast(`Đã tải: ${cleanName}`);
     } catch (e) {
       Share.share({ url: downloadUrl });
     }
+  };
+
+  // Mở trực tiếp ứng dụng Tệp (Apple Files app) để truy cập thư mục Kite trên iPhone
+  const handleOpenDownloads = async () => {
+    try {
+      if (Platform.OS === 'ios') {
+        const filesScheme = 'shareddocuments://';
+        const canOpen = await Linking.canOpenURL(filesScheme);
+        if (canOpen) {
+          await Linking.openURL(filesScheme);
+          return;
+        }
+        await Linking.openURL(filesScheme);
+        return;
+      }
+    } catch (e) {
+      console.log('Cannot open native Files app:', e);
+    }
+    // Fallback nếu không mở được app Tệp hệ thống
+    setDownloadSheetVisible(true);
   };
 
   const isCurrentIncognito = Boolean(currentTab?.isIncognito || isIncognito);
@@ -1984,7 +2017,7 @@ function BrowserMain() {
                 onScanQr={() => setQrModalVisible(true)}
                 onOpenBookmarks={() => setBookmarkSheetVisible(true)}
                 onOpenHistory={() => setHistorySheetVisible(true)}
-                onOpenDownloads={() => setDownloadSheetVisible(true)}
+                onOpenDownloads={handleOpenDownloads}
                 onOpenPasswordManager={() => setPasswordManagerVisible(true)}
                 onOpenExtensions={() => setExtensionSheetVisible(true)}
                 onOpenTabs={handleOpenTabSheet}
@@ -2300,7 +2333,7 @@ function BrowserMain() {
           }
         }}
         onOpenSearchScreenLens={handleSearchScreenWithLens}
-        onOpenDownloads={() => setDownloadSheetVisible(true)}
+        onOpenDownloads={handleOpenDownloads}
         onOpenPasswordManager={() => setPasswordManagerVisible(true)}
         onOpenExtensions={() => setExtensionSheetVisible(true)}
         onOpenBookmarks={() => setBookmarkSheetVisible(true)}
