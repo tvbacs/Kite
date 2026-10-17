@@ -439,7 +439,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
             <View style={styles.headerTitleGroup}>
               {/* Biểu tượng chìa khóa Google */}
               <View style={styles.googleKeyBox}>
-                <Feather name="key" size={17} color="#1a73e8" />
+                <Feather name="key" size={17} color="#18181b" />
               </View>
               <Text style={styles.headerTitleText}>Trình quản lý mật khẩu</Text>
             </View>
@@ -516,13 +516,13 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
               </View>
               <View style={styles.checkupRightCol}>
                 <View style={styles.shieldBadge}>
-                  <Feather name="shield" size={15} color="#1a73e8" />
+                  <Feather name="shield" size={15} color="#18181b" />
                 </View>
                 <Feather name="chevron-right" size={18} color="#747775" />
               </View>
             </TouchableOpacity>
 
-            {/* Nút Thêm mật khẩu chuẩn Google */}
+            {/* Nút Thêm mật khẩu */}
             <TouchableOpacity
               style={styles.addPasswordRowBtn}
               onPress={handleOpenAddModal}
@@ -538,7 +538,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
             {credentials.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
-                  <Feather name="lock" size={28} color="#1a73e8" />
+                  <Feather name="lock" size={28} color="#18181b" />
                 </View>
                 <Text style={styles.emptyTitle}>Chưa lưu mật khẩu nào</Text>
                 <Text style={styles.emptySub}>
@@ -601,7 +601,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
                               onPress={() => handleCopy(item.username, false)}
                               activeOpacity={0.7}
                             >
-                              <Feather name="copy" size={15} color="#1a73e8" />
+                              <Feather name="copy" size={15} color="#18181b" />
                               <Text style={styles.detailActionText}>Sao chép</Text>
                             </TouchableOpacity>
                           </View>
@@ -636,7 +636,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
                                 onPress={() => handleCopy('', true, item.id)}
                                 activeOpacity={0.7}
                               >
-                                <Feather name="copy" size={15} color="#1a73e8" />
+                                <Feather name="copy" size={15} color="#18181b" />
                                 <Text style={styles.detailActionText}>Sao chép</Text>
                               </TouchableOpacity>
                             </View>
@@ -649,7 +649,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
                               onPress={() => handleOpenSite(item.website)}
                               activeOpacity={0.7}
                             >
-                              <Feather name="external-link" size={14} color="#1a73e8" style={{ marginRight: 4 }} />
+                              <Feather name="external-link" size={14} color="#18181b" style={{ marginRight: 4 }} />
                               <Text style={styles.openWebBtnText}>Mở trang web</Text>
                             </TouchableOpacity>
 
@@ -827,7 +827,9 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
                   <Switch
                     value={settings.autoPromptSave}
                     onValueChange={(v) => updateSetting('autoPromptSave', v)}
-                    trackColor={{ false: '#e0e0e0', true: '#1a73e8' }}
+                    trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                    ios_backgroundColor="#e4e4e7"
+                    thumbColor="#ffffff"
                   />
                 </View>
 
@@ -839,7 +841,9 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
                   <Switch
                     value={settings.requireBiometrics}
                     onValueChange={(v) => updateSetting('requireBiometrics', v)}
-                    trackColor={{ false: '#e0e0e0', true: '#1a73e8' }}
+                    trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                    ios_backgroundColor="#e4e4e7"
+                    thumbColor="#ffffff"
                   />
                 </View>
 
@@ -867,7 +871,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#f8fafd',
+    backgroundColor: '#ffffff',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     maxHeight: '92%',
@@ -897,7 +901,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#e8f0fe',
+    backgroundColor: '#f4f4f5',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -942,19 +946,17 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   learnMoreLink: {
-    color: '#1a73e8',
-    fontWeight: '500',
+    color: '#18181b',
+    fontWeight: '600',
   },
   checkupCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f4f4f5',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e0e2e5',
   },
   checkupTitle: {
     fontSize: 15.5,
@@ -975,23 +977,21 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#e8f0fe',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
   },
   addPasswordRowBtn: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#dadce0',
+    backgroundColor: '#f4f4f5',
+    borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 18,
     marginBottom: 16,
   },
   addPasswordRowBtnText: {
     fontSize: 14,
-    color: '#1a73e8',
-    fontWeight: '500',
+    color: '#18181b',
+    fontWeight: '600',
   },
   sectionHeaderLabel: {
     fontSize: 15,
@@ -1000,10 +1000,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   groupedListCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f4f4f5',
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e2e5',
     overflow: 'hidden',
   },
   credRowItem: {
@@ -1046,19 +1044,19 @@ const styles = StyleSheet.create({
     marginLeft: 66,
   },
   detailExpandBox: {
-    backgroundColor: '#fafbfc',
+    backgroundColor: '#ffffff',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderColor: '#f1f3f4',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e4e4e7',
   },
   detailFieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderColor: '#f1f3f4',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e4e4e7',
   },
   detailFieldLabel: {
     fontSize: 11.5,
@@ -1079,14 +1077,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 5,
     paddingHorizontal: 8,
-    borderRadius: 12,
-    backgroundColor: '#e8f0fe',
+    borderRadius: 10,
+    backgroundColor: '#f4f4f5',
     gap: 4,
   },
   detailActionText: {
     fontSize: 12,
-    color: '#1a73e8',
-    fontWeight: '500',
+    color: '#18181b',
+    fontWeight: '600',
   },
   iconCircleBtn: {
     width: 28,
@@ -1109,8 +1107,8 @@ const styles = StyleSheet.create({
   },
   openWebBtnText: {
     fontSize: 13,
-    color: '#1a73e8',
-    fontWeight: '500',
+    color: '#18181b',
+    fontWeight: '600',
   },
   miniBtn: {
     width: 32,
@@ -1126,17 +1124,15 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 10,
-    borderTopWidth: 1,
-    borderColor: '#ebebeb',
-    backgroundColor: '#f8fafd',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
   },
   bottomPillBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f4f4f5',
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#dadce0',
     paddingVertical: 8,
     paddingHorizontal: 18,
   },
@@ -1150,16 +1146,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 36,
     paddingHorizontal: 20,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f4f4f5',
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e2e5',
   },
   emptyIconCircle: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#e8f0fe',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
@@ -1218,8 +1212,8 @@ const styles = StyleSheet.create({
   },
   generatePwdText: {
     fontSize: 12,
-    color: '#1a73e8',
-    fontWeight: '500',
+    color: '#18181b',
+    fontWeight: '600',
   },
   passwordInputWrap: {
     flexDirection: 'row',
@@ -1249,11 +1243,11 @@ const styles = StyleSheet.create({
   },
   cancelTextBtnLabel: {
     fontSize: 14,
-    color: '#1a73e8',
+    color: '#71717a',
     fontWeight: '500',
   },
   savePillBtn: {
-    backgroundColor: '#1a73e8',
+    backgroundColor: '#18181b',
     borderRadius: 18,
     paddingVertical: 9,
     paddingHorizontal: 20,
