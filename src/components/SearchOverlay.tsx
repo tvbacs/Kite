@@ -287,6 +287,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [enginePickerVisible, setEnginePickerVisible] = useState<boolean>(false);
+  const [text, setText] = useState<string>(inputUrl);
   const [userTypedText, setUserTypedText] = useState<string>(inputUrl);
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
   const lastTypedLengthRef = useRef<number>(inputUrl.length);
@@ -305,12 +306,16 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   }, [isIncognito, userEmail]);
 
   useEffect(() => {
-    if (!inputUrl) {
+    setText(inputUrl);
+  }, [inputUrl]);
+
+  useEffect(() => {
+    if (!text) {
       setUserTypedText('');
       lastTypedLengthRef.current = 0;
       setSelection(undefined);
     }
-  }, [inputUrl]);
+  }, [text]);
 
   const loadHistory = async () => {
     if (isIncognito) return;
@@ -352,7 +357,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
     title?: string;
   } | null>(() => {
     if (isIncognito) return null;
-    const q = (userTypedText || inputUrl).trim();
+    const q = text.trim();
     if (!q || q.length < 1) return null;
     const lowerQ = q.toLowerCase();
 
@@ -399,14 +404,14 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
     }
 
     return null;
-  }, [history, bookmarks, userTypedText, inputUrl, isIncognito]);
+  }, [history, bookmarks, text, isIncognito]);
 
   const ghostSuffix = ghostMatch?.suffix || '';
 
   // Gợi ý tìm kiếm: CHỈ gợi ý các từ khóa và nội dung mà người dùng ĐÃ TÌM TRONG LỊCH SỬ trước đó
   const historySearchSuggestions = useMemo(() => {
     if (isIncognito) return [];
-    const q = (userTypedText || inputUrl).trim();
+    const q = text.trim();
     if (!q) return [];
     const lowerQ = q.toLowerCase();
 
@@ -456,16 +461,17 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
       if (!aStarts && bStarts) return 1;
       return a.text.length - b.text.length;
     }).slice(0, 5);
-  }, [history, userTypedText, inputUrl, isIncognito, ghostMatch]);
+  }, [history, text, isIncognito, ghostMatch]);
 
   // Khi người dùng gõ phím: CHỈ cập nhật nội dung gõ, TUYỆT ĐỐI KHÔNG tự động fill chèn chữ vào ô nhập
   const handleTextChange = (newText: string) => {
+    setText(newText);
     setUserTypedText(newText);
     setSelection(undefined);
     onUrlChange(newText);
   };
 
-  const filterQuery = (userTypedText || inputUrl).trim();
+  const filterQuery = text.trim();
 
   // Lọc lịch sử theo nội dung đang nhập (lọc theo nội dung người dùng thực tế gõ)
   const filteredHistory = filterQuery
@@ -512,11 +518,23 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           )}
 
           <View style={styles.inputWrapper}>
-            {/* Lớp hiển thị gợi ý mờ phía sau con trỏ (Ghost Suggestion Overlay - chỉ hiển thị chữ mờ, không điền đè) */}
-            {ghostSuffix && inputUrl.trim().length > 0 ? (
+            {/* Placeholder tùy chỉnh: hiển thị khi text rỗng, độc lập hoàn toàn với native TextInput nên KHÔNG BAO GIỜ bị đè chữ hay xung đột nhấp nháy với gợi ý */}
+            {text.length === 0 && (
+              <View pointerEvents="none" style={styles.placeholderContainer}>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.placeholderText, { color: subColor }]}
+                >
+                  {`Tìm trên ${currentEngineName} hoặc nhập URL`}
+                </Text>
+              </View>
+            )}
+
+            {/* Lớp hiển thị gợi ý mờ phía sau con trỏ (Ghost Suggestion Overlay - chỉ hiển thị chữ mờ khi đang có nội dung gõ) */}
+            {ghostSuffix && text.trim().length > 0 ? (
               <View pointerEvents="none" style={styles.ghostTextContainer}>
                 <Text style={styles.ghostBaseText} numberOfLines={1}>
-                  {inputUrl}
+                  {text}
                 </Text>
                 <Text
                   style={[
@@ -533,17 +551,16 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
 
             <TextInput
               style={[styles.input, { color: textColor, backgroundColor: 'transparent' }]}
-              value={inputUrl}
+              value={text}
               onChangeText={handleTextChange}
-              placeholder={`Tìm trên ${currentEngineName} hoặc nhập URL`}
-              placeholderTextColor={subColor}
+              placeholder=""
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType={Platform.OS === 'ios' ? 'web-search' : 'default'}
               returnKeyType="search"
               onSubmitEditing={() => {
-                const target = ghostMatch?.fullText || (ghostSuffix ? `${inputUrl.trim()}${ghostSuffix}` : inputUrl);
+                const target = ghostMatch?.fullText || (ghostSuffix ? `${text.trim()}${ghostSuffix}` : text);
                 onSubmit(target);
               }}
               selectTextOnFocus={!userTypedText}
@@ -553,7 +570,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           {/* Cụm nút thao tác bên phải: Cố định bên phải và không bị textfield đè lên */}
           <View style={styles.rightActionsGroup}>
             {/* Nút lưu Dấu trang (Bookmark) ngay trên thanh URL */}
-            {onToggleBookmark && inputUrl.trim().length > 0 && (
+            {onToggleBookmark && text.trim().length > 0 && (
               <TouchableOpacity
                 style={styles.pillActionBtn}
                 onPress={onToggleBookmark}
@@ -567,10 +584,11 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
               </TouchableOpacity>
             )}
 
-            {inputUrl.length > 0 && (
+            {text.length > 0 && (
               <TouchableOpacity
                 style={styles.pillActionBtn}
                 onPress={() => {
+                  setText('');
                   setUserTypedText('');
                   lastTypedLengthRef.current = 0;
                   setSelection(undefined);
@@ -583,7 +601,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
             )}
 
             {/* Quét mã QR */}
-            {!inputUrl && onScanQr && (
+            {!text && onScanQr && (
               <TouchableOpacity
                 style={styles.pillActionBtn}
                 onPress={onScanQr}
@@ -618,7 +636,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
             Dòng 1: Hiện đầy đủ mục gợi ý khớp với ghost text (để người dùng bấm vào luôn như Chrome) HOẶC Đi tới https://...com
             Dòng 2: Tìm "<inputUrl>" trên Google (được đưa xuống dưới Đi tới theo yêu cầu)
         */}
-        {inputUrl.trim().length > 0 && (
+        {text.trim().length > 0 && (
           <>
             {/* DÒNG 1: GỢI Ý ĐẦY ĐỦ (GIỐNG CHROME) HOẶC ĐI TỚI WEBSITE */}
             {ghostMatch ? (
@@ -646,13 +664,13 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                       <>
                         <Text style={{ fontWeight: '400', color: subColor }}>Đi tới </Text>
                         <Text style={{ fontWeight: '400' }}>
-                          https://{inputUrl.trim().replace(/^https?:\/\//i, '')}
+                          https://{text.trim().replace(/^https?:\/\//i, '')}
                         </Text>
                         <Text style={{ fontWeight: '700' }}>{ghostMatch.suffix}</Text>
                       </>
                     ) : (
                       <>
-                        <Text style={{ fontWeight: '400' }}>{inputUrl.trim()}</Text>
+                        <Text style={{ fontWeight: '400' }}>{text.trim()}</Text>
                         <Text style={{ fontWeight: '700' }}>{ghostMatch.suffix}</Text>
                       </>
                     )}
@@ -669,11 +687,11 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 </View>
                 <Feather name="arrow-up-right" size={19} color="#007aff" />
               </TouchableOpacity>
-            ) : /^[a-zA-Z0-9-]{2,20}$/.test(inputUrl.trim()) && !inputUrl.includes('.') ? (
+            ) : /^[a-zA-Z0-9-]{2,20}$/.test(text.trim()) && !text.includes('.') ? (
               /* Nếu không có ghost match nhưng người dùng gõ tên miền (như vidsnaps, google, fb): ĐƯA "ĐI TỚI" LÊN TRÊN "TÌM" */
               <TouchableOpacity
                 style={[styles.historyRow, { borderBottomColor: borderCol }]}
-                onPress={() => onSubmit(`https://${inputUrl.trim().toLowerCase()}.com`)}
+                onPress={() => onSubmit(`https://${text.trim().toLowerCase()}.com`)}
                 activeOpacity={0.7}
               >
                 <View style={styles.iconCircle}>
@@ -681,7 +699,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 </View>
                 <View style={styles.textContainer}>
                   <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
-                    Đi tới https://{inputUrl.trim().toLowerCase()}.com
+                    Đi tới https://{text.trim().toLowerCase()}.com
                   </Text>
                 </View>
                 <Feather name="arrow-up-right" size={19} color="#007aff" />
@@ -691,7 +709,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
             {/* DÒNG 2: TÌM TRÊN GOOGLE (NẰM DƯỚI ĐI TỚI THEO ĐÚNG YÊU CẦU CỦA USER) */}
             <TouchableOpacity
               style={[styles.historyRow, { borderBottomColor: borderCol }]}
-              onPress={() => onSubmit(inputUrl.trim())}
+              onPress={() => onSubmit(text.trim())}
               activeOpacity={0.7}
             >
               <View style={styles.iconCircle}>
@@ -699,7 +717,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
               </View>
               <View style={styles.textContainer}>
                 <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
-                  Tìm "{inputUrl.trim()}" trên {currentEngineName}
+                  Tìm "{text.trim()}" trên {currentEngineName}
                 </Text>
               </View>
               <Feather name="arrow-up-right" size={19} color="#007aff" />
@@ -752,6 +770,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                     style={styles.arrowBtn}
                     hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                     onPress={() => {
+                      setText(sug.text);
                       setUserTypedText(sug.text);
                       lastTypedLengthRef.current = sug.text.length;
                       setSelection(undefined);
@@ -790,6 +809,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 currentEngineName={currentEngineName}
                 onSubmit={onSubmit}
                 onUrlChange={(selectedText) => {
+                  setText(selectedText);
                   setUserTypedText(selectedText);
                   lastTypedLengthRef.current = selectedText.length;
                   setSelection(undefined);
@@ -802,7 +822,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           })}
 
         {/* Thông báo riêng trong chế độ Ẩn danh */}
-        {isIncognito && inputUrl.trim().length === 0 && (
+        {isIncognito && text.trim().length === 0 && (
           <View style={styles.emptyContainer}>
             <View
               style={{
@@ -936,6 +956,20 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     marginRight: 4,
+  },
+  placeholderContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  placeholderText: {
+    fontSize: 15,
+    padding: 0,
+    margin: 0,
   },
   ghostTextContainer: {
     position: 'absolute',
