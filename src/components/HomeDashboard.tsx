@@ -1773,7 +1773,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bgOptionTitle}>Trình quản lý mật khẩu</Text>
-                        <Text style={styles.bgOptionSub}>Xem và sao chép mật khẩu đã lưu</Text>
+                        <Text style={styles.bgOptionSub}>Bảo mật bằng Apple Keychain & Face ID</Text>
                       </View>
                       <View style={styles.rightCircleBtn}>
                         <Feather name="key" size={18} color="#000000" />

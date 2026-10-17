@@ -21,6 +21,7 @@
         "LSApplicationQueriesSchemes": [
           "shareddocuments"
         ],
+        "NSFaceIDUsageDescription": "Kite sử dụng Face ID hoặc Touch ID để bảo vệ và mở khóa mật khẩu đã lưu của bạn.",
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
         }
@@ -44,7 +45,8 @@
           "microphonePermission": "Cho phép Kite truy cập microphone để tìm kiếm bằng giọng nói.",
           "speechRecognitionPermission": "Cho phép Kite nhận diện giọng nói tiếng Việt."
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

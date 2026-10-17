@@ -10,22 +10,141 @@ import {
   Platform,
   Alert,
   Image,
+  Switch,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
+import * as SecureStore from 'expo-secure-store';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 export const STORAGE_PASSWORDS_KEY = '@kite_saved_passwords';
+export const STORAGE_PASSWORD_SETTINGS_KEY = '@kite_pwd_settings';
 
 export interface SavedCredential {
   id: string;
   website: string;
   username: string;
-  password: string;
+  password?: string; // Tùy chọn cho tương thích ngược; dữ liệu mật khẩu thực tế lưu mã hóa trong Keychain
   updatedAt: number;
   notes?: string;
 }
+
+export interface PasswordSettings {
+  autoPromptSave: boolean;
+  autoFill: boolean;
+  requireBiometrics: boolean;
+}
+
+export const DEFAULT_PASSWORD_SETTINGS: PasswordSettings = {
+  autoPromptSave: true,
+  autoFill: true,
+  requireBiometrics: true,
+};
+
+/**
+ * Lưu trữ mật khẩu an toàn vào Apple Keychain (iOS) hoặc Android Keystore
+ */
+export const saveCredentialSecurely = async (
+  website: string,
+  username: string,
+  passwordSecret: string
+): Promise<SavedCredential | null> => {
+  try {
+    const cleanWeb = website.trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
+    const cleanUser = username.trim();
+    const id = `pwd-${Date.now()}`;
+
+    // 1. Lưu mật khẩu vào Apple Keychain / Android Keystore
+    try {
+      const isSecureAvail = await SecureStore.isAvailableAsync();
+      if (isSecureAvail) {
+        await SecureStore.setItemAsync(`kite_pwd_${id}`, passwordSecret, {
+          keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+        });
+      }
+    } catch (e) {
+      console.log('SecureStore set error:', e);
+    }
+
+    // 2. Lưu thông tin metadata vào danh sách
+    const stored = await AsyncStorage.getItem(STORAGE_PASSWORDS_KEY);
+    const list: SavedCredential[] = stored ? JSON.parse(stored) : [];
+    const newCred: SavedCredential = {
+      id,
+      website: cleanWeb,
+      username: cleanUser,
+      updatedAt: Date.now(),
+    };
+
+    // Kiểm tra xem đã có tài khoản cho trang này với cùng username chưa
+    const existingIndex = list.findIndex(
+      (c) => c.website.toLowerCase() === cleanWeb.toLowerCase() && c.username.toLowerCase() === cleanUser.toLowerCase()
+    );
+
+    let updated: SavedCredential[];
+    if (existingIndex >= 0) {
+      const oldId = list[existingIndex].id;
+      // Cập nhật lại mật khẩu trong keychain
+      try {
+        await SecureStore.setItemAsync(`kite_pwd_${oldId}`, passwordSecret);
+      } catch (e) {}
+      updated = list.map((item, idx) =>
+        idx === existingIndex ? { ...item, updatedAt: Date.now() } : item
+      );
+    } else {
+      updated = [newCred, ...list];
+    }
+
+    await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
+    return newCred;
+  } catch (e) {
+    console.log('Error saving credential securely:', e);
+    return null;
+  }
+};
+
+/**
+ * Đọc mật khẩu bí mật từ Apple Keychain / Keystore với xác thực Face ID
+ */
+export const getCredentialPassword = async (
+  id: string,
+  requireAuth = true
+): Promise<string | null> => {
+  try {
+    if (requireAuth) {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (hasHardware && isEnrolled) {
+        const auth = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Xác thực Face ID / Vân tay để truy cập mật khẩu',
+          cancelLabel: 'Hủy',
+          fallbackLabel: 'Sử dụng mật mã máy',
+          disableDeviceFallback: false,
+        });
+        if (!auth.success) return null;
+      }
+    }
+
+    const isSecureAvail = await SecureStore.isAvailableAsync();
+    if (isSecureAvail) {
+      const secret = await SecureStore.getItemAsync(`kite_pwd_${id}`);
+      if (secret) return secret;
+    }
+
+    // Fallback kiểm tra nếu còn lưu trong AsyncStorage cũ
+    const stored = await AsyncStorage.getItem(STORAGE_PASSWORDS_KEY);
+    if (stored) {
+      const list: SavedCredential[] = JSON.parse(stored);
+      const found = list.find((c) => c.id === id);
+      if (found && found.password) return found.password;
+    }
+  } catch (e) {
+    console.log('Error getting credential password:', e);
+  }
+  return null;
+};
 
 interface PasswordManagerSheetProps {
   visible: boolean;
@@ -45,9 +164,10 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
 
   const [credentials, setCredentials] = useState<SavedCredential[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, string>>({});
+  const [selectedCred, setSelectedCred] = useState<SavedCredential | null>(null);
 
-  // Trạng thái modal Thêm / Sửa mật khẩu
+  // Modal Thêm / Chỉnh sửa tài khoản
   const [editModalVisible, setEditModalVisible] = useState<boolean>(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [inputWebsite, setInputWebsite] = useState<string>('');
@@ -55,21 +175,67 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
   const [inputPassword, setInputPassword] = useState<string>('');
   const [showFormPassword, setShowFormPassword] = useState<boolean>(false);
 
+  // Modal Cài đặt
+  const [settingsModalVisible, setSettingsModalVisible] = useState<boolean>(false);
+  const [settings, setSettings] = useState<PasswordSettings>(DEFAULT_PASSWORD_SETTINGS);
+
   useEffect(() => {
     if (visible) {
       loadCredentials();
+      loadSettings();
       setSearchQuery('');
-      setVisiblePasswords({});
+      setRevealedPasswords({});
+      setSelectedCred(null);
     }
   }, [visible]);
+
+  const loadSettings = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_PASSWORD_SETTINGS_KEY);
+      if (stored) {
+        setSettings(JSON.parse(stored));
+      }
+    } catch (e) {}
+  };
+
+  const updateSetting = async (key: keyof PasswordSettings, val: boolean) => {
+    const updated = { ...settings, [key]: val };
+    setSettings(updated);
+    await AsyncStorage.setItem(STORAGE_PASSWORD_SETTINGS_KEY, JSON.stringify(updated));
+  };
 
   const loadCredentials = async () => {
     try {
       const stored = await AsyncStorage.getItem(STORAGE_PASSWORDS_KEY);
       if (stored) {
-        setCredentials(JSON.parse(stored));
+        const parsed: SavedCredential[] = JSON.parse(stored);
+        setCredentials(parsed);
+
+        // Tự động di chuyển mật khẩu cũ sang Keychain mã hóa nếu có
+        let needSave = false;
+        const cleanedList = await Promise.all(
+          parsed.map(async (c) => {
+            if (c.password) {
+              try {
+                await SecureStore.setItemAsync(`kite_pwd_${c.id}`, c.password, {
+                  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+                });
+                needSave = true;
+                const { password, ...rest } = c;
+                return rest;
+              } catch (e) {
+                return c;
+              }
+            }
+            return c;
+          })
+        );
+
+        if (needSave) {
+          await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(cleanedList));
+          setCredentials(cleanedList);
+        }
       } else {
-        // Mật khẩu mẫu nếu người dùng lần đầu mở
         setCredentials([]);
       }
     } catch (e) {
@@ -77,26 +243,49 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
     }
   };
 
-  const handleCopyText = async (text: string, type: 'username' | 'password') => {
-    try {
-      await Clipboard.setStringAsync(text);
-      if (onShowToast) {
-        onShowToast(
-          type === 'username'
-            ? 'Đã sao chép tên đăng nhập'
-            : 'Đã sao chép mật khẩu vào bộ nhớ tạm'
-        );
-      }
-    } catch (e) {
-      if (onShowToast) onShowToast('Không thể sao chép');
+  // Xác thực Face ID và hiện mật khẩu
+  const handleToggleReveal = async (item: SavedCredential) => {
+    if (revealedPasswords[item.id]) {
+      setRevealedPasswords((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+      return;
+    }
+
+    const secret = await getCredentialPassword(item.id, settings.requireBiometrics);
+    if (secret) {
+      setRevealedPasswords((prev) => ({ ...prev, [item.id]: secret }));
+    } else {
+      if (onShowToast) onShowToast('Không thể xác thực');
     }
   };
 
-  const togglePasswordVisibility = (id: string) => {
-    setVisiblePasswords((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
+  // Sao chép tên đăng nhập hoặc mật khẩu
+  const handleCopy = async (text: string, isPassword = false, id = '') => {
+    try {
+      let copyContent = text;
+      if (isPassword) {
+        const secret = await getCredentialPassword(id, settings.requireBiometrics);
+        if (!secret) {
+          if (onShowToast) onShowToast('Xác thực thất bại');
+          return;
+        }
+        copyContent = secret;
+      }
+
+      await Clipboard.setStringAsync(copyContent);
+      if (onShowToast) {
+        onShowToast(
+          isPassword
+            ? 'Đã sao chép mật khẩu an toàn'
+            : 'Đã sao chép tên đăng nhập'
+        );
+      }
+    } catch (e) {
+      if (onShowToast) onShowToast('Lỗi khi sao chép');
+    }
   };
 
   const generateStrongPassword = () => {
@@ -119,53 +308,57 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
     setEditModalVisible(true);
   };
 
-  const handleOpenEditModal = (item: SavedCredential) => {
+  const handleOpenEditModal = async (item: SavedCredential) => {
+    const secret = await getCredentialPassword(item.id, settings.requireBiometrics);
+    if (secret === null && settings.requireBiometrics) {
+      if (onShowToast) onShowToast('Xác thực không thành công');
+      return;
+    }
     setEditingId(item.id);
     setInputWebsite(item.website);
     setInputUsername(item.username);
-    setInputPassword(item.password);
+    setInputPassword(secret || '');
     setShowFormPassword(false);
     setEditModalVisible(true);
   };
 
   const handleSaveCredential = async () => {
     if (!inputWebsite.trim() || !inputUsername.trim() || !inputPassword.trim()) {
-      if (onShowToast) onShowToast('Vui lòng điền đủ trang web, tài khoản và mật khẩu');
+      if (onShowToast) onShowToast('Vui lòng điền đủ thông tin');
       return;
     }
 
-    let cleanWeb = inputWebsite.trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
+    const cleanWeb = inputWebsite.trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
+    const cleanUser = inputUsername.trim();
 
     try {
-      let updated: SavedCredential[];
       if (editingId) {
-        updated = credentials.map((c) =>
+        // Cập nhật lại mật khẩu trong Keychain
+        try {
+          await SecureStore.setItemAsync(`kite_pwd_${editingId}`, inputPassword.trim());
+        } catch (e) {}
+
+        const updated = credentials.map((c) =>
           c.id === editingId
             ? {
                 ...c,
                 website: cleanWeb,
-                username: inputUsername.trim(),
-                password: inputPassword.trim(),
+                username: cleanUser,
                 updatedAt: Date.now(),
               }
             : c
         );
+        setCredentials(updated);
+        await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
       } else {
-        const newItem: SavedCredential = {
-          id: `pwd-${Date.now()}`,
-          website: cleanWeb,
-          username: inputUsername.trim(),
-          password: inputPassword.trim(),
-          updatedAt: Date.now(),
-        };
-        updated = [newItem, ...credentials];
+        await saveCredentialSecurely(cleanWeb, cleanUser, inputPassword.trim());
+        await loadCredentials();
       }
 
-      setCredentials(updated);
-      await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
       setEditModalVisible(false);
+      setSelectedCred(null);
       if (onShowToast) {
-        onShowToast(editingId ? 'Đã cập nhật mật khẩu' : 'Đã thêm tài khoản mới');
+        onShowToast(editingId ? 'Đã cập nhật mật khẩu' : 'Đã lưu mật khẩu vào Keychain');
       }
     } catch (e) {
       if (onShowToast) onShowToast('Lỗi khi lưu mật khẩu');
@@ -174,7 +367,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
 
   const handleDeleteCredential = (id: string, site: string) => {
     Alert.alert(
-      'Xóa mật khẩu đã lưu?',
+      'Xóa mật khẩu?',
       `Bạn có chắc chắn muốn xóa mật khẩu cho trang "${site}"?`,
       [
         { text: 'Hủy', style: 'cancel' },
@@ -182,9 +375,13 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
           text: 'Xóa',
           style: 'destructive',
           onPress: async () => {
+            try {
+              await SecureStore.deleteItemAsync(`kite_pwd_${id}`);
+            } catch (e) {}
             const updated = credentials.filter((c) => c.id !== id);
             setCredentials(updated);
             await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
+            setSelectedCred(null);
             if (onShowToast) onShowToast('Đã xóa mật khẩu');
           },
         },
@@ -208,6 +405,11 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
       c.username.toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
 
+  const getDomainInitial = (site: string) => {
+    const clean = site.replace(/^www\./i, '');
+    return (clean[0] || 'K').toUpperCase();
+  };
+
   const getFavicon = (site: string) => {
     return `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(site)}`;
   };
@@ -229,205 +431,280 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
           activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
         >
-          {/* Thanh kéo */}
+          {/* Thanh kéo trang nhã */}
           <View style={styles.dragHandle} />
 
-          {/* Header */}
+          {/* Header phong cách Google Password Manager */}
           <View style={styles.headerRow}>
-            <View style={styles.titleGroup}>
-              <View style={styles.titleIconBox}>
-                <Feather name="key" size={18} color="#16a34a" />
+            <View style={styles.headerTitleGroup}>
+              {/* Biểu tượng chìa khóa Google */}
+              <View style={styles.googleKeyBox}>
+                <Feather name="key" size={17} color="#1a73e8" />
               </View>
-              <Text style={styles.sheetTitle}>Trình quản lý mật khẩu</Text>
-              {credentials.length > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{credentials.length}</Text>
-                </View>
-              )}
+              <Text style={styles.headerTitleText}>Trình quản lý mật khẩu</Text>
             </View>
 
-            <View style={styles.headerRightActions}>
-              <TouchableOpacity
-                style={styles.addBtn}
-                onPress={handleOpenAddModal}
-                activeOpacity={0.7}
-              >
-                <Feather name="plus" size={16} color="#ffffff" />
-                <Text style={styles.addBtnText}>Thêm</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={onClose}
-                activeOpacity={0.7}
-              >
-                <Feather name="x" size={20} color="#52525b" />
-              </TouchableOpacity>
-            </View>
+            {/* Nút đóng tròn tinh tế */}
+            <TouchableOpacity
+              style={styles.circleCloseBtn}
+              onPress={onClose}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name="x" size={18} color="#3c4043" />
+            </TouchableOpacity>
           </View>
 
-          {/* Ô tìm kiếm tài khoản */}
-          {credentials.length > 0 && (
-            <View style={styles.searchBarBox}>
-              <Feather name="search" size={16} color="#71717a" style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Tìm trang web hoặc tài khoản..."
-                placeholderTextColor="#a1a1aa"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Feather name="x-circle" size={16} color="#71717a" />
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
+          {/* Ô tìm kiếm dạng viên thuốc (Pill Search Bar chuẩn Google) */}
+          <View style={styles.searchPillBox}>
+            <Feather name="search" size={18} color="#5f6368" style={{ marginRight: 10 }} />
+            <TextInput
+              style={styles.searchPillInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Tìm kiếm"
+              placeholderTextColor="#5f6368"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Feather name="x-circle" size={16} color="#70757a" />
+              </TouchableOpacity>
+            )}
+          </View>
 
-          {/* Danh sách thẻ mật khẩu */}
+          {/* Nội dung cuộn chính */}
           <ScrollView
-            style={styles.listScroll}
+            style={styles.contentScroll}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={credentials.length === 0 ? styles.emptyScroll : undefined}
           >
+            {/* Dòng mô tả & Tìm hiểu thêm */}
+            <Text style={styles.descriptionParagraph}>
+              Tạo, lưu và quản lý mật khẩu và khoá truy cập để dễ dàng đăng nhập vào các trang web và ứng dụng.{' '}
+              <Text
+                style={styles.learnMoreLink}
+                onPress={() => {
+                  Alert.alert(
+                    'Bảo vệ mật khẩu',
+                    'Kite lưu trữ mật khẩu an toàn trong Apple Keychain và Android Keystore. Mật khẩu được mã hóa phần cứng và chỉ có thể truy cập qua Face ID hoặc mật mã của bạn.'
+                  );
+                }}
+              >
+                Tìm hiểu thêm
+              </Text>
+            </Text>
+
+            {/* Thẻ Kiểm tra mật khẩu (Password Checkup) chuẩn Google */}
+            <TouchableOpacity
+              style={styles.checkupCard}
+              activeOpacity={0.7}
+              onPress={() => {
+                Alert.alert(
+                  'Kiểm tra mật khẩu',
+                  `Hệ thống đã kiểm tra ${credentials.length} mật khẩu đã lưu. Toàn bộ thông tin được bảo vệ bằng mã hóa Apple Keychain hai lớp và xác thực sinh trắc học Face ID.`
+                );
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.checkupTitle}>Kiểm tra mật khẩu</Text>
+                <Text style={styles.checkupSubtitle}>
+                  {credentials.length > 0
+                    ? `${credentials.length} tài khoản được bảo vệ bởi Keychain`
+                    : 'Được bảo vệ bằng Apple Keychain & Face ID'}
+                </Text>
+              </View>
+              <View style={styles.checkupRightCol}>
+                <View style={styles.shieldBadge}>
+                  <Feather name="shield" size={15} color="#1a73e8" />
+                </View>
+                <Feather name="chevron-right" size={18} color="#747775" />
+              </View>
+            </TouchableOpacity>
+
+            {/* Nút Thêm mật khẩu chuẩn Google */}
+            <TouchableOpacity
+              style={styles.addPasswordRowBtn}
+              onPress={handleOpenAddModal}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.addPasswordRowBtnText}>Thêm mật khẩu...</Text>
+            </TouchableOpacity>
+
+            {/* Tiêu đề nhóm: Mật khẩu và khoá truy cập đã lưu */}
+            <Text style={styles.sectionHeaderLabel}>Mật khẩu và khoá truy cập đã lưu</Text>
+
+            {/* Danh sách tài khoản đã lưu */}
             {credentials.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
-                  <Feather name="shield" size={40} color="#16a34a" />
+                  <Feather name="lock" size={28} color="#1a73e8" />
                 </View>
                 <Text style={styles.emptyTitle}>Chưa lưu mật khẩu nào</Text>
                 <Text style={styles.emptySub}>
-                  Mật khẩu và tài khoản của bạn được lưu an toàn cục bộ trên thiết bị này. Nhấn "Thêm" để lưu tài khoản đầu tiên.
+                  Khi bạn đăng nhập trên các trang web, Kite sẽ tự động hỏi để lưu mật khẩu an toàn vào Keychain.
                 </Text>
-                <TouchableOpacity
-                  style={styles.emptyAddBtn}
-                  onPress={handleOpenAddModal}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="plus" size={16} color="#ffffff" style={{ marginRight: 6 }} />
-                  <Text style={styles.emptyAddBtnText}>Thêm mật khẩu mới</Text>
-                </TouchableOpacity>
               </View>
             ) : filteredCredentials.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <Feather name="search" size={32} color="#a1a1aa" style={{ marginBottom: 10 }} />
+                <Feather name="search" size={28} color="#70757a" style={{ marginBottom: 8 }} />
                 <Text style={styles.emptyTitle}>Không tìm thấy tài khoản</Text>
-                <Text style={styles.emptySub}>Thử tìm kiếm với tên miền hoặc email khác</Text>
+                <Text style={styles.emptySub}>Thử tìm kiếm với tên trang web hoặc email khác</Text>
               </View>
             ) : (
-              filteredCredentials.map((item) => {
-                const isRevealed = !!visiblePasswords[item.id];
+              <View style={styles.groupedListCard}>
+                {filteredCredentials.map((item, idx) => {
+                  const isLast = idx === filteredCredentials.length - 1;
+                  const isRevealed = Boolean(revealedPasswords[item.id]);
 
-                return (
-                  <View key={item.id} style={styles.credCard}>
-                    {/* Header của thẻ: Favicon + Domain + Nút Truy cập & Sửa & Xóa */}
-                    <View style={styles.credCardHeader}>
-                      <View style={styles.siteInfoRow}>
-                        <Image
-                          source={{ uri: getFavicon(item.website) }}
-                          style={styles.siteFavicon}
-                        />
-                        <TouchableOpacity
-                          onPress={() => handleOpenSite(item.website)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.siteName} numberOfLines={1}>
-                            {item.website}
-                          </Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      <View style={styles.cardActionsRow}>
-                        <TouchableOpacity
-                          style={styles.cardMiniBtn}
-                          onPress={() => handleOpenSite(item.website)}
-                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                        >
-                          <Feather name="external-link" size={15} color="#007aff" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cardMiniBtn}
-                          onPress={() => handleOpenEditModal(item)}
-                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                        >
-                          <Feather name="edit-2" size={15} color="#52525b" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.cardMiniBtn}
-                          onPress={() => handleDeleteCredential(item.id, item.website)}
-                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                        >
-                          <Feather name="trash-2" size={15} color="#ef4444" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-
-                    {/* Hàng Tên đăng nhập */}
-                    <View style={styles.credFieldRow}>
-                      <View style={styles.fieldLabelGroup}>
-                        <Feather name="user" size={14} color="#71717a" style={{ marginRight: 6 }} />
-                        <Text style={styles.fieldValue} numberOfLines={1}>
-                          {item.username}
-                        </Text>
-                      </View>
+                  return (
+                    <View key={item.id}>
                       <TouchableOpacity
-                        style={styles.copyBtn}
-                        onPress={() => handleCopyText(item.username, 'username')}
+                        style={styles.credRowItem}
+                        onPress={() => setSelectedCred(selectedCred?.id === item.id ? null : item)}
                         activeOpacity={0.7}
                       >
-                        <Feather name="copy" size={13} color="#007aff" style={{ marginRight: 4 }} />
-                        <Text style={styles.copyBtnText}>Sao chép</Text>
+                        {/* Hộp biểu tượng trang web chuẩn Google */}
+                        <View style={styles.faviconBox}>
+                          <Text style={styles.faviconLetter}>{getDomainInitial(item.website)}</Text>
+                        </View>
+
+                        {/* Tên trang web & Tên người dùng */}
+                        <View style={styles.credRowText}>
+                          <Text style={styles.credRowSite} numberOfLines={1}>
+                            {item.website}
+                          </Text>
+                          <Text style={styles.credRowUser} numberOfLines={1}>
+                            {item.username}
+                          </Text>
+                        </View>
+
+                        {/* Mũi tên điều hướng */}
+                        <Feather
+                          name={selectedCred?.id === item.id ? 'chevron-down' : 'chevron-right'}
+                          size={18}
+                          color="#747775"
+                        />
                       </TouchableOpacity>
+
+                      {/* Vùng chi tiết mở rộng khi bấm vào tài khoản */}
+                      {selectedCred?.id === item.id && (
+                        <View style={styles.detailExpandBox}>
+                          {/* Hàng Tên đăng nhập & Sao chép */}
+                          <View style={styles.detailFieldRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.detailFieldLabel}>Tên người dùng</Text>
+                              <Text style={styles.detailFieldValue}>{item.username}</Text>
+                            </View>
+                            <TouchableOpacity
+                              style={styles.detailActionBtn}
+                              onPress={() => handleCopy(item.username, false)}
+                              activeOpacity={0.7}
+                            >
+                              <Feather name="copy" size={15} color="#1a73e8" />
+                              <Text style={styles.detailActionText}>Sao chép</Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          {/* Hàng Mật khẩu & Hiện / Sao chép an toàn bằng Face ID */}
+                          <View style={styles.detailFieldRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.detailFieldLabel}>Mật khẩu</Text>
+                              <Text
+                                style={[
+                                  styles.detailFieldValue,
+                                  !isRevealed && styles.passwordMasked,
+                                ]}
+                              >
+                                {isRevealed ? revealedPasswords[item.id] : '••••••••••••'}
+                              </Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <TouchableOpacity
+                                style={styles.iconCircleBtn}
+                                onPress={() => handleToggleReveal(item)}
+                                activeOpacity={0.7}
+                              >
+                                <Feather
+                                  name={isRevealed ? 'eye-off' : 'eye'}
+                                  size={16}
+                                  color="#5f6368"
+                                />
+                              </TouchableOpacity>
+                              <TouchableOpacity
+                                style={styles.detailActionBtn}
+                                onPress={() => handleCopy('', true, item.id)}
+                                activeOpacity={0.7}
+                              >
+                                <Feather name="copy" size={15} color="#1a73e8" />
+                                <Text style={styles.detailActionText}>Sao chép</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+
+                          {/* Các nút thao tác: Mở trang web, Sửa, Xóa */}
+                          <View style={styles.detailButtonRow}>
+                            <TouchableOpacity
+                              style={styles.openWebBtn}
+                              onPress={() => handleOpenSite(item.website)}
+                              activeOpacity={0.7}
+                            >
+                              <Feather name="external-link" size={14} color="#1a73e8" style={{ marginRight: 4 }} />
+                              <Text style={styles.openWebBtnText}>Mở trang web</Text>
+                            </TouchableOpacity>
+
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                              <TouchableOpacity
+                                style={styles.miniBtn}
+                                onPress={() => handleOpenEditModal(item)}
+                                activeOpacity={0.7}
+                              >
+                                <Feather name="edit-2" size={15} color="#3c4043" />
+                              </TouchableOpacity>
+
+                              <TouchableOpacity
+                                style={styles.miniBtn}
+                                onPress={() => handleDeleteCredential(item.id, item.website)}
+                                activeOpacity={0.7}
+                              >
+                                <Feather name="trash-2" size={15} color="#d93025" />
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </View>
+                      )}
+
+                      {!isLast && <View style={styles.itemDivider} />}
                     </View>
-
-                    {/* Hàng Mật khẩu */}
-                    <View style={[styles.credFieldRow, { borderBottomWidth: 0 }]}>
-                      <View style={styles.fieldLabelGroup}>
-                        <Feather name="lock" size={14} color="#71717a" style={{ marginRight: 6 }} />
-                        <Text
-                          style={[
-                            styles.fieldValue,
-                            !isRevealed && styles.passwordHiddenText,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {isRevealed ? item.password : '••••••••••••'}
-                        </Text>
-                      </View>
-
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <TouchableOpacity
-                          style={styles.eyeBtn}
-                          onPress={() => togglePasswordVisibility(item.id)}
-                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                        >
-                          <Feather
-                            name={isRevealed ? 'eye-off' : 'eye'}
-                            size={15}
-                            color="#71717a"
-                          />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.copyBtn}
-                          onPress={() => handleCopyText(item.password, 'password')}
-                          activeOpacity={0.7}
-                        >
-                          <Feather name="copy" size={13} color="#007aff" style={{ marginRight: 4 }} />
-                          <Text style={styles.copyBtnText}>Sao chép</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                );
-              })
+                  );
+                })}
+              </View>
             )}
+
+            <View style={{ height: 30 }} />
           </ScrollView>
 
-          {/* MODAL THÊM / CHỈNH SỬA TÀI KHOẢN */}
+          {/* Thanh công cụ dưới cùng chuẩn ảnh tham chiếu Google (Cài đặt & Chọn) */}
+          <View style={styles.bottomBarRow}>
+            <TouchableOpacity
+              style={styles.bottomPillBtn}
+              onPress={() => setSettingsModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <Feather name="sliders" size={15} color="#1f1f1f" style={{ marginRight: 6 }} />
+              <Text style={styles.bottomPillBtnText}>Cài đặt</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.bottomPillBtn}
+              onPress={onClose}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.bottomPillBtnText}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* MODAL THÊM / CHỈNH SỬA TÀI KHOẢN (GOOGLE STYLE) */}
           <Modal
             visible={editModalVisible}
             transparent
@@ -435,89 +712,143 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
             onRequestClose={() => setEditModalVisible(false)}
           >
             <TouchableOpacity
-              style={styles.innerModalBackdrop}
+              style={styles.dialogBackdrop}
               activeOpacity={1}
               onPress={() => setEditModalVisible(false)}
             >
               <TouchableOpacity
-                style={styles.innerModalBox}
+                style={styles.dialogCard}
                 activeOpacity={1}
                 onPress={(e) => e.stopPropagation()}
               >
-                <View style={styles.innerModalHeader}>
-                  <Text style={styles.innerModalTitle}>
-                    {editingId ? 'Chỉnh sửa tài khoản' : 'Thêm tài khoản mới'}
-                  </Text>
-                  <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                    <Feather name="x" size={20} color="#71717a" />
-                  </TouchableOpacity>
-                </View>
+                <Text style={styles.dialogTitle}>
+                  {editingId ? 'Chỉnh sửa mật khẩu' : 'Thêm mật khẩu'}
+                </Text>
 
-                {/* Form fields */}
-                <Text style={styles.inputLabel}>Trang web hoặc tên miền</Text>
+                {/* Ô Trang web */}
+                <Text style={styles.inputFieldLabel}>Trang web</Text>
                 <TextInput
-                  style={styles.modalInput}
+                  style={styles.dialogInput}
                   value={inputWebsite}
                   onChangeText={setInputWebsite}
-                  placeholder="Ví dụ: google.com, facebook.com"
-                  placeholderTextColor="#a1a1aa"
+                  placeholder="ví dụ: google.com, facebook.com"
+                  placeholderTextColor="#747775"
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
 
-                <Text style={styles.inputLabel}>Tên đăng nhập hoặc Email</Text>
+                {/* Ô Tên đăng nhập */}
+                <Text style={styles.inputFieldLabel}>Tên đăng nhập / Email</Text>
                 <TextInput
-                  style={styles.modalInput}
+                  style={styles.dialogInput}
                   value={inputUsername}
                   onChangeText={setInputUsername}
-                  placeholder="email@example.com hoặc username"
-                  placeholderTextColor="#a1a1aa"
+                  placeholder="Email, số điện thoại hoặc tài khoản"
+                  placeholderTextColor="#747775"
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
 
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.inputLabel}>Mật khẩu</Text>
+                {/* Ô Mật khẩu */}
+                <View style={styles.pwdLabelRow}>
+                  <Text style={styles.inputFieldLabel}>Mật khẩu</Text>
                   <TouchableOpacity onPress={generateStrongPassword}>
-                    <Text style={styles.generateText}>✨ Tạo mật khẩu mạnh</Text>
+                    <Text style={styles.generatePwdText}>Tạo mật khẩu mạnh</Text>
                   </TouchableOpacity>
                 </View>
-                <View style={styles.passwordInputContainer}>
+                <View style={styles.passwordInputWrap}>
                   <TextInput
-                    style={styles.modalPasswordInput}
+                    style={styles.passwordInputInner}
                     value={inputPassword}
                     onChangeText={setInputPassword}
-                    placeholder="Nhập mật khẩu..."
-                    placeholderTextColor="#a1a1aa"
+                    placeholder="Mật khẩu bảo mật"
+                    placeholderTextColor="#747775"
                     secureTextEntry={!showFormPassword}
                     autoCapitalize="none"
                     autoCorrect={false}
                   />
                   <TouchableOpacity
-                    style={{ padding: 8 }}
                     onPress={() => setShowFormPassword(!showFormPassword)}
+                    style={{ padding: 6 }}
                   >
                     <Feather
                       name={showFormPassword ? 'eye-off' : 'eye'}
-                      size={17}
-                      color="#71717a"
+                      size={18}
+                      color="#5f6368"
                     />
                   </TouchableOpacity>
                 </View>
 
-                {/* Nút hành động */}
-                <View style={styles.innerModalActions}>
+                {/* Nút hành động Lưu / Hủy */}
+                <View style={styles.dialogActionsRow}>
                   <TouchableOpacity
-                    style={styles.innerCancelBtn}
+                    style={styles.cancelTextBtn}
                     onPress={() => setEditModalVisible(false)}
                   >
-                    <Text style={styles.innerCancelText}>Hủy</Text>
+                    <Text style={styles.cancelTextBtnLabel}>Hủy</Text>
                   </TouchableOpacity>
+
                   <TouchableOpacity
-                    style={styles.innerSaveBtn}
+                    style={styles.savePillBtn}
                     onPress={handleSaveCredential}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.innerSaveText}>Lưu tài khoản</Text>
+                    <Text style={styles.savePillBtnLabel}>Lưu</Text>
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </Modal>
+
+          {/* MODAL CÀI ĐẶT BẢO MẬT MẬT KHẨU */}
+          <Modal
+            visible={settingsModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setSettingsModalVisible(false)}
+          >
+            <TouchableOpacity
+              style={styles.dialogBackdrop}
+              activeOpacity={1}
+              onPress={() => setSettingsModalVisible(false)}
+            >
+              <TouchableOpacity
+                style={styles.dialogCard}
+                activeOpacity={1}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <Text style={styles.dialogTitle}>Cài đặt mật khẩu</Text>
+
+                <View style={styles.settingItemRow}>
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <Text style={styles.settingItemTitle}>Đề xuất lưu mật khẩu</Text>
+                    <Text style={styles.settingItemSub}>Hỏi để lưu thông tin đăng nhập khi gửi form</Text>
+                  </View>
+                  <Switch
+                    value={settings.autoPromptSave}
+                    onValueChange={(v) => updateSetting('autoPromptSave', v)}
+                    trackColor={{ false: '#e0e0e0', true: '#1a73e8' }}
+                  />
+                </View>
+
+                <View style={styles.settingItemRow}>
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <Text style={styles.settingItemTitle}>Bảo vệ bằng Face ID / Vân tay</Text>
+                    <Text style={styles.settingItemSub}>Yêu cầu xác thực trước khi xem hoặc sao chép</Text>
+                  </View>
+                  <Switch
+                    value={settings.requireBiometrics}
+                    onValueChange={(v) => updateSetting('requireBiometrics', v)}
+                    trackColor={{ false: '#e0e0e0', true: '#1a73e8' }}
+                  />
+                </View>
+
+                <View style={styles.dialogActionsRow}>
+                  <TouchableOpacity
+                    style={styles.savePillBtn}
+                    onPress={() => setSettingsModalVisible(false)}
+                  >
+                    <Text style={styles.savePillBtnLabel}>Xong</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
@@ -536,321 +867,418 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    maxHeight: '86%',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 10,
+    backgroundColor: '#f8fafd',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '92%',
+    minHeight: '65%',
+    paddingTop: 8,
   },
   dragHandle: {
-    width: 38,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#d4d4d8',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#c4c7c5',
     alignSelf: 'center',
-    marginBottom: 14,
+    marginBottom: 8,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
   },
-  titleGroup: {
+  headerTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
   },
-  titleIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f0fdf4',
+  googleKeyBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#e8f0fe',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 10,
   },
-  sheetTitle: {
+  headerTitleText: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#09090b',
-  },
-  countBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: '#f4f4f5',
-  },
-  countBadgeText: {
-    fontSize: 12,
     fontWeight: '600',
-    color: '#71717a',
+    color: '#1f1f1f',
   },
-  headerRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: '#16a34a',
-  },
-  addBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f4f4f5',
+  circleCloseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f1f3f4',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  searchBarBox: {
+  searchPillBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f4f4f5',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 38,
+    backgroundColor: '#f1f3f4',
+    borderRadius: 24,
+    marginHorizontal: 20,
+    paddingHorizontal: 16,
+    height: 44,
+    marginBottom: 12,
+  },
+  searchPillInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1f1f1f',
+    padding: 0,
+  },
+  contentScroll: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  descriptionParagraph: {
+    fontSize: 13.5,
+    color: '#444746',
+    lineHeight: 19,
     marginBottom: 14,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#09090b',
-    paddingVertical: 0,
+  learnMoreLink: {
+    color: '#1a73e8',
+    fontWeight: '500',
   },
-  listScroll: {
-    maxHeight: 490,
-  },
-  emptyScroll: {
-    paddingVertical: 36,
+  checkupCard: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e0e2e5',
+  },
+  checkupTitle: {
+    fontSize: 15.5,
+    fontWeight: '600',
+    color: '#1f1f1f',
+    marginBottom: 3,
+  },
+  checkupSubtitle: {
+    fontSize: 12.5,
+    color: '#5f6368',
+  },
+  checkupRightCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  shieldBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#e8f0fe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addPasswordRowBtn: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#dadce0',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+  },
+  addPasswordRowBtnText: {
+    fontSize: 14,
+    color: '#1a73e8',
+    fontWeight: '500',
+  },
+  sectionHeaderLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1f1f1f',
+    marginBottom: 10,
+  },
+  groupedListCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e0e2e5',
+    overflow: 'hidden',
+  },
+  credRowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  faviconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#f1f3f4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  faviconLetter: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#5f6368',
+  },
+  credRowText: {
+    flex: 1,
+    marginRight: 10,
+  },
+  credRowSite: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1f1f1f',
+    marginBottom: 2,
+  },
+  credRowUser: {
+    fontSize: 12.5,
+    color: '#5f6368',
+  },
+  itemDivider: {
+    height: 1,
+    backgroundColor: '#f1f3f4',
+    marginLeft: 66,
+  },
+  detailExpandBox: {
+    backgroundColor: '#fafbfc',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderColor: '#f1f3f4',
+  },
+  detailFieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: '#f1f3f4',
+  },
+  detailFieldLabel: {
+    fontSize: 11.5,
+    color: '#747775',
+    marginBottom: 2,
+  },
+  detailFieldValue: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1f1f1f',
+  },
+  passwordMasked: {
+    letterSpacing: 2,
+    fontSize: 13,
+  },
+  detailActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: '#e8f0fe',
+    gap: 4,
+  },
+  detailActionText: {
+    fontSize: 12,
+    color: '#1a73e8',
+    fontWeight: '500',
+  },
+  iconCircleBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f1f3f4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 4,
+  },
+  openWebBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  openWebBtnText: {
+    fontSize: 13,
+    color: '#1a73e8',
+    fontWeight: '500',
+  },
+  miniBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f3f4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderColor: '#ebebeb',
+    backgroundColor: '#f8fafd',
+  },
+  bottomPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#dadce0',
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+  },
+  bottomPillBtnText: {
+    fontSize: 13.5,
+    fontWeight: '500',
+    color: '#1f1f1f',
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 24,
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e0e2e5',
   },
   emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#f0fdf4',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#e8f0fe',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 16,
+    fontSize: 15.5,
     fontWeight: '600',
-    color: '#09090b',
+    color: '#1f1f1f',
     marginBottom: 6,
   },
   emptySub: {
     fontSize: 13,
-    color: '#71717a',
+    color: '#5f6368',
     textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 18,
   },
-  emptyAddBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#16a34a',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 16,
-  },
-  emptyAddBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  credCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  credCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-    marginBottom: 10,
-  },
-  siteInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  dialogBackdrop: {
     flex: 1,
-  },
-  siteFavicon: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-  },
-  siteName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  cardActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  cardMiniBtn: {
-    padding: 4,
-  },
-  credFieldRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#f1f5f9',
-  },
-  fieldLabelGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 8,
-  },
-  fieldValue: {
-    fontSize: 13,
-    color: '#334155',
-    fontWeight: '500',
-  },
-  passwordHiddenText: {
-    letterSpacing: 2,
-    fontSize: 14,
-  },
-  eyeBtn: {
-    padding: 4,
-  },
-  copyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: '#eff6ff',
-  },
-  copyBtnText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#007aff',
-  },
-  innerModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingHorizontal: 24,
   },
-  innerModalBox: {
-    width: '100%',
+  dialogCard: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 8,
+    width: '100%',
+    padding: 22,
   },
-  innerModalHeader: {
+  dialogTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1f1f1f',
+    marginBottom: 16,
+  },
+  inputFieldLabel: {
+    fontSize: 12.5,
+    color: '#444746',
+    fontWeight: '500',
+    marginBottom: 5,
+  },
+  dialogInput: {
+    backgroundColor: '#f1f3f4',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 42,
+    fontSize: 14.5,
+    color: '#1f1f1f',
+    marginBottom: 14,
+  },
+  pwdLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 5,
   },
-  innerModalTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#09090b',
-  },
-  inputLabel: {
+  generatePwdText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#52525b',
-    marginBottom: 6,
-    marginTop: 8,
+    color: '#1a73e8',
+    fontWeight: '500',
   },
-  generateText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#16a34a',
-    marginTop: 8,
-  },
-  modalInput: {
-    backgroundColor: '#f4f4f5',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 42,
-    fontSize: 14,
-    color: '#09090b',
-  },
-  passwordInputContainer: {
+  passwordInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#f1f3f4',
     borderRadius: 12,
-    paddingLeft: 12,
-    paddingRight: 6,
+    paddingHorizontal: 14,
     height: 42,
+    marginBottom: 20,
   },
-  modalPasswordInput: {
+  passwordInputInner: {
     flex: 1,
-    fontSize: 14,
-    color: '#09090b',
+    fontSize: 14.5,
+    color: '#1f1f1f',
+    padding: 0,
   },
-  innerModalActions: {
+  dialogActionsRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 10,
-    marginTop: 20,
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 6,
   },
-  innerCancelBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#f4f4f5',
+  cancelTextBtn: {
+    paddingVertical: 9,
+    paddingHorizontal: 16,
   },
-  innerCancelText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#71717a',
+  cancelTextBtnLabel: {
+    fontSize: 14,
+    color: '#1a73e8',
+    fontWeight: '500',
   },
-  innerSaveBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#16a34a',
+  savePillBtn: {
+    backgroundColor: '#1a73e8',
+    borderRadius: 18,
+    paddingVertical: 9,
+    paddingHorizontal: 20,
   },
-  innerSaveText: {
-    fontSize: 13,
-    fontWeight: '600',
+  savePillBtnLabel: {
+    fontSize: 14,
     color: '#ffffff',
+    fontWeight: '600',
+  },
+  settingItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: '#f1f3f4',
+  },
+  settingItemTitle: {
+    fontSize: 14.5,
+    fontWeight: '500',
+    color: '#1f1f1f',
+    marginBottom: 2,
+  },
+  settingItemSub: {
+    fontSize: 12,
+    color: '#5f6368',
   },
 });

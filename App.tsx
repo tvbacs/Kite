@@ -29,7 +29,9 @@ import { QRScannerModal } from './src/components/QRScannerModal';
 import { HistorySheet, STORAGE_HISTORY_KEY, HistoryItem } from './src/components/HistorySheet';
 import { BookmarkSheet, STORAGE_BOOKMARKS_KEY, DEFAULT_BOOKMARKS, BookmarkItem } from './src/components/BookmarkSheet';
 import { DownloadSheet, STORAGE_DOWNLOADS_KEY, DownloadedItem } from './src/components/DownloadSheet';
-import { PasswordManagerSheet } from './src/components/PasswordManagerSheet';
+import { DownloadPromptModal } from './src/components/DownloadPromptModal';
+import { PasswordManagerSheet, saveCredentialSecurely } from './src/components/PasswordManagerSheet';
+import { PasswordSavePromptModal } from './src/components/PasswordSavePromptModal';
 import { BrowserMenuSheet } from './src/components/BrowserMenuSheet';
 import {
   ExtensionSheet,
@@ -202,6 +204,18 @@ function BrowserMain() {
   const [extensions, setExtensions] = useState<ExtensionItem[]>(DEFAULT_EXTENSIONS);
   const [browserMenuVisible, setBrowserMenuVisible] = useState<boolean>(false);
   const [isCurrentBookmarked, setIsCurrentBookmarked] = useState<boolean>(false);
+  const [downloadPrompt, setDownloadPrompt] = useState<{
+    visible: boolean;
+    url: string;
+    fileName: string;
+    isDownloading?: boolean;
+  } | null>(null);
+  const [passwordSavePrompt, setPasswordSavePrompt] = useState<{
+    visible: boolean;
+    website: string;
+    username: string;
+    passwordSecret: string;
+  } | null>(null);
 
   // Sinh mã script tiện ích mở rộng phù hợp với URL của tab
   const getExtensionsScriptForTab = (
@@ -1507,6 +1521,15 @@ function BrowserMain() {
             return prev;
           });
         }
+      } else if (data.type === 'DETECTED_LOGIN') {
+        if (data.website && data.username && data.password) {
+          setPasswordSavePrompt({
+            visible: true,
+            website: data.website,
+            username: data.username,
+            passwordSecret: data.password,
+          });
+        }
       }
     } catch (e) {}
   };
@@ -1559,6 +1582,13 @@ function BrowserMain() {
     // 1. Cho phép các trang nội bộ about/data
     if (reqUrl.startsWith('about:blank') || reqUrl.startsWith('data:')) {
       return true;
+    }
+
+    // 1b. Bắt liên kết tải tệp trực tiếp để không chuyển toàn bộ trang sang màn hình trắng
+    const isDirectDownload = /\.(mp4|mov|avi|mkv|mp3|wav|zip|rar|7z|tar|gz|pdf|apk|dmg|iso)(\?.*)?$/i.test(request.url);
+    if (isDirectDownload) {
+      handleFileDownload({ nativeEvent: { downloadUrl: request.url } });
+      return false;
     }
 
     // 2. Nếu người dùng chủ động gõ URL hoặc bấm kết quả tìm kiếm/dấu trang: cho phép tải thẳng
@@ -1821,36 +1851,66 @@ function BrowserMain() {
     }
   };
 
-  // Xử lý tải tệp xuống trên iOS và lưu trực tiếp vào thư mục Kite trong ứng dụng Tệp (Files)
+  // Xử lý khi có yêu cầu tải tệp xuống: Mở hộp thoại để người dùng chọn nơi lưu
   const handleFileDownload = async ({ nativeEvent }: { nativeEvent: { downloadUrl: string } }) => {
     const { downloadUrl } = nativeEvent;
     if (!downloadUrl) return;
-    showToast('Đang tải tệp xuống...');
-    try {
-      // Tải trực tiếp vào Paths.document để xuất hiện ngay trong thư mục "Kite" trên ứng dụng Tệp (Files) của iPhone
-      const downloadedFile = await File.downloadFileAsync(downloadUrl, Paths.document, { idempotent: true });
-      const cleanName =
-        downloadedFile?.name ||
-        downloadUrl.split('/').pop()?.split('?')[0] ||
-        `file_${Date.now()}`;
 
-      // Tự động lưu vào danh sách Tệp đã tải xuống của Kite
+    let cleanName = downloadUrl.split('/').pop()?.split('?')[0] || `tep_${Date.now()}`;
+    try {
+      cleanName = decodeURIComponent(cleanName);
+    } catch (e) {}
+
+    setDownloadPrompt({
+      visible: true,
+      url: downloadUrl,
+      fileName: cleanName,
+      isDownloading: false,
+    });
+  };
+
+  // Người dùng chọn: Lưu trực tiếp vào Kite (Tệp đã tải)
+  const handleConfirmSaveToKite = async () => {
+    if (!downloadPrompt) return;
+    const { url, fileName } = downloadPrompt;
+    setDownloadPrompt((prev) => (prev ? { ...prev, isDownloading: true } : null));
+
+    try {
+      const downloadedFile = await File.downloadFileAsync(url, Paths.document, { idempotent: true });
+      const actualName = downloadedFile?.name || fileName;
+
       try {
         const stored = await AsyncStorage.getItem(STORAGE_DOWNLOADS_KEY);
         const list: DownloadedItem[] = stored ? JSON.parse(stored) : [];
         const newItem: DownloadedItem = {
           id: `dl-${Date.now()}`,
-          fileName: cleanName,
+          fileName: actualName,
           uri: downloadedFile.uri,
           fileSize: downloadedFile.size || 0,
           timestamp: Date.now(),
-          sourceUrl: downloadUrl,
+          sourceUrl: url,
         };
         const updated = [newItem, ...list.filter((i) => i.uri !== downloadedFile.uri)];
         await AsyncStorage.setItem(STORAGE_DOWNLOADS_KEY, JSON.stringify(updated));
       } catch (e) {}
 
-      showToast(`Đã lưu vào Tệp > Kite: ${cleanName}`);
+      setDownloadPrompt(null);
+      showToast(`Đã lưu vào Kite: ${actualName}`);
+    } catch (e) {
+      setDownloadPrompt(null);
+      showToast('Lỗi khi tải tệp');
+    }
+  };
+
+  // Người dùng chọn: Chọn nơi lưu... (Mở hộp thoại Save to Files / Save Video của iOS)
+  const handleConfirmChooseLocation = async () => {
+    if (!downloadPrompt) return;
+    const { url } = downloadPrompt;
+    setDownloadPrompt((prev) => (prev ? { ...prev, isDownloading: true } : null));
+
+    try {
+      const downloadedFile = await File.downloadFileAsync(url, Paths.cache, { idempotent: true });
+      setDownloadPrompt(null);
 
       const canShare = await Sharing.isAvailableAsync();
       if (canShare && downloadedFile?.uri) {
@@ -1858,31 +1918,26 @@ function BrowserMain() {
       } else if (downloadedFile?.uri) {
         await Share.share({ url: downloadedFile.uri });
       } else {
-        await Share.share({ url: downloadUrl });
+        await Share.share({ url });
       }
     } catch (e) {
-      Share.share({ url: downloadUrl });
+      setDownloadPrompt(null);
+      showToast('Lỗi khi chuẩn bị tệp');
     }
   };
 
-  // Mở trực tiếp ứng dụng Tệp (Apple Files app) để truy cập thư mục Kite trên iPhone
-  const handleOpenDownloads = async () => {
-    try {
-      if (Platform.OS === 'ios') {
-        const filesScheme = 'shareddocuments://';
-        const canOpen = await Linking.canOpenURL(filesScheme);
-        if (canOpen) {
-          await Linking.openURL(filesScheme);
-          return;
-        }
-        await Linking.openURL(filesScheme);
-        return;
-      }
-    } catch (e) {
-      console.log('Cannot open native Files app:', e);
-    }
-    // Fallback nếu không mở được app Tệp hệ thống
+  // Mở trình quản lý Tệp đã tải xuống của Kite
+  const handleOpenDownloads = () => {
     setDownloadSheetVisible(true);
+  };
+
+  // Xác nhận lưu mật khẩu tự động sau khi đăng nhập
+  const handleConfirmSavePassword = async () => {
+    if (!passwordSavePrompt) return;
+    const { website, username, passwordSecret } = passwordSavePrompt;
+    await saveCredentialSecurely(website, username, passwordSecret);
+    setPasswordSavePrompt(null);
+    showToast(`Đã lưu tài khoản ${website} vào Keychain`);
   };
 
   const isCurrentIncognito = Boolean(currentTab?.isIncognito || isIncognito);
@@ -2310,6 +2365,30 @@ function BrowserMain() {
         onSelectUrl={handleNavigate}
         onShowToast={showToast}
       />
+
+      {/* Hộp thoại xác nhận tải xuống & Chọn nơi lưu */}
+      {downloadPrompt && (
+        <DownloadPromptModal
+          visible={downloadPrompt.visible}
+          fileName={downloadPrompt.fileName}
+          downloadUrl={downloadPrompt.url}
+          isDownloading={downloadPrompt.isDownloading}
+          onSaveToKite={handleConfirmSaveToKite}
+          onChooseLocation={handleConfirmChooseLocation}
+          onCancel={() => setDownloadPrompt(null)}
+        />
+      )}
+
+      {/* Hộp thoại đề xuất lưu mật khẩu tự động sau khi đăng nhập */}
+      {passwordSavePrompt && (
+        <PasswordSavePromptModal
+          visible={passwordSavePrompt.visible}
+          website={passwordSavePrompt.website}
+          username={passwordSavePrompt.username}
+          onSave={handleConfirmSavePassword}
+          onDismiss={() => setPasswordSavePrompt(null)}
+        />
+      )}
 
       {/* Menu trình duyệt 3 chấm Header (Browser Menu Sheet) */}
       <BrowserMenuSheet

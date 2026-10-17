@@ -243,12 +243,12 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               }}
               activeOpacity={0.7}
             >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#f0fdf4' }]}>
-                <Feather name="key" size={18} color="#16a34a" />
+              <View style={[styles.menuIconCircle, { backgroundColor: '#e8f0fe' }]}>
+                <Feather name="key" size={18} color="#1a73e8" />
               </View>
               <View style={styles.menuTextContainer}>
                 <Text style={styles.menuTitle}>Trình quản lý mật khẩu</Text>
-                <Text style={styles.menuSubtitle}>Quản lý tài khoản & sao chép mật khẩu an toàn</Text>
+                <Text style={styles.menuSubtitle}>Bảo mật bằng Apple Keychain & Face ID</Text>
               </View>
               <Feather name="chevron-right" size={18} color="#a1a1aa" />
             </TouchableOpacity>

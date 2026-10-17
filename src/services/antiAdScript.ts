@@ -1061,6 +1061,78 @@ export const getDataSaverScript = (mode: 'block_images' | 'compress_images' | 'o
       compObs.observe(document.documentElement || document.body, { childList: true, subtree: true });
     }
   } catch(e) {}
+
+  // 6. Nhận diện Form Đăng nhập & Mật khẩu để tự động hỏi người dùng có muốn lưu không
+  try {
+    var lastCapturedLogin = null;
+
+    var captureLoginForm = function(targetEl) {
+      try {
+        var form = targetEl ? targetEl.closest('form') : null;
+        var pwdInput = null;
+        var userInput = null;
+
+        if (form) {
+          pwdInput = form.querySelector('input[type="password"]');
+          userInput = form.querySelector('input[type="email"], input[type="text"], input[name*="user"], input[name*="login"], input[id*="user"], input[id*="login"], input[autocomplete="username"]');
+        }
+
+        if (!pwdInput) {
+          pwdInput = document.querySelector('input[type="password"]');
+        }
+
+        if (pwdInput && pwdInput.value) {
+          if (!userInput) {
+            var allInputs = Array.from(document.querySelectorAll('input:not([type="password"]):not([type="hidden"]):not([type="submit"]):not([type="button"])'));
+            for (var i = 0; i < allInputs.length; i++) {
+              if (allInputs[i].value && (allInputs[i].type === 'email' || allInputs[i].type === 'text')) {
+                userInput = allInputs[i];
+                break;
+              }
+            }
+          }
+
+          var usernameVal = userInput ? userInput.value.trim() : '';
+          var passwordVal = pwdInput.value;
+
+          if (passwordVal && passwordVal.length >= 2) {
+            var loginData = {
+              type: 'DETECTED_LOGIN',
+              website: location.hostname || location.host,
+              username: usernameVal || 'Tài khoản',
+              password: passwordVal,
+            };
+
+            var loginKey = loginData.website + '|' + loginData.username + '|' + loginData.password;
+            if (lastCapturedLogin !== loginKey) {
+              lastCapturedLogin = loginKey;
+              window.ReactNativeWebView.postMessage(JSON.stringify(loginData));
+            }
+          }
+        }
+      } catch(e) {}
+    };
+
+    document.addEventListener('submit', function(e) {
+      captureLoginForm(e.target);
+    }, true);
+
+    document.addEventListener('click', function(e) {
+      var btn = e.target ? e.target.closest('button, input[type="submit"], [role="button"], a') : null;
+      if (btn) {
+        var btnText = (btn.innerText || btn.value || '').toLowerCase();
+        if (
+          btnText.includes('đăng nhập') ||
+          btnText.includes('login') ||
+          btnText.includes('sign in') ||
+          btnText.includes('log in') ||
+          btn.type === 'submit'
+        ) {
+          captureLoginForm(btn);
+        }
+      }
+    }, true);
+  } catch(e) {}
 })();
 true;
 `;
