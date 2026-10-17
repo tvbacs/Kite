@@ -878,22 +878,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     } catch (e) {}
   };
 
-  const handleGuestLogin = async () => {
-    const guestUser: UserProfile = {
-      isLoggedIn: false,
-      name: 'Khách',
-      email: '',
-      avatarUrl: '',
-    };
-    setUserProfile(guestUser);
-    if (onUpdateProfile) onUpdateProfile(guestUser);
-    await AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(guestUser));
-    setUserModalVisible(false);
-    if (onShowToast) {
-      onShowToast('Đang duyệt web với tư cách khách');
-    }
-  };
-
   const handleLogout = async () => {
     // Xóa tài khoản hiện tại khỏi danh sách tài khoản đã lưu
     const remaining = savedAccounts.filter(
@@ -1966,15 +1950,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <Text style={styles.activeAccountName} numberOfLines={1}>
                 {userProfile.isLoggedIn && userProfile.name
                   ? userProfile.name
-                  : userProfile.name === 'Khách'
-                  ? 'Người dùng khách'
                   : 'Tài khoản Google'}
               </Text>
               <Text style={styles.activeAccountEmail} numberOfLines={1}>
                 {userProfile.isLoggedIn && userProfile.email
                   ? userProfile.email
-                  : userProfile.name === 'Khách'
-                  ? 'Đang duyệt web với tư cách khách'
                   : 'Đăng nhập để đồng bộ lịch sử duyệt web và lối tắt'}
               </Text>
             </View>
@@ -2102,22 +2082,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   <Feather name="user-plus" size={17} color="#007aff" style={{ marginRight: 10 }} />
                   <Text style={styles.addAccountText}>
                     {allAccounts.length > 0 ? 'Thêm tài khoản khác...' : 'Đăng nhập với Google'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <View style={styles.accountCardFullDivider} />
-
-              {/* Nút Đăng nhập bằng tư cách khách */}
-              <TouchableOpacity
-                style={styles.addAccountRow}
-                onPress={handleGuestLogin}
-                activeOpacity={0.6}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Feather name="user-check" size={17} color="#71717a" style={{ marginRight: 10 }} />
-                  <Text style={[styles.addAccountText, { color: '#71717a' }]}>
-                    Duyệt web với tư cách khách
                   </Text>
                 </View>
               </TouchableOpacity>
