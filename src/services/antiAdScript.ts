@@ -813,7 +813,7 @@ export const INJECTED_AFTER_CONTENT = `
             lastReportedKey = reportKey;
             try {
               window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: isGoogleCompletedLogin ? 'GOOGLE_LOGIN_COMPLETED' : 'GOOGLE_USER_PROFILE',
+                type: 'GOOGLE_USER_PROFILE',
                 avatarUrl: userAvatar || '',
                 name: userName,
                 email: userEmail

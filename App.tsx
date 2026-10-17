@@ -1349,11 +1349,6 @@ function BrowserMain() {
           });
           showToast(`Đăng nhập thành công! (${profile.name || profile.email})`);
         }
-        // Đưa về màn hình trống (HomeDashboard) ngay khi hoàn tất
-        setTabs((prev) =>
-          prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
-        );
-        setInputUrl('');
       } else if (data.type === 'GOOGLE_USER_PROFILE') {
         const isBadName = Boolean(
           data.name &&
@@ -1394,11 +1389,7 @@ function BrowserMain() {
               }
               AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
             });
-            showToast(`Đăng nhập thành công! (${profile.name || profile.email})`);
-            setTabs((prev) =>
-              prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
-            );
-            setInputUrl('');
+            // Giữ nguyên tab để người dùng quản lý tài khoản Google bình thường, không đưa về trang trống
             return;
           }
 
@@ -1599,20 +1590,15 @@ function BrowserMain() {
       return;
     }
 
-    const isLoginDone =
-      navState.url &&
-      (navState.url.toLowerCase().includes('utm_source=sign_in_no_continue') ||
-        navState.url.toLowerCase().includes('myaccount.google.com'));
-
     if (tabId === activeTabId) {
       setCanGoBack(navState.canGoBack);
       setCanGoForward(navState.canGoForward);
-      if (!isEditing && navState.url && !isLoginDone) {
+      if (!isEditing && navState.url) {
         setInputUrl(navState.url);
       }
     }
 
-    if (navState.title && !isLoginDone) {
+    if (navState.title) {
       setTabs((prev) => {
         const updated = prev.map((t) => (t.id === tabId ? { ...t, title: navState.title } : t));
         persistTabsState(updated);
@@ -1621,18 +1607,6 @@ function BrowserMain() {
     }
 
     if (navState.url) {
-      if (isLoginDone) {
-        // Chờ 600ms để script trích xuất avatar & profile rồi đưa thẳng về màn hình trống (HomeDashboard)
-        setTimeout(() => {
-          setTabs((prev) => {
-            const updated = prev.map((t) => (t.id === tabId ? { ...t, url: '', title: 'Trang mới' } : t));
-            persistTabsState(updated);
-            return updated;
-          });
-          setInputUrl('');
-        }, 600);
-        return;
-      }
 
       saveToHistory(navState.url, navState.title || navState.url, tabId);
       setTabs((prev) => {
