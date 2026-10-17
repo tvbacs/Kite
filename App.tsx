@@ -2618,6 +2618,39 @@ function BrowserMain() {
             showToast('Đang tải lại trang...');
           }
         }}
+        onShare={() => {
+          setBrowserMenuVisible(false);
+          const urlToShare = activeUrl;
+          if (!urlToShare) {
+            showToast('Không có liên kết để chia sẻ');
+            return;
+          }
+          let shareUrl = urlToShare.trim();
+          if (!shareUrl.startsWith('http://') && !shareUrl.startsWith('https://')) {
+            shareUrl = 'https://' + shareUrl;
+          }
+          const titleToShare = currentTab?.title || '';
+
+          setTimeout(async () => {
+            try {
+              if (Platform.OS === 'ios') {
+                await Share.share({
+                  url: shareUrl,
+                  message: titleToShare || undefined,
+                });
+              } else {
+                await Share.share({
+                  title: titleToShare || 'Chia sẻ liên kết',
+                  message: titleToShare ? `${titleToShare}\n${shareUrl}` : shareUrl,
+                });
+              }
+            } catch (err: any) {
+              if (err?.message !== 'User did not share') {
+                showToast('Không thể mở chia sẻ');
+              }
+            }
+          }, Platform.OS === 'ios' ? 350 : 100);
+        }}
         onFindInPage={() => {
           if (!activeUrl) {
             showToast('Chỉ tìm được trên trang web');

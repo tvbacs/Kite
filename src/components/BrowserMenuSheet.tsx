@@ -28,6 +28,7 @@ interface BrowserMenuSheetProps {
   onToggleBookmark?: () => void;
   onToggleDesktop?: () => void;
   onReload?: () => void;
+  onShare?: () => void;
   onOpenSearchScreenLens?: () => void;
   onFindInPage?: () => void;
   onOpenDownloads: () => void;
@@ -59,6 +60,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onToggleBookmark,
   onToggleDesktop,
   onReload,
+  onShare,
   onOpenSearchScreenLens,
   onFindInPage,
   onOpenDownloads,
@@ -81,14 +83,38 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
   const [engineModalVisible, setEngineModalVisible] = useState(false);
 
-  const handleShare = async () => {
+  const handleShare = () => {
+    onClose();
+    if (onShare) {
+      onShare();
+      return;
+    }
     if (!currentUrl) return;
-    try {
-      await Share.share({
-        url: currentUrl,
-        message: currentTitle ? `${currentTitle} - ${currentUrl}` : currentUrl,
-      });
-    } catch (e) {}
+    let urlToShare = currentUrl.trim();
+    if (!urlToShare.startsWith('http://') && !urlToShare.startsWith('https://')) {
+      urlToShare = 'https://' + urlToShare;
+    }
+    const titleToShare = currentTitle || '';
+
+    setTimeout(async () => {
+      try {
+        if (Platform.OS === 'ios') {
+          await Share.share({
+            url: urlToShare,
+            message: titleToShare || undefined,
+          });
+        } else {
+          await Share.share({
+            title: titleToShare || 'Chia sẻ liên kết',
+            message: titleToShare ? `${titleToShare}\n${urlToShare}` : urlToShare,
+          });
+        }
+      } catch (e: any) {
+        if (e?.message !== 'User did not share') {
+          console.warn('Share error:', e);
+        }
+      }
+    }, Platform.OS === 'ios' ? 350 : 100);
   };
 
   const getDisplayDomain = (url?: string | null) => {
@@ -174,10 +200,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
             {/* Chia sẻ */}
             <TouchableOpacity
               style={styles.quickActionItem}
-              onPress={() => {
-                onClose();
-                handleShare();
-              }}
+              onPress={handleShare}
               activeOpacity={0.7}
             >
               <View style={styles.quickActionIconBox}>
