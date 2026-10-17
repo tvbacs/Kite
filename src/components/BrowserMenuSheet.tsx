@@ -255,25 +255,13 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={[styles.menuTitle, { color: '#007aff', fontWeight: '600' }]}>
-                        Tải video trên trang
-                      </Text>
-                      <View
-                        style={{
-                          backgroundColor: '#007aff',
-                          borderRadius: 10,
-                          paddingHorizontal: 7,
-                          paddingVertical: 1.5,
-                          marginLeft: 8,
-                        }}
-                      >
-                        <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700' }}>
-                          {detectedMediaCount}
-                        </Text>
+                    <Text style={styles.menuTitle}>Tải video trên trang</Text>
+                    <View style={styles.menuRowActionRight}>
+                      <View style={styles.mediaCountBadge}>
+                        <Text style={styles.mediaCountBadgeText}>{detectedMediaCount}</Text>
                       </View>
+                      <Feather name="download" size={19} color="#007aff" />
                     </View>
-                    <Feather name="download" size={20} color="#007aff" />
                   </TouchableOpacity>
                   <View style={styles.horizontalDivider} />
                 </>
@@ -671,6 +659,25 @@ const styles = StyleSheet.create({
     height: theme.divider.height,
     backgroundColor: theme.divider.backgroundColor,
     marginHorizontal: 16,
+  },
+  menuRowActionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mediaCountBadge: {
+    backgroundColor: '#007aff',
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 10,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaCountBadgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   engineRightGroup: {
     flexDirection: 'row',

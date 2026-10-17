@@ -1,19 +1,35 @@
 /**
  * Video & Media Sniffer Script cho Trình duyệt Kite
  * Tự động bắt mọi luồng phát media (MP4, M3U8, WEBM, MOV, Audio, Video Playback)
- * trên mọi trang web (Phim online, Donghua, YouTube, TikTok, Facebook, Dailymotion, tin tức...)
- * Hỗ trợ chạy trong cả Main Frame lẫn Subframes (iFrames).
+ * trên mọi trang web (Phim online, Donghua, Filmove, YouTube, TikTok, Facebook, Dailymotion...)
+ * Hỗ trợ lọc triệt để các tệp phân đoạn nhỏ (chunks/segments .ts, .m4s),
+ * gom nhóm các luồng của cùng 1 tập phim để chỉ hiển thị đúng 1 video duy nhất.
  */
 export const VIDEO_SNIFFER_SCRIPT = `
 (function() {
   if (window.__kite_sniffer_installed) return;
   window.__kite_sniffer_installed = true;
 
-  var seenUrls = {};
+  var seenSignatures = {};
   var resolvedDailymotionIds = {};
 
-  var MEDIA_EXT_REGEX = /\\.(mp4|m3u8|webm|mov|m4v|3gp|flv|mp3|m4a|aac|wav|ogg)(\\?|$|#)/i;
-  var STREAM_PATTERN_REGEX = /(videoplayback|mime=video|mime=audio|\\/manifest\\.m3u8|\\/playlist\\.m3u8|\\/hls\\/|\\/video-stream|cdn\\/manifest\\/video|cf\\.dmcdn\\.net)/i;
+  var MEDIA_EXT_REGEX = /\\.(mp4|m3u8|webm|mov|m4v)(\\?|$|#)/i;
+  var STREAM_PATTERN_REGEX = /(videoplayback\\?|mime=video\\b|\\/manifest\\.m3u8|\\/playlist\\.m3u8|\\/master\\.m3u8|cdn\\/manifest\\/video)/i;
+
+  // Kiểm tra xem URL có phải là file chunk / segment rời rạc không (Tuyệt đối không bắt các file này)
+  var isChunkOrSegment = function(url) {
+    if (!url || typeof url !== 'string') return true;
+    var lower = url.toLowerCase();
+    // 1. Loại bỏ các đuôi file phân đoạn HLS / DASH / phụ đề
+    if (/\\.(ts|m4s|m4f|key|vtt|srt|dfxp|ass|ssa)(\\?|$|#)/i.test(lower)) return true;
+    // 2. Loại bỏ các đường dẫn chunk / segment trong player
+    if (/\\/(seg|chunk|fragment|range)[-_\\d]/i.test(lower)) return true;
+    if (/[\\?&](range|segment|chunk|frag|byterange)=\\d+/i.test(lower)) return true;
+    if (lower.includes('init.mp4') || lower.includes('/init-') || lower.includes('/segment-') || lower.includes('/seg_')) return true;
+    // 3. Loại bỏ ảnh, font, css
+    if (/\\.(jpe?g|png|webp|gif|svg|ico|css|woff2?|ttf)(\\?|$|#)/i.test(lower)) return true;
+    return false;
+  };
 
   var getFormat = function(url) {
     var lower = url.toLowerCase();
@@ -21,8 +37,31 @@ export const VIDEO_SNIFFER_SCRIPT = `
     if (lower.includes('.webm')) return 'webm';
     if (lower.includes('.mov')) return 'mov';
     if (lower.includes('.m4v')) return 'm4v';
-    if (lower.includes('.mp3') || lower.includes('.m4a') || lower.includes('.aac') || lower.includes('.wav')) return 'audio';
     return 'mp4';
+  };
+
+  // Gom nhóm các URL biến thể (1080p, 720p, 480p, master) của cùng 1 luồng video
+  var getStreamSignature = function(u) {
+    try {
+      var clean = u.split('?')[0].split('#')[0].toLowerCase();
+      // Gom nhóm Dailymotion theo ID video
+      var dm = u.match(/video\\/fmp4\\/([a-zA-Z0-9]+)/i) ||
+               u.match(/manifest\\/video\\/([a-zA-Z0-9]+)/i) ||
+               u.match(/[?&]video=([a-zA-Z0-9]+)/i);
+      if (dm) return 'dm-' + dm[1];
+
+      // Gom nhóm YouTube videoplayback
+      var yt = u.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+      if (yt && u.includes('videoplayback')) return 'yt-' + yt[1];
+
+      // Gom nhóm các file m3u8 trong cùng 1 thư mục stream
+      var baseHls = clean.replace(/\\/(master|playlist|index|1080p|720p|480p|360p|chunklist[^\\/]*|h264[^\\/]*|manifest)\\.m3u8$/i, '');
+      if (baseHls !== clean) return 'hls-' + baseHls;
+
+      return clean;
+    } catch(e) {
+      return u;
+    }
   };
 
   // Hàm gửi tin nhắn tin cậy lên React Native từ bất kỳ Frame nào
@@ -41,7 +80,6 @@ export const VIDEO_SNIFFER_SCRIPT = `
         sent = true;
       }
     } catch(e) {}
-    // Nếu đang nằm trong iframe, bắn tin nhắn lên parent window để parent forward
     try {
       if (window.parent && window.parent !== window) {
         window.parent.postMessage({ __kite_media_payload: payload }, '*');
@@ -74,6 +112,10 @@ export const VIDEO_SNIFFER_SCRIPT = `
 
   var getBestPageTitle = function() {
     try {
+      var h1 = document.querySelector('h1');
+      if (h1 && h1.innerText && h1.innerText.trim().length > 2) {
+        return h1.innerText.trim();
+      }
       var og = document.querySelector('meta[property="og:title"]');
       if (og && og.content) return og.content;
       var tw = document.querySelector('meta[name="twitter:title"]');
@@ -86,13 +128,19 @@ export const VIDEO_SNIFFER_SCRIPT = `
   var reportMedia = function(rawUrl, explicitTitle) {
     var url = toAbsoluteUrl(rawUrl);
     if (!url) return;
+    if (isChunkOrSegment(url)) return;
+
+    // Kiểm tra trùng lặp luồng video
+    var sig = getStreamSignature(url);
+    if (seenSignatures[sig]) {
+      // Nếu đã có luồng này và URL mới không phải master playlist thì bỏ qua
+      if (!url.toLowerCase().includes('master.m3u8')) return;
+    }
+    seenSignatures[sig] = true;
 
     // Lọc bỏ quảng cáo, pixel theo dõi hoặc analytics
     var lower = url.toLowerCase();
     if (lower.includes('analytics') || lower.includes('telemetry') || lower.includes('doubleclick') || lower.includes('google-analytics') || lower.includes('/beacon')) return;
-
-    if (seenUrls[url]) return;
-    seenUrls[url] = true;
 
     var format = getFormat(url);
     var pageTitle = explicitTitle || getBestPageTitle();
@@ -111,8 +159,12 @@ export const VIDEO_SNIFFER_SCRIPT = `
 
   var inspectUrl = function(url, title) {
     if (!url || typeof url !== 'string') return;
+    // Bỏ qua các API metadata nội bộ của chính trình sniffer
+    if (url.includes('/player/metadata/video/') || url.includes('/video/') && url.includes('/config')) return;
+
     var abs = toAbsoluteUrl(url);
     if (!abs) return;
+    if (isChunkOrSegment(abs)) return;
 
     if (MEDIA_EXT_REGEX.test(abs) || STREAM_PATTERN_REGEX.test(abs)) {
       reportMedia(abs, title);
@@ -195,7 +247,7 @@ export const VIDEO_SNIFFER_SCRIPT = `
         }
       }
 
-      // Quét thẻ iframe (Rất quan trọng đối với các trang phim / anime embed player như Dailymotion, JWPlayer)
+      // Quét thẻ iframe (Trang phim / anime embed player)
       var iframes = document.querySelectorAll('iframe');
       for (var k = 0; k < iframes.length; k++) {
         var iframe = iframes[k];
@@ -240,7 +292,7 @@ export const VIDEO_SNIFFER_SCRIPT = `
     });
   } catch(e) {}
 
-  // 3. Hook Fetch API để bắt mọi luồng stream mạng của player
+  // 3. Hook Fetch API để bắt luồng stream mạng của player
   try {
     var origFetch = window.fetch;
     if (typeof origFetch === 'function') {
@@ -257,7 +309,7 @@ export const VIDEO_SNIFFER_SCRIPT = `
     }
   } catch(e) {}
 
-  // 4. Hook XMLHttpRequest để bắt các request tải manifest/chunk của player
+  // 4. Hook XMLHttpRequest để bắt request tải manifest của player
   try {
     var origXhrOpen = XMLHttpRequest.prototype.open;
     XMLHttpRequest.prototype.open = function(method, url) {
@@ -271,9 +323,9 @@ export const VIDEO_SNIFFER_SCRIPT = `
     };
   } catch(e) {}
 
-  // 5. Quét định kỳ mỗi 1.2s để phát hiện player chèn động sau khi bấm xem phim
+  // 5. Quét định kỳ mỗi 1.5s
   scanDomElements();
-  setInterval(scanDomElements, 1200);
+  setInterval(scanDomElements, 1500);
 })();
 true;
 `;

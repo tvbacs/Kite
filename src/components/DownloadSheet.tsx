@@ -31,16 +31,28 @@ export interface DownloadedItem {
   sourceUrl?: string;
 }
 
+export interface ActiveDownloadItem {
+  id: string;
+  fileName: string;
+  url: string;
+  progress: number;
+  bytesWritten: number;
+  totalBytes: number;
+  status: 'downloading' | 'completed' | 'error';
+}
+
 interface DownloadSheetProps {
   visible: boolean;
   onClose: () => void;
   onShowToast?: (message: string) => void;
+  activeDownloads?: ActiveDownloadItem[];
 }
 
 export const DownloadSheet: React.FC<DownloadSheetProps> = ({
   visible,
   onClose,
   onShowToast,
+  activeDownloads = [],
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
@@ -292,17 +304,61 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
             showsVerticalScrollIndicator={false}
             contentContainerStyle={downloads.length === 0 ? styles.emptyScroll : undefined}
           >
-            {downloads.length === 0 ? (
+            {/* 1. PHẦN ĐANG TẢI XUỐNG (ACTIVE DOWNLOADS) */}
+            {activeDownloads && activeDownloads.length > 0 && (
+              <View style={styles.activeDownloadsSection}>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionHeaderTitle}>
+                    ĐANG TẢI XUỐNG ({activeDownloads.length})
+                  </Text>
+                </View>
+                {activeDownloads.map((task) => (
+                  <View key={task.id} style={styles.activeTaskCard}>
+                    <View style={styles.activeTaskTopRow}>
+                      <View style={styles.activeTaskIconBox}>
+                        <Feather name="arrow-down-circle" size={22} color="#007aff" />
+                      </View>
+                      <View style={styles.activeTaskDetails}>
+                        <Text style={styles.activeTaskName} numberOfLines={1}>
+                          {task.fileName}
+                        </Text>
+                        <Text style={styles.activeTaskMeta}>
+                          {task.totalBytes > 0
+                            ? `Đang tải: ${task.progress}% • ${formatFileSize(task.bytesWritten)} / ${formatFileSize(task.totalBytes)}`
+                            : `Đang tải: ${formatFileSize(task.bytesWritten)}...`}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.activeProgressBarTrack}>
+                      <View
+                        style={[
+                          styles.activeProgressBarFill,
+                          { width: `${Math.max(6, Math.min(100, task.progress || 0))}%` },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                ))}
+                {filteredDownloads.length > 0 && (
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionHeaderTitle}>ĐÃ TẢI XUỐNG</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* 2. PHẦN ĐÃ HOÀN THÀNH */}
+            {downloads.length === 0 && (!activeDownloads || activeDownloads.length === 0) ? (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
                   <Feather name="download-cloud" size={36} color="#71717a" />
                 </View>
                 <Text style={styles.emptyTitle}>Chưa có tệp tải xuống nào</Text>
                 <Text style={styles.emptySub}>
-                  Các tài liệu, hình ảnh và tệp bạn tải về từ trang web sẽ xuất hiện tại đây
+                  Các tài liệu, hình ảnh và video bạn tải về từ trang web sẽ xuất hiện tại đây
                 </Text>
               </View>
-            ) : filteredDownloads.length === 0 ? (
+            ) : downloads.length > 0 && filteredDownloads.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Feather name="search" size={32} color="#a1a1aa" style={{ marginBottom: 10 }} />
                 <Text style={styles.emptyTitle}>Không tìm thấy tệp phù hợp</Text>
@@ -552,5 +608,65 @@ const styles = StyleSheet.create({
     marginLeft: 2,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  activeDownloadsSection: {
+    marginBottom: 14,
+  },
+  sectionHeaderRow: {
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  sectionHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#71717a',
+    letterSpacing: 0.5,
+  },
+  activeTaskCard: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  activeTaskTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  activeTaskIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  activeTaskDetails: {
+    flex: 1,
+  },
+  activeTaskName: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#1e3a8a',
+    marginBottom: 3,
+  },
+  activeTaskMeta: {
+    fontSize: 11.5,
+    color: '#3b82f6',
+    fontWeight: '500',
+  },
+  activeProgressBarTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#bfdbfe',
+    overflow: 'hidden',
+  },
+  activeProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#007aff',
+    borderRadius: 3,
   },
 });

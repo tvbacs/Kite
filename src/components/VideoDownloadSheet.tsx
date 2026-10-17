@@ -123,7 +123,7 @@ export const VideoDownloadSheet: React.FC<VideoDownloadSheetProps> = ({
                     </View>
                     <View style={styles.cardInfoCol}>
                       <Text style={styles.mediaTitle} numberOfLines={2}>
-                        {media.title || 'Video không tên'}
+                        {media.title || 'Video'}
                       </Text>
                       <View style={styles.badgeRow}>
                         <View style={[styles.formatBadge, { backgroundColor: badge.bg }]}>
@@ -131,6 +131,13 @@ export const VideoDownloadSheet: React.FC<VideoDownloadSheetProps> = ({
                             {badge.label}
                           </Text>
                         </View>
+                        {mediaList.length > 1 && (
+                          <View style={[styles.formatBadge, { backgroundColor: '#f1f5f9' }]}>
+                            <Text style={[styles.formatBadgeText, { color: '#475569' }]}>
+                              BẢN {idx + 1}
+                            </Text>
+                          </View>
+                        )}
                         {domain ? (
                           <Text style={styles.domainText} numberOfLines={1}>
                             • {domain}

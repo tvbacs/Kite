@@ -28,7 +28,7 @@ import { ImageSearchModal } from './src/components/ImageSearchModal';
 import { QRScannerModal } from './src/components/QRScannerModal';
 import { HistorySheet, STORAGE_HISTORY_KEY, HistoryItem } from './src/components/HistorySheet';
 import { BookmarkSheet, STORAGE_BOOKMARKS_KEY, DEFAULT_BOOKMARKS, BookmarkItem } from './src/components/BookmarkSheet';
-import { DownloadSheet, STORAGE_DOWNLOADS_KEY, DownloadedItem } from './src/components/DownloadSheet';
+import { DownloadSheet, STORAGE_DOWNLOADS_KEY, DownloadedItem, ActiveDownloadItem } from './src/components/DownloadSheet';
 import { DownloadPromptModal } from './src/components/DownloadPromptModal';
 import { PasswordManagerSheet, saveCredentialSecurely } from './src/components/PasswordManagerSheet';
 import { PasswordSavePromptModal } from './src/components/PasswordSavePromptModal';
@@ -279,6 +279,7 @@ function BrowserMain() {
   const [historySheetVisible, setHistorySheetVisible] = useState<boolean>(false);
   const [bookmarkSheetVisible, setBookmarkSheetVisible] = useState<boolean>(false);
   const [downloadSheetVisible, setDownloadSheetVisible] = useState<boolean>(false);
+  const [activeDownloads, setActiveDownloads] = useState<ActiveDownloadItem[]>([]);
   const [videoDownloadSheetVisible, setVideoDownloadSheetVisible] = useState<boolean>(false);
   const [detectedMediaByTab, setDetectedMediaByTab] = useState<Record<string, DetectedMedia[]>>({});
   const activeDetectedMedia = detectedMediaByTab[activeTabId] || [];
@@ -1809,18 +1810,76 @@ function BrowserMain() {
       } else if (data.type === 'MEDIA_DETECTED') {
         const media = data.media;
         if (media && media.url) {
+          // 1. Loại bỏ hoàn toàn các tệp chunk / phân đoạn nhỏ rời rạc
+          const isChunk =
+            /\.(ts|m4s|m4f|key|vtt|srt|dfxp|ass|ssa)(\?|$|#)/i.test(media.url) ||
+            /[\?&](range|segment|chunk|frag|byterange)=\d+/i.test(media.url) ||
+            /\/(seg|chunk|fragment|range)[-_\d]/i.test(media.url);
+          if (isChunk) return;
+
           setDetectedMediaByTab((prev) => {
             const currentList = prev[activeTabId] || [];
-            if (currentList.some((m) => m.url === media.url)) {
+
+            // 2. Hàm sinh chữ ký luồng phát để gom nhóm các biến thể độ phân giải (1080p, 720p, master)
+            const getSig = (u: string) => {
+              try {
+                const clean = u.split('?')[0].split('#')[0].toLowerCase();
+                const dm =
+                  u.match(/video\/fmp4\/([a-zA-Z0-9]+)/i) ||
+                  u.match(/manifest\/video\/([a-zA-Z0-9]+)/i) ||
+                  u.match(/[?&]video=([a-zA-Z0-9]+)/i);
+                if (dm) return `dm-${dm[1]}`;
+
+                const yt = u.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+                if (yt && u.includes('videoplayback')) return `yt-${yt[1]}`;
+
+                const baseHls = clean.replace(
+                  /\/(master|playlist|index|1080p|720p|480p|360p|chunklist[^\/]*|h264[^\/]*|manifest)\.m3u8$/i,
+                  ''
+                );
+                if (baseHls !== clean) return `hls-${baseHls}`;
+
+                return clean;
+              } catch (e) {
+                return u;
+              }
+            };
+
+            const newSig = getSig(media.url);
+            const existingIdx = currentList.findIndex((m) => getSig(m.url) === newSig);
+
+            if (existingIdx !== -1) {
+              // Nếu đã có luồng này và URL mới là master.m3u8 thì ưu tiên nâng cấp lên master
+              const isOldMaster = currentList[existingIdx].url.toLowerCase().includes('master.m3u8');
+              const isNewMaster = media.url.toLowerCase().includes('master.m3u8');
+              if (isNewMaster && !isOldMaster) {
+                const updated = [...currentList];
+                updated[existingIdx] = {
+                  ...updated[existingIdx],
+                  url: media.url,
+                  format: 'm3u8',
+                };
+                return { ...prev, [activeTabId]: updated };
+              }
+              // Đã tồn tại luồng phát này -> Không thêm trùng lặp!
               return prev;
             }
+
             try {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             } catch (e) {}
+
+            let title = media.title || currentTab?.title || 'Video';
+            // Làm sạch tiêu đề (loại bỏ hậu tố tên trang web như | Filmove, - DonghuaWorld...)
+            title = title
+              .replace(/\s*[-|–—]\s*(Filmove|DonghuaWorld|Xem Phim|Phim Mới|Bilibili|YouTube).*$/i, '')
+              .replace(/[\n\r\t]+/g, ' ')
+              .trim();
+
             const newMedia: DetectedMedia = {
               id: `media-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
               url: media.url,
-              title: media.title || currentTab?.title || 'Video',
+              title: title || 'Video',
               format: media.format || 'mp4',
               tabId: activeTabId,
               detectedAt: media.detectedAt || Date.now(),
@@ -2442,11 +2501,14 @@ function BrowserMain() {
     else if (media.format === 'mov') ext = 'mov';
     else if (media.format === 'm4v') ext = 'm4v';
 
-    let cleanName = (media.title || 'Kite_Video')
+    let cleanName = (media.title || currentTab?.title || 'Video')
+      .replace(/\s*[-|–—]\s*(Filmove|DonghuaWorld|Xem Phim|Phim Mới|Bilibili|YouTube|Anime|Trang chủ).*$/i, '')
       .replace(/[/\\?%*:|"<>]/g, '_')
       .replace(/\s+/g, ' ')
       .trim();
-    if (!cleanName) cleanName = `video_${Date.now()}`;
+    if (!cleanName || cleanName === 'Video' || cleanName === 'Video không tên') {
+      cleanName = `Video_${Date.now()}`;
+    }
     if (!cleanName.toLowerCase().endsWith(`.${ext}`)) {
       cleanName = `${cleanName}.${ext}`;
     }
@@ -2463,11 +2525,54 @@ function BrowserMain() {
   const handleConfirmSaveToKite = async () => {
     if (!downloadPrompt) return;
     const { url, fileName } = downloadPrompt;
-    setDownloadPrompt((prev) => (prev ? { ...prev, isDownloading: true } : null));
+    const taskId = `task-${Date.now()}`;
+    const cleanFileName = fileName || `video_${Date.now()}.mp4`;
+
+    // 1. Thêm ngay vào danh sách activeDownloads để hiển thị tiến trình và tên tuổi tệp
+    const newTask: ActiveDownloadItem = {
+      id: taskId,
+      fileName: cleanFileName,
+      url,
+      progress: 0,
+      bytesWritten: 0,
+      totalBytes: 0,
+      status: 'downloading',
+    };
+    setActiveDownloads((prev) => [newTask, ...prev]);
+
+    // 2. Đóng hộp thoại DownloadPromptModal để người dùng tiếp tục xem phim
+    setDownloadPrompt(null);
+    showToast(`Bắt đầu tải: ${cleanFileName}`);
 
     try {
-      const downloadedFile = await File.downloadFileAsync(url, Paths.document, { idempotent: true });
-      const actualName = downloadedFile?.name || fileName;
+      const destination = new File(Paths.document, cleanFileName);
+      const downloadedFile = await File.downloadFileAsync(url, destination, {
+        idempotent: true,
+        onProgress: (p) => {
+          setActiveDownloads((prev) =>
+            prev.map((item) => {
+              if (item.id !== taskId) return item;
+              const total = p.totalBytes > 0 ? p.totalBytes : 0;
+              const percent = total > 0 ? Math.round((p.bytesWritten / total) * 100) : 0;
+              return {
+                ...item,
+                bytesWritten: p.bytesWritten,
+                totalBytes: total,
+                progress: percent,
+              };
+            })
+          );
+        },
+      });
+
+      const actualName = downloadedFile?.name || cleanFileName;
+
+      // 3. Xóa khỏi activeDownloads khi hoàn tất
+      setActiveDownloads((prev) => prev.filter((item) => item.id !== taskId));
+
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (e) {}
 
       try {
         const stored = await AsyncStorage.getItem(STORAGE_DOWNLOADS_KEY);
@@ -2484,11 +2589,10 @@ function BrowserMain() {
         await AsyncStorage.setItem(STORAGE_DOWNLOADS_KEY, JSON.stringify(updated));
       } catch (e) {}
 
-      setDownloadPrompt(null);
-      showToast(`Đã lưu vào Kite: ${actualName}`);
+      showToast(`Đã tải xong: ${actualName}`);
     } catch (e) {
-      setDownloadPrompt(null);
-      showToast('Lỗi khi tải tệp');
+      setActiveDownloads((prev) => prev.filter((item) => item.id !== taskId));
+      showToast(`Tải thất bại: ${cleanFileName}`);
     }
   };
 
@@ -2982,7 +3086,10 @@ function BrowserMain() {
         {/* Nút Floating Tải Video (Cốc Cốc style) */}
         {!isEditing && activeUrl !== null && activeDetectedMedia.length > 0 && (
           <TouchableOpacity
-            style={styles.floatingVideoDownloadPill}
+            style={[
+              styles.floatingVideoDownloadPill,
+              activeDownloads.length > 0 && { bottom: 84 },
+            ]}
             onPress={() => setVideoDownloadSheetVisible(true)}
             activeOpacity={0.85}
           >
@@ -2993,6 +3100,38 @@ function BrowserMain() {
             <View style={styles.floatingVideoCountBadge}>
               <Text style={styles.floatingVideoCountText}>{activeDetectedMedia.length}</Text>
             </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Thanh Floating hiển thị Tiến trình Tải xuống Đang chạy (Active Downloads) */}
+        {!isEditing && activeDownloads.length > 0 && (
+          <TouchableOpacity
+            style={styles.floatingActiveDownloadBanner}
+            onPress={() => setDownloadSheetVisible(true)}
+            activeOpacity={0.9}
+          >
+            <View style={styles.downloadBannerIconBox}>
+              <Feather name="arrow-down-circle" size={20} color="#007aff" />
+            </View>
+            <View style={styles.downloadBannerTextCol}>
+              <Text style={styles.downloadBannerTitle} numberOfLines={1}>
+                {activeDownloads[0].fileName}
+              </Text>
+              <Text style={styles.downloadBannerSub}>
+                {activeDownloads[0].totalBytes > 0
+                  ? `Đang tải: ${activeDownloads[0].progress}% • ${(activeDownloads[0].bytesWritten / (1024 * 1024)).toFixed(1)} / ${(activeDownloads[0].totalBytes / (1024 * 1024)).toFixed(1)} MB`
+                  : `Đang tải: ${(activeDownloads[0].bytesWritten / (1024 * 1024)).toFixed(1)} MB...`}
+              </Text>
+              <View style={styles.downloadBannerProgressBar}>
+                <View
+                  style={[
+                    styles.downloadBannerProgressFill,
+                    { width: `${Math.max(6, Math.min(100, activeDownloads[0].progress || 0))}%` },
+                  ]}
+                />
+              </View>
+            </View>
+            <Feather name="chevron-right" size={16} color="#71717a" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
         )}
 
@@ -3092,6 +3231,7 @@ function BrowserMain() {
         visible={downloadSheetVisible}
         onClose={() => setDownloadSheetVisible(false)}
         onShowToast={showToast}
+        activeDownloads={activeDownloads}
       />
 
       {/* Trình quản lý mật khẩu (Password Manager) */}
@@ -3477,5 +3617,60 @@ const styles = StyleSheet.create({
     color: '#007aff',
     fontSize: 11,
     fontWeight: '800',
+  },
+  floatingActiveDownloadBanner: {
+    position: 'absolute',
+    bottom: 14,
+    left: 16,
+    right: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    zIndex: 99998,
+  },
+  downloadBannerIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  downloadBannerTextCol: {
+    flex: 1,
+  },
+  downloadBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 2,
+  },
+  downloadBannerSub: {
+    fontSize: 11,
+    color: '#007aff',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  downloadBannerProgressBar: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  downloadBannerProgressFill: {
+    height: '100%',
+    backgroundColor: '#007aff',
+    borderRadius: 2,
   },
 });
