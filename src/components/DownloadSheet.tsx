@@ -103,10 +103,10 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
 
   const getFileIcon = (fileName: string) => {
     const cat = getFileCategory(fileName);
-    if (cat === 'image') return { name: 'image' as const, color: '#0284c7', bg: '#e0f2fe' };
-    if (cat === 'doc') return { name: 'file-text' as const, color: '#dc2626', bg: '#fee2e2' };
-    if (cat === 'media') return { name: 'video' as const, color: '#7c3aed', bg: '#f3e8ff' };
-    return { name: 'file' as const, color: '#4b5563', bg: '#f3f4f6' };
+    if (cat === 'image') return { name: 'image' as const, color: '#52525b', bg: '#f4f4f5' };
+    if (cat === 'doc') return { name: 'file-text' as const, color: '#52525b', bg: '#f4f4f5' };
+    if (cat === 'media') return { name: 'video' as const, color: '#52525b', bg: '#f4f4f5' };
+    return { name: 'file' as const, color: '#52525b', bg: '#f4f4f5' };
   };
 
   const handleOpenFile = async (item: DownloadedItem) => {
@@ -206,17 +206,9 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
 
           {/* Header thanh tiêu đề */}
           <View style={styles.headerRow}>
-            <View style={styles.titleGroup}>
-              <View style={styles.titleIconBox}>
-                <Feather name="download" size={18} color="#18181b" />
-              </View>
-              <Text style={styles.sheetTitle}>Tệp đã tải xuống</Text>
-              {downloads.length > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{downloads.length}</Text>
-                </View>
-              )}
-            </View>
+            <Text style={styles.sheetTitle} numberOfLines={1}>
+              Tệp đã tải xuống
+            </Text>
 
             <View style={styles.headerRightActions}>
               <TouchableOpacity
@@ -236,7 +228,7 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
                   onPress={handleClearAll}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.clearAllBtnText}>Xóa tất cả</Text>
+                  <Text style={styles.clearAllBtnText}>Xóa</Text>
                 </TouchableOpacity>
               )}
 
@@ -244,8 +236,9 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
                 style={styles.closeBtn}
                 onPress={onClose}
                 activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Feather name="x" size={20} color="#52525b" />
+                <Feather name="x" size={18} color="#52525b" />
               </TouchableOpacity>
             </View>
           </View>
@@ -273,9 +266,14 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
 
           {/* Bộ lọc phân loại nhanh */}
           {downloads.length > 0 && (
-            <View style={styles.filterRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterRow}
+              style={styles.filterScroll}
+            >
               {[
-                { id: 'all', label: 'Tất cả' },
+                { id: 'all', label: `Tất cả (${downloads.length})` },
                 { id: 'images', label: 'Hình ảnh' },
                 { id: 'docs', label: 'Tài liệu' },
                 { id: 'media', label: 'Video & Audio' },
@@ -294,7 +292,7 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
           )}
 
           {/* Danh sách tệp đã tải */}
@@ -306,7 +304,7 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
             {downloads.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
-                  <Feather name="download-cloud" size={40} color="#007aff" />
+                  <Feather name="download-cloud" size={36} color="#71717a" />
                 </View>
                 <Text style={styles.emptyTitle}>Chưa có tệp tải xuống nào</Text>
                 <Text style={styles.emptySub}>
@@ -360,7 +358,7 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
                       hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                       onPress={() => handleOpenFile(item)}
                     >
-                      <Feather name="share" size={17} color="#007aff" />
+                      <Feather name="share" size={17} color="#71717a" />
                     </TouchableOpacity>
 
                     {/* Nút Xóa tệp */}
@@ -369,7 +367,7 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
                       hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                       onPress={() => handleDeleteItem(item.id, item.uri)}
                     >
-                      <Feather name="trash-2" size={17} color="#ef4444" />
+                      <Feather name="trash-2" size={17} color="#71717a" />
                     </TouchableOpacity>
                   </TouchableOpacity>
                 );
@@ -392,7 +390,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
-    maxHeight: '84%',
+    height: '78%',
+    maxHeight: '90%',
     paddingHorizontal: 20,
     paddingTop: 10,
     shadowColor: '#000',
@@ -415,36 +414,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 14,
   },
-  titleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  titleIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f4f4f5',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   sheetTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#09090b',
-  },
-  countBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: '#f4f4f5',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-  },
-  countBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#71717a',
+    flexShrink: 1,
   },
   headerRightActions: {
     flexDirection: 'row',
@@ -469,7 +443,7 @@ const styles = StyleSheet.create({
   },
   clearAllBtn: {
     paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     borderRadius: 10,
     backgroundColor: '#f4f4f5',
     borderWidth: 1,
@@ -505,10 +479,13 @@ const styles = StyleSheet.create({
     color: '#09090b',
     paddingVertical: 0,
   },
+  filterScroll: {
+    marginBottom: 12,
+    flexGrow: 0,
+  },
   filterRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
   },
   filterChip: {
     paddingHorizontal: 12,
@@ -532,7 +509,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listScroll: {
-    maxHeight: 480,
+    flex: 1,
   },
   emptyScroll: {
     paddingVertical: 40,
@@ -548,7 +525,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#f4f4f5',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
