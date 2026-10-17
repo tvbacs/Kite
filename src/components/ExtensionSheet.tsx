@@ -358,7 +358,7 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
           {/* Thanh kéo Sheet */}
           <View style={styles.dragHandle} />
 
-          {/* Header tối giản Trắng - Đen - Xám */}
+          {/* Header thanh thoát: Tiêu đề bên trái, Nút đóng bên phải */}
           <View style={styles.headerRow}>
             <View style={styles.titleGroup}>
               <Text style={styles.sheetTitle}>Tiện ích mở rộng</Text>
@@ -369,36 +369,36 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
               )}
             </View>
 
-            <View style={styles.headerRightActions}>
-              {/* Nút Nhập file .js */}
-              <TouchableOpacity
-                style={styles.importBtn}
-                onPress={handlePickFile}
-                activeOpacity={0.7}
-              >
-                <Feather name="upload" size={14} color="#18181b" />
-                <Text style={styles.importBtnText}>Nhập tệp</Text>
-              </TouchableOpacity>
+            {/* Nút Đóng cố định góc phải */}
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={onClose}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name="x" size={19} color="#71717a" />
+            </TouchableOpacity>
+          </View>
 
-              {/* Nút Thêm mới */}
-              <TouchableOpacity
-                style={styles.addBtn}
-                onPress={handleOpenAddModal}
-                activeOpacity={0.7}
-              >
-                <Feather name="plus" size={16} color="#ffffff" />
-                <Text style={styles.addBtnText}>Thêm</Text>
-              </TouchableOpacity>
+          {/* Hàng nút chức năng Nhập tệp & Thêm mới rộng rãi cân đối */}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={styles.importBtn}
+              onPress={handlePickFile}
+              activeOpacity={0.7}
+            >
+              <Feather name="upload" size={14} color="#18181b" />
+              <Text style={styles.importBtnText}>Nhập tệp .js</Text>
+            </TouchableOpacity>
 
-              {/* Nút Đóng */}
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={onClose}
-                activeOpacity={0.7}
-              >
-                <Feather name="x" size={19} color="#71717a" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={handleOpenAddModal}
+              activeOpacity={0.7}
+            >
+              <Feather name="plus" size={15} color="#ffffff" />
+              <Text style={styles.addBtnText}>Thêm mới</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Ô tìm kiếm */}
@@ -658,7 +658,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   titleGroup: {
     flexDirection: 'row',
@@ -675,29 +675,35 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
     backgroundColor: '#f4f4f5',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   countBadgeText: {
     fontSize: 11.5,
     fontWeight: '600',
     color: '#71717a',
   },
-  headerRightActions: {
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f4f4f5',
+  },
+  actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    marginBottom: 12,
   },
   importBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    justifyContent: 'center',
+    gap: 6,
+    height: 38,
     borderRadius: 10,
     backgroundColor: '#f4f4f5',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   importBtnText: {
     fontSize: 13,
@@ -705,11 +711,12 @@ const styles = StyleSheet.create({
     color: '#18181b',
   },
   addBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 6,
-    paddingHorizontal: 11,
+    justifyContent: 'center',
+    gap: 5,
+    height: 38,
     borderRadius: 10,
     backgroundColor: '#18181b',
   },
@@ -718,24 +725,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
   },
-  closeBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f4f4f5',
-  },
   searchBarBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f4f4f5',
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 12,
     height: 38,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   searchInput: {
     flex: 1,
@@ -784,8 +781,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   extCardTopRow: {
     flexDirection: 'row',
