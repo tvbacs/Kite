@@ -36,11 +36,13 @@ export const getFindInPageSearchScript = (query: string): string => {
         const targetY = scrollY + rect.top - Math.max(120, Math.floor(windowH * 0.35));
         const targetX = scrollX + rect.left - 40;
 
-        window.scrollTo({
-          top: Math.max(0, targetY),
-          left: Math.max(0, targetX),
-          behavior: 'auto'
-        });
+        window.scrollTo(Math.max(0, targetX), Math.max(0, targetY));
+        if (document.scrollingElement) {
+          document.scrollingElement.scrollTop = Math.max(0, targetY);
+        }
+        if (document.body) {
+          document.body.scrollTop = Math.max(0, targetY);
+        }
       } catch (err) {}
     }
 
@@ -214,11 +216,13 @@ export const getFindInPageNextScript = (): string => `
         const targetY = scrollY + rect.top - Math.max(120, Math.floor(windowH * 0.35));
         const targetX = scrollX + rect.left - 40;
 
-        window.scrollTo({
-          top: Math.max(0, targetY),
-          left: Math.max(0, targetX),
-          behavior: 'auto'
-        });
+        window.scrollTo(Math.max(0, targetX), Math.max(0, targetY));
+        if (document.scrollingElement) {
+          document.scrollingElement.scrollTop = Math.max(0, targetY);
+        }
+        if (document.body) {
+          document.body.scrollTop = Math.max(0, targetY);
+        }
       } catch (err) {}
     }
 
@@ -291,11 +295,13 @@ export const getFindInPagePrevScript = (): string => `
         const targetY = scrollY + rect.top - Math.max(120, Math.floor(windowH * 0.35));
         const targetX = scrollX + rect.left - 40;
 
-        window.scrollTo({
-          top: Math.max(0, targetY),
-          left: Math.max(0, targetX),
-          behavior: 'auto'
-        });
+        window.scrollTo(Math.max(0, targetX), Math.max(0, targetY));
+        if (document.scrollingElement) {
+          document.scrollingElement.scrollTop = Math.max(0, targetY);
+        }
+        if (document.body) {
+          document.body.scrollTop = Math.max(0, targetY);
+        }
       } catch (err) {}
     }
 
