@@ -463,6 +463,16 @@ function BrowserMain() {
         setUserProfile(profile);
         await AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
         await upsertCloudProfile(u.id, profile);
+        // Cộng dồn vào @kite_saved_accounts
+        if (profile.email) {
+          const res = await AsyncStorage.getItem('@kite_saved_accounts');
+          let list: UserProfile[] = [];
+          if (res) { try { list = JSON.parse(res); } catch (e) {} }
+          if (!Array.isArray(list)) list = [];
+          const idx = list.findIndex((a) => a.email?.toLowerCase() === profile.email?.toLowerCase());
+          if (idx !== -1) { list[idx] = profile; } else { list.push(profile); }
+          await AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
+        }
       }
     });
 
@@ -586,6 +596,17 @@ function BrowserMain() {
               setUserProfile(profile);
               AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
               upsertCloudProfile(profile.email || 'user', profile);
+              // Cộng dồn vào @kite_saved_accounts
+              if (profile.email) {
+                AsyncStorage.getItem('@kite_saved_accounts').then((res) => {
+                  let list: UserProfile[] = [];
+                  if (res) { try { list = JSON.parse(res); } catch (e) {} }
+                  if (!Array.isArray(list)) list = [];
+                  const idx = list.findIndex((a) => a.email?.toLowerCase() === profile.email?.toLowerCase());
+                  if (idx !== -1) { list[idx] = profile; } else { list.push(profile); }
+                  AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
+                });
+              }
               showToast(`Đăng nhập Google thành công! (${profile.name})`);
             }
             setTabs((prev) =>
@@ -1516,6 +1537,15 @@ function BrowserMain() {
           };
           setUserProfile(chosenProfile);
           AsyncStorage.setItem('@kite_user_profile', JSON.stringify(chosenProfile));
+          // Cộng dồn vào @kite_saved_accounts
+          AsyncStorage.getItem('@kite_saved_accounts').then((res) => {
+            let list: UserProfile[] = [];
+            if (res) { try { list = JSON.parse(res); } catch (e) {} }
+            if (!Array.isArray(list)) list = [];
+            const idx = list.findIndex((a) => a.email?.toLowerCase() === chosenProfile.email?.toLowerCase());
+            if (idx !== -1) { list[idx] = chosenProfile; } else { list.push(chosenProfile); }
+            AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
+          });
           showToast(`Đã chuyển sang: ${chosenProfile.email}`);
         }
       } else if (data.type === 'GOOGLE_LOGIN_COMPLETED') {
@@ -1697,6 +1727,17 @@ function BrowserMain() {
           setUserProfile(profile);
           AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
           upsertCloudProfile(profile.email || 'user', profile);
+          // Cộng dồn vào @kite_saved_accounts
+          if (profile.email) {
+            AsyncStorage.getItem('@kite_saved_accounts').then((res) => {
+              let list: UserProfile[] = [];
+              if (res) { try { list = JSON.parse(res); } catch (e) {} }
+              if (!Array.isArray(list)) list = [];
+              const idx = list.findIndex((a) => a.email?.toLowerCase() === profile.email?.toLowerCase());
+              if (idx !== -1) { list[idx] = profile; } else { list.push(profile); }
+              AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
+            });
+          }
           showToast(`Đăng nhập Google thành công! (${profile.name})`);
         } else {
           showToast('Đăng nhập Google chưa hoàn tất, vui lòng thử lại.');
@@ -1827,6 +1868,17 @@ function BrowserMain() {
           setUserProfile(profile);
           AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
           upsertCloudProfile(profile.email || 'user', profile);
+          // Cộng dồn vào @kite_saved_accounts
+          if (profile.email) {
+            AsyncStorage.getItem('@kite_saved_accounts').then((res) => {
+              let list: UserProfile[] = [];
+              if (res) { try { list = JSON.parse(res); } catch (e) {} }
+              if (!Array.isArray(list)) list = [];
+              const idx = list.findIndex((a) => a.email?.toLowerCase() === profile.email?.toLowerCase());
+              if (idx !== -1) { list[idx] = profile; } else { list.push(profile); }
+              AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
+            });
+          }
           showToast(`Đăng nhập Google thành công! (${profile.name})`);
         } else {
           showToast('Đăng nhập Google chưa hoàn tất, vui lòng thử lại.');
@@ -2333,7 +2385,8 @@ function BrowserMain() {
                     AsyncStorage.setItem('@kite_user_profile', JSON.stringify(p));
                   } else {
                     AsyncStorage.removeItem('@kite_user_profile');
-                    AsyncStorage.removeItem('@kite_saved_accounts');
+                    // Không xóa @kite_saved_accounts ở đây — handleLogout trong HomeDashboard
+                    // đã cộng dồn danh sách còn lại trước khi gọi onUpdateProfile
                   }
                 }}
                 onShowToast={showToast}
