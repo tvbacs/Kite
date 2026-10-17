@@ -459,24 +459,14 @@ export const INJECTED_AFTER_CONTENT = `
 (function() {
   var AD_SELECTORS = ${serializedSelectors};
 
-  // 1. Đảm bảo CSS ẩn quảng cáo luôn hiện diện bằng sheet.insertRule từng selector
+  // 1. Đảm bảo CSS ẩn quảng cáo luôn hiện diện bằng textContent siêu tốc một lần duy nhất
   try {
     if (!document.getElementById('kite-shield-ad-block-css')) {
       var s = document.createElement('style');
       s.id = 'kite-shield-ad-block-css';
       s.type = 'text/css';
+      s.textContent = AD_SELECTORS.join(', ') + ' { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; height: 0 !important; width: 0 !important; max-height: 0 !important; overflow: hidden !important; }';
       (document.head || document.documentElement).appendChild(s);
-      var sheet = s.sheet;
-      if (sheet) {
-        for (var i = 0; i < AD_SELECTORS.length; i++) {
-          try {
-            sheet.insertRule(
-              AD_SELECTORS[i] + ' { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; height: 0 !important; width: 0 !important; max-height: 0 !important; overflow: hidden !important; }',
-              sheet.cssRules.length
-            );
-          } catch(err) {}
-        }
-      }
     }
   } catch(e) {}
 
@@ -551,27 +541,25 @@ export const INJECTED_AFTER_CONTENT = `
       }
     };
 
-    // Quét triệt tiêu các huy hiệu giả mạo VPN và nút đóng quảng cáo nổi
-    var scanVpnBadges = function() {
+    // Quét triệt tiêu các huy hiệu giả mạo VPN và nút đóng quảng cáo nổi (nhẹ nhàng, không ép reflow)
+    var scanVpnBadges = function(root) {
       try {
-        var allDivs = document.querySelectorAll('div, a, section, span');
-        for (var bIdx = 0; bIdx < allDivs.length; bIdx++) {
-          var el = allDivs[bIdx];
-          if (!el || el.children.length > 5) continue;
-          var txt = (el.innerText || '').toLowerCase();
+        var base = root || document;
+        var candidates = base.querySelectorAll('[class*="vpn"], [id*="vpn"], [class*="chatmate"], [id*="chatmate"], [class*="overlay"]');
+        for (var bIdx = 0; bIdx < candidates.length; bIdx++) {
+          var el = candidates[bIdx];
+          if (!el || el.children.length > 4) continue;
+          var txt = (el.textContent || '').toLowerCase();
           if (
             txt.includes('vpn recommended') ||
             txt.includes('tap to install and continue watching') ||
             txt.includes('install chatmate') ||
             (txt.includes('close ad') && txt.length < 25)
           ) {
-            var st = window.getComputedStyle(el);
-            if (st.position === 'fixed' || st.position === 'absolute' || parseInt(st.zIndex, 10) > 100) {
-              el.style.setProperty('display', 'none', 'important');
-              el.style.setProperty('pointer-events', 'none', 'important');
-              el.style.setProperty('visibility', 'hidden', 'important');
-              el.style.setProperty('opacity', '0', 'important');
-            }
+            el.style.setProperty('display', 'none', 'important');
+            el.style.setProperty('pointer-events', 'none', 'important');
+            el.style.setProperty('visibility', 'hidden', 'important');
+            el.style.setProperty('opacity', '0', 'important');
           }
         }
       } catch(e) {}
@@ -605,9 +593,8 @@ export const INJECTED_AFTER_CONTENT = `
     unblankBody();
     setTimeout(function() { processPendingNodes(); scanVpnBadges(); unblankBody(); }, 400);
     setTimeout(function() { processPendingNodes(); scanVpnBadges(); unblankBody(); }, 1200);
-    setTimeout(function() { processPendingNodes(); scanVpnBadges(); unblankBody(); }, 2500);
 
-    // Lắng nghe MutationObserver có debounce
+    // Lắng nghe MutationObserver có debounce tiết kiệm pin (300ms)
     var observer = new MutationObserver(function(mutations) {
       for (var mIdx = 0; mIdx < mutations.length; mIdx++) {
         var mut = mutations[mIdx];
@@ -623,14 +610,18 @@ export const INJECTED_AFTER_CONTENT = `
       if (pendingNodes.length > 0 && !scheduledTimer) {
         scheduledTimer = setTimeout(function() {
           processPendingNodes();
-          scanVpnBadges();
-        }, 100);
+        }, 300);
       }
     });
 
     if (document.body) {
       observer.observe(document.body, { childList: true, subtree: true });
     }
+
+    // Tự động ngắt observer sau 12 giây để giải phóng 100% CPU và hạ nhiệt máy tối đa
+    setTimeout(function() {
+      try { observer.disconnect(); } catch(e) {}
+    }, 12000);
   } catch(e) {}
 
   // 3. Nhận diện tài khoản Google một cách an toàn
@@ -842,10 +833,18 @@ export const INJECTED_AFTER_CONTENT = `
 
       try {
         if (typeof MutationObserver !== 'undefined' && document.body) {
+          var googleDebounce = null;
           var obs = new MutationObserver(function() {
-            findGoogleProfile();
+            if (googleDebounce) return;
+            googleDebounce = setTimeout(function() {
+              googleDebounce = null;
+              findGoogleProfile();
+            }, 1000);
           });
           obs.observe(document.body, { childList: true, subtree: true });
+          setTimeout(function() {
+            try { obs.disconnect(); } catch(e) {}
+          }, 10000);
         }
       } catch(e) {}
     }

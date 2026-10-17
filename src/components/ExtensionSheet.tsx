@@ -66,6 +66,7 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     code: `(function() {
   setInterval(function() {
     try {
+      if (!document.querySelector('video, [class*="player"], [id*="player"]')) return;
       const skipBtn = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .videoAdUiSkipButton, button[class*="skip"]');
       if (skipBtn) {
         skipBtn.click();
@@ -75,7 +76,7 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
         adOverlay.click();
       }
     } catch(e) {}
-  }, 800);
+  }, 1500);
 })();`,
     runAt: 'document_end',
     enabled: true,

@@ -763,11 +763,11 @@ function BrowserMain() {
     });
   }, [activeTabId]);
 
-  // Tự động đóng băng (Smart Tab Sleeping) các tab nền không hoạt động sau 5 phút để dọn dẹp RAM
+  // Tự động đóng băng (Smart Tab Sleeping) các tab nền không hoạt động sau 3 phút để tiết kiệm pin & hạ nhiệt máy
   useEffect(() => {
     const idleCheckInterval = setInterval(() => {
       const now = Date.now();
-      const IDLE_TIME_MS = 5 * 60 * 1000;
+      const IDLE_TIME_MS = 3 * 60 * 1000;
       setTabs((prev) => {
         const toFreeze = prev.filter(
           (t) =>
