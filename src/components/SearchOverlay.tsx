@@ -463,12 +463,23 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
     }).slice(0, 5);
   }, [history, text, isIncognito, ghostMatch]);
 
+  // Debounce đẩy URL về App.tsx để tránh re-render toàn bộ ứng dụng mỗi ký tự gõ gây đơ/lag
+  const debounceUrlChangeRef = useRef<any>(null);
+
   // Khi người dùng gõ phím: CHỈ cập nhật nội dung gõ, TUYỆT ĐỐI KHÔNG tự động fill chèn chữ vào ô nhập
   const handleTextChange = (newText: string) => {
     setText(newText);
     setUserTypedText(newText);
     setSelection(undefined);
-    onUrlChange(newText);
+
+    if (onUrlChange) {
+      if (debounceUrlChangeRef.current) {
+        clearTimeout(debounceUrlChangeRef.current);
+      }
+      debounceUrlChangeRef.current = setTimeout(() => {
+        onUrlChange(newText);
+      }, 350);
+    }
   };
 
   const filterQuery = text.trim();
@@ -518,18 +529,6 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           )}
 
           <View style={styles.inputWrapper}>
-            {/* Placeholder tùy chỉnh: hiển thị khi text rỗng, độc lập hoàn toàn với native TextInput nên KHÔNG BAO GIỜ bị đè chữ hay xung đột nhấp nháy với gợi ý */}
-            {text.length === 0 && (
-              <View pointerEvents="none" style={styles.placeholderContainer}>
-                <Text
-                  numberOfLines={1}
-                  style={[styles.placeholderText, { color: subColor }]}
-                >
-                  {`Tìm trên ${currentEngineName} hoặc nhập URL`}
-                </Text>
-              </View>
-            )}
-
             {/* Lớp hiển thị gợi ý mờ phía sau con trỏ (Ghost Suggestion Overlay - chỉ hiển thị chữ mờ khi đang có nội dung gõ) */}
             {ghostSuffix && text.trim().length > 0 ? (
               <View pointerEvents="none" style={styles.ghostTextContainer}>
@@ -553,7 +552,8 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
               style={[styles.input, { color: textColor, backgroundColor: 'transparent' }]}
               value={text}
               onChangeText={handleTextChange}
-              placeholder=""
+              placeholder={`Tìm trên ${currentEngineName} hoặc nhập URL`}
+              placeholderTextColor={subColor}
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}
@@ -956,20 +956,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
     marginRight: 4,
-  },
-  placeholderContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  placeholderText: {
-    fontSize: 15,
-    padding: 0,
-    margin: 0,
   },
   ghostTextContainer: {
     position: 'absolute',

@@ -1,6 +1,6 @@
 /**
  * Script tìm kiếm văn bản trong trang web (Ctrl + F / Find in page)
- * Tự động quét DOM, highlight kết quả bằng <mark> và cuộn tới vị trí kết quả.
+ * Tự động quét DOM, highlight kết quả bằng <mark> và cuộn NGAY LẬP TỨC tới vị trí kết quả khi nhấn mũi tên.
  */
 
 export const getFindInPageSearchScript = (query: string): string => {
@@ -9,6 +9,49 @@ export const getFindInPageSearchScript = (query: string): string => {
 (function() {
   try {
     const query = ${escapedQuery}.trim();
+
+    function scrollToMatch(el) {
+      if (!el) return;
+
+      // 1. Thử API WebKit scrollIntoViewIfNeeded trước (rất mượt và chuẩn xác trên iOS)
+      if (typeof el.scrollIntoViewIfNeeded === 'function') {
+        try {
+          el.scrollIntoViewIfNeeded(true);
+        } catch (e) {}
+      } else {
+        try {
+          el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+        } catch (e) {
+          try { el.scrollIntoView(true); } catch (e2) {}
+        }
+      }
+
+      // 2. Tính toán toạ độ bù trừ chính xác (tránh bị thanh tìm kiếm trên đỉnh hoặc bàn phím dưới đáy che)
+      try {
+        const rect = el.getBoundingClientRect();
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        const scrollX = window.pageXOffset || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+        const windowH = window.innerHeight || document.documentElement.clientHeight || 600;
+
+        const targetY = scrollY + rect.top - Math.max(120, Math.floor(windowH * 0.35));
+        const targetX = scrollX + rect.left - 40;
+
+        window.scrollTo({
+          top: Math.max(0, targetY),
+          left: Math.max(0, targetX),
+          behavior: 'auto'
+        });
+      } catch (err) {}
+    }
+
+    function setActiveHighlight(el) {
+      if (!el) return;
+      el.style.backgroundColor = '#ff6b00';
+      el.style.color = '#ffffff';
+      el.style.outline = '3px solid #ff6b00';
+      el.style.boxShadow = '0 0 10px rgba(255, 107, 0, 0.9)';
+      el.style.zIndex = '9999';
+    }
 
     // 1. Dọn dẹp các thẻ mark highlight cũ nếu có
     function clearHighlights() {
@@ -100,11 +143,13 @@ export const getFindInPageSearchScript = (query: string): string => {
         const mark = document.createElement('mark');
         mark.className = 'kite-find-highlight';
         mark.textContent = matchText;
+        mark.style.display = 'inline-block';
         mark.style.backgroundColor = '#fff3a8';
         mark.style.color = '#111827';
         mark.style.padding = '1px 2px';
-        mark.style.borderRadius = '2px';
-        mark.style.outline = '1px solid rgba(0,0,0,0.15)';
+        mark.style.borderRadius = '3px';
+        mark.style.outline = '1px solid rgba(0,0,0,0.18)';
+        mark.style.scrollMargin = '150px 0';
         frag.appendChild(mark);
         matches.push(mark);
 
@@ -117,13 +162,11 @@ export const getFindInPageSearchScript = (query: string): string => {
     window.__kiteFindMatches = matches;
     window.__kiteFindIndex = matches.length > 0 ? 0 : -1;
 
-    // Highlight kết quả đầu tiên và cuộn đến đó
+    // Highlight kết quả đầu tiên và cuộn NGAY ĐẾN ĐÓ
     if (matches.length > 0) {
       const first = matches[0];
-      first.style.backgroundColor = '#ff9800';
-      first.style.color = '#ffffff';
-      first.style.outline = '2px solid #e65100';
-      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setActiveHighlight(first);
+      scrollToMatch(first);
     }
 
     if (window.ReactNativeWebView) {
@@ -147,11 +190,46 @@ export const getFindInPageNextScript = (): string => `
     const matches = window.__kiteFindMatches || [];
     if (!matches || matches.length === 0) return;
 
+    function scrollToMatch(el) {
+      if (!el) return;
+
+      if (typeof el.scrollIntoViewIfNeeded === 'function') {
+        try {
+          el.scrollIntoViewIfNeeded(true);
+        } catch (e) {}
+      } else {
+        try {
+          el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+        } catch (e) {
+          try { el.scrollIntoView(true); } catch (e2) {}
+        }
+      }
+
+      try {
+        const rect = el.getBoundingClientRect();
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        const scrollX = window.pageXOffset || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+        const windowH = window.innerHeight || document.documentElement.clientHeight || 600;
+
+        const targetY = scrollY + rect.top - Math.max(120, Math.floor(windowH * 0.35));
+        const targetX = scrollX + rect.left - 40;
+
+        window.scrollTo({
+          top: Math.max(0, targetY),
+          left: Math.max(0, targetX),
+          behavior: 'auto'
+        });
+      } catch (err) {}
+    }
+
     const oldIndex = window.__kiteFindIndex;
     if (oldIndex >= 0 && matches[oldIndex]) {
-      matches[oldIndex].style.backgroundColor = '#fff3a8';
-      matches[oldIndex].style.color = '#111827';
-      matches[oldIndex].style.outline = '1px solid rgba(0,0,0,0.15)';
+      const prev = matches[oldIndex];
+      prev.style.backgroundColor = '#fff3a8';
+      prev.style.color = '#111827';
+      prev.style.outline = '1px solid rgba(0,0,0,0.18)';
+      prev.style.boxShadow = 'none';
+      prev.style.zIndex = 'auto';
     }
 
     let nextIndex = (oldIndex + 1) % matches.length;
@@ -159,10 +237,14 @@ export const getFindInPageNextScript = (): string => `
 
     const current = matches[nextIndex];
     if (current) {
-      current.style.backgroundColor = '#ff9800';
+      current.style.backgroundColor = '#ff6b00';
       current.style.color = '#ffffff';
-      current.style.outline = '2px solid #e65100';
-      current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      current.style.outline = '3px solid #ff6b00';
+      current.style.boxShadow = '0 0 10px rgba(255, 107, 0, 0.9)';
+      current.style.zIndex = '9999';
+
+      // Cuộn NGAY LẬP TỨC tới kết quả
+      scrollToMatch(current);
     }
 
     if (window.ReactNativeWebView) {
@@ -172,7 +254,9 @@ export const getFindInPageNextScript = (): string => `
         current: nextIndex + 1
       }));
     }
-  } catch (err) {}
+  } catch (err) {
+    console.error('FindInPage next error:', err);
+  }
 })();
 true;
 `;
@@ -183,11 +267,46 @@ export const getFindInPagePrevScript = (): string => `
     const matches = window.__kiteFindMatches || [];
     if (!matches || matches.length === 0) return;
 
+    function scrollToMatch(el) {
+      if (!el) return;
+
+      if (typeof el.scrollIntoViewIfNeeded === 'function') {
+        try {
+          el.scrollIntoViewIfNeeded(true);
+        } catch (e) {}
+      } else {
+        try {
+          el.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+        } catch (e) {
+          try { el.scrollIntoView(true); } catch (e2) {}
+        }
+      }
+
+      try {
+        const rect = el.getBoundingClientRect();
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        const scrollX = window.pageXOffset || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+        const windowH = window.innerHeight || document.documentElement.clientHeight || 600;
+
+        const targetY = scrollY + rect.top - Math.max(120, Math.floor(windowH * 0.35));
+        const targetX = scrollX + rect.left - 40;
+
+        window.scrollTo({
+          top: Math.max(0, targetY),
+          left: Math.max(0, targetX),
+          behavior: 'auto'
+        });
+      } catch (err) {}
+    }
+
     const oldIndex = window.__kiteFindIndex;
     if (oldIndex >= 0 && matches[oldIndex]) {
-      matches[oldIndex].style.backgroundColor = '#fff3a8';
-      matches[oldIndex].style.color = '#111827';
-      matches[oldIndex].style.outline = '1px solid rgba(0,0,0,0.15)';
+      const prev = matches[oldIndex];
+      prev.style.backgroundColor = '#fff3a8';
+      prev.style.color = '#111827';
+      prev.style.outline = '1px solid rgba(0,0,0,0.18)';
+      prev.style.boxShadow = 'none';
+      prev.style.zIndex = 'auto';
     }
 
     let prevIndex = (oldIndex - 1 + matches.length) % matches.length;
@@ -195,10 +314,14 @@ export const getFindInPagePrevScript = (): string => `
 
     const current = matches[prevIndex];
     if (current) {
-      current.style.backgroundColor = '#ff9800';
+      current.style.backgroundColor = '#ff6b00';
       current.style.color = '#ffffff';
-      current.style.outline = '2px solid #e65100';
-      current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      current.style.outline = '3px solid #ff6b00';
+      current.style.boxShadow = '0 0 10px rgba(255, 107, 0, 0.9)';
+      current.style.zIndex = '9999';
+
+      // Cuộn NGAY LẬP TỨC tới kết quả
+      scrollToMatch(current);
     }
 
     if (window.ReactNativeWebView) {
@@ -208,7 +331,9 @@ export const getFindInPagePrevScript = (): string => `
         current: prevIndex + 1
       }));
     }
-  } catch (err) {}
+  } catch (err) {
+    console.error('FindInPage prev error:', err);
+  }
 })();
 true;
 `;
