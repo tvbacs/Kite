@@ -70,19 +70,64 @@ export const TabSheet: React.FC<TabSheetProps> = ({
   const pendingUnlockActionRef = useRef<(() => void) | null>(null);
   const prevVisibleRef = useRef<boolean>(visible);
 
+  const scrollViewRef = useRef<ScrollView>(null);
+  const shouldScrollToEndRef = useRef<boolean>(true);
+
+  const scrollToLastTab = (animated: boolean = false) => {
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollToEnd({ animated });
+    });
+  };
+
   useEffect(() => {
     if (visible && !prevVisibleRef.current) {
       setActiveMode(isIncognito ? 'incognito' : 'normal');
+      shouldScrollToEndRef.current = true;
+      // Tự động cuộn đến tab cuối cùng ngay khi mở màn hình danh sách tab
+      const t1 = setTimeout(() => {
+        scrollToLastTab(false);
+      }, 50);
+      const t2 = setTimeout(() => {
+        scrollToLastTab(false);
+      }, 200);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     } else if (!visible) {
       setIsPinUnlocking(false);
       pendingUnlockActionRef.current = null;
     }
     prevVisibleRef.current = visible;
-  }, [visible]);
+  }, [visible, isIncognito]);
 
   const normalTabs = tabs.filter((t) => !t.isIncognito);
   const incognitoTabs = tabs.filter((t) => !!t.isIncognito);
   const currentDisplayedTabs = activeMode === 'normal' ? normalTabs : incognitoTabs;
+
+  // Khi chuyển đổi giữa chế độ thường và ẩn danh, tự động cuộn xuống cuối danh sách
+  useEffect(() => {
+    if (visible) {
+      shouldScrollToEndRef.current = true;
+      const t = setTimeout(() => {
+        scrollToLastTab(false);
+      }, 60);
+      return () => clearTimeout(t);
+    }
+  }, [activeMode, visible]);
+
+  // Nếu có thêm tab mới (ví dụ khôi phục tab vừa đóng), cuộn mượt xuống tab cuối
+  const prevTabsLengthRef = useRef<number>(currentDisplayedTabs.length);
+  useEffect(() => {
+    if (visible && currentDisplayedTabs.length > prevTabsLengthRef.current) {
+      shouldScrollToEndRef.current = true;
+      const t = setTimeout(() => {
+        scrollToLastTab(true);
+      }, 100);
+      return () => clearTimeout(t);
+    }
+    prevTabsLengthRef.current = currentDisplayedTabs.length;
+  }, [currentDisplayedTabs.length, visible]);
 
   const handleSwitchToIncognito = () => {
     if (activeMode === 'incognito') return;
@@ -274,9 +319,16 @@ export const TabSheet: React.FC<TabSheetProps> = ({
           </View>
         ) : (
           <ScrollView
+            ref={scrollViewRef}
             style={styles.gridScroll}
             contentContainerStyle={styles.gridContent}
             showsVerticalScrollIndicator={false}
+            onContentSizeChange={(_w, h) => {
+              if (shouldScrollToEndRef.current && h > 0) {
+                shouldScrollToEndRef.current = false;
+                scrollToLastTab(false);
+              }
+            }}
           >
             <View style={styles.gridRow}>
               {currentDisplayedTabs.map((tab) => {
