@@ -1814,6 +1814,9 @@ function BrowserMain() {
             if (currentList.some((m) => m.url === media.url)) {
               return prev;
             }
+            try {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            } catch (e) {}
             const newMedia: DetectedMedia = {
               id: `media-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
               url: media.url,
@@ -2819,6 +2822,8 @@ function BrowserMain() {
                     style={[styles.webView, { backgroundColor: '#ffffff' }]}
                     incognito={Boolean(tab.isIncognito)}
                     mediaCapturePermissionGrantType="grant"
+                    injectedJavaScriptBeforeContentLoadedForMainFrameOnly={false}
+                    injectedJavaScriptForMainFrameOnly={false}
                     injectedJavaScriptBeforeContentLoaded={
                       ((stats.isShieldActive ? INJECTED_BEFORE_CONTENT : '') +
                         VIDEO_SNIFFER_SCRIPT +
@@ -3440,8 +3445,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
-    elevation: 8,
-    zIndex: 998,
+    elevation: 20,
+    zIndex: 99999,
   },
   floatingVideoIconCircle: {
     width: 24,
