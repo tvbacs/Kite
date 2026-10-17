@@ -1910,19 +1910,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               {/* Nút Đăng nhập hoặc Thêm tài khoản */}
               <TouchableOpacity
                 style={styles.addAccountRow}
-                onPress={async () => {
+                onPress={() => {
                   setUserModalVisible(false);
-                  try {
-                    const oauthUrl = await getGoogleOAuthUrl();
-                    if (oauthUrl) {
-                      onSelectUrl(oauthUrl);
-                      return;
-                    }
-                  } catch (e) {}
                   onSelectUrl(
-                    userProfile.isLoggedIn
-                      ? 'https://accounts.google.com/AddSession?continue=https://myaccount.google.com/'
-                      : 'https://accounts.google.com/ServiceLogin?continue=https://myaccount.google.com/'
+                    'https://ivwnjrugslrvsxssufco.supabase.co/auth/v1/authorize?provider=google&redirect_to=kite%3A%2F%2Fauth-callback'
                   );
                 }}
                 activeOpacity={0.6}
