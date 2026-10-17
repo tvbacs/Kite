@@ -43,12 +43,12 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.titleRow}>
-              <Feather name="shield" size={18} color="#007aff" />
+              <Feather name="shield" size={18} color="#18181b" />
               <Text style={styles.title}>Kite Shield</Text>
               <View
                 style={[
                   styles.statusDot,
-                  { backgroundColor: stats.isShieldActive ? '#22c55e' : '#a1a1aa' },
+                  { backgroundColor: stats.isShieldActive ? '#18181b' : '#a1a1aa' },
                 ]}
               />
             </View>
@@ -86,8 +86,8 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
               <Switch
                 value={stats.isShieldActive}
                 onValueChange={onToggleShield}
-                trackColor={{ false: '#d1d5db', true: '#007aff' }}
-                ios_backgroundColor="#d1d5db"
+                trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                ios_backgroundColor="#e4e4e7"
                 thumbColor="#ffffff"
               />
             </View>
@@ -101,14 +101,14 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
               <Switch
                 value={stats.aggressiveMode}
                 onValueChange={onToggleAggressive}
-                trackColor={{ false: '#d1d5db', true: '#007aff' }}
-                ios_backgroundColor="#d1d5db"
+                trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                ios_backgroundColor="#e4e4e7"
                 thumbColor="#ffffff"
               />
             </View>
           </View>
 
-          {/* Nút Phá khóa khẩn cấp - Nền Blue #007aff */}
+          {/* Nút Phá khóa khẩn cấp */}
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => {
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   statNumber: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#007aff',
+    color: '#18181b',
     marginBottom: 2,
   },
   statLabel: {
@@ -234,15 +234,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007aff',
+    backgroundColor: '#18181b',
     paddingVertical: 14,
     borderRadius: 16,
     gap: 8,
-    shadowColor: '#007aff',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
   },
   actionBtnText: {
     color: '#ffffff',

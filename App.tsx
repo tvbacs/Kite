@@ -79,6 +79,9 @@ const STORAGE_PIN_KEY = '@kite_incognito_pin';
 const STORAGE_PERSISTED_TABS_KEY = '@kite_persisted_tabs_state';
 const STORAGE_ACTIVE_TAB_ID_KEY = '@kite_active_tab_id';
 const STORAGE_DATA_SAVER_KEY = '@kite_data_saver_mode';
+const STORAGE_KEEP_AWAKE_KEY = '@kite_keep_awake';
+const STORAGE_SHIELD_ACTIVE_KEY = '@kite_shield_active';
+const STORAGE_SHIELD_AGGRESSIVE_KEY = '@kite_shield_aggressive';
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const GOOGLE_AUTH_USER_AGENT =
@@ -146,6 +149,7 @@ function BrowserMain() {
         title: t.title,
         isDesktop: t.isDesktop,
         isIncognito: t.isIncognito,
+        isReaderMode: t.isReaderMode,
         snapshotUri: t.snapshotUri,
         frozenState: t.frozenState,
         lastActiveAt: t.id === idToSave ? Date.now() : t.lastActiveAt,
@@ -500,6 +504,9 @@ function BrowserMain() {
             if (targetTab.isIncognito) {
               setIsIncognitoUnlocked(true);
             }
+            if (targetTab.isReaderMode) {
+              setStats((prev) => ({ ...prev, isReaderMode: true }));
+            }
           }
         } catch (e) {}
       }
@@ -514,6 +521,37 @@ function BrowserMain() {
           isDataSaverActive: true,
           dataSaverMode: savedMode,
         }));
+      }
+    });
+
+    // Khôi phục cài đặt Giữ màn hình luôn sáng
+    AsyncStorage.getItem(STORAGE_KEEP_AWAKE_KEY).then((res) => {
+      if (res !== null) {
+        try {
+          const val = JSON.parse(res);
+          setStats((prev) => ({ ...prev, isKeepAwakeActive: !!val }));
+          updateWakeLock(!!val, isVideoPlayingRef.current);
+        } catch (e) {}
+      }
+    });
+
+    // Khôi phục cài đặt Khiên Kite Shield
+    AsyncStorage.getItem(STORAGE_SHIELD_ACTIVE_KEY).then((res) => {
+      if (res !== null) {
+        try {
+          const val = JSON.parse(res);
+          setStats((prev) => ({ ...prev, isShieldActive: !!val }));
+        } catch (e) {}
+      }
+    });
+
+    // Khôi phục cài đặt Chế độ chặn gắt gao
+    AsyncStorage.getItem(STORAGE_SHIELD_AGGRESSIVE_KEY).then((res) => {
+      if (res !== null) {
+        try {
+          const val = JSON.parse(res);
+          setStats((prev) => ({ ...prev, aggressiveMode: !!val }));
+        } catch (e) {}
       }
     });
 
@@ -1745,23 +1783,23 @@ function BrowserMain() {
     }
 
     if (navState.url) {
-
       saveToHistory(navState.url, navState.title || navState.url, tabId);
+      const isUrlDifferent = tabs.find((t) => t.id === tabId)?.url !== navState.url;
       setTabs((prev) => {
-        const isUrlDifferent = prev.find((t) => t.id === tabId)?.url !== navState.url;
+        const isDiff = prev.find((t) => t.id === tabId)?.url !== navState.url;
         const updated = prev.map((t) =>
           t.id === tabId
             ? {
                 ...t,
                 url: navState.url,
-                isReaderMode: isUrlDifferent ? false : t.isReaderMode,
+                isReaderMode: isDiff ? false : t.isReaderMode,
               }
             : t
         );
         persistTabsState(updated);
         return updated;
       });
-      if (tabId === activeTabId) {
+      if (tabId === activeTabId && isUrlDifferent) {
         setStats((prev) => ({
           ...prev,
           isReaderMode: false,
@@ -1783,9 +1821,11 @@ function BrowserMain() {
   // Bật/tắt chế độ Trang web máy tính (Desktop User-Agent) theo từng trang
   const handleToggleDesktopMode = () => {
     const nextVal = !currentTab?.isDesktop;
-    setTabs((prev) =>
-      prev.map((t) => (t.id === activeTabId ? { ...t, isDesktop: nextVal } : t))
-    );
+    setTabs((prev) => {
+      const updated = prev.map((t) => (t.id === activeTabId ? { ...t, isDesktop: nextVal } : t));
+      persistTabsState(updated);
+      return updated;
+    });
     setTimeout(() => {
       const activeWV = getActiveWebView();
       if (activeWV) {
@@ -1793,6 +1833,22 @@ function BrowserMain() {
       }
     }, 80);
     showToast(nextVal ? 'Đã bật chế độ Trang web máy tính' : 'Đã về chế độ Trang web di động');
+  };
+
+  // Bật/tắt Khiên Kite Shield
+  const handleToggleShield = () => {
+    const nextVal = !stats.isShieldActive;
+    setStats((prev) => ({ ...prev, isShieldActive: nextVal }));
+    AsyncStorage.setItem(STORAGE_SHIELD_ACTIVE_KEY, JSON.stringify(nextVal));
+    showToast(nextVal ? 'Đã bật Khiên Kite Shield' : 'Đã tắt Khiên Kite Shield');
+  };
+
+  // Bật/tắt Chế độ chặn gắt gao (Aggressive Mode)
+  const handleToggleAggressive = () => {
+    const nextVal = !stats.aggressiveMode;
+    setStats((prev) => ({ ...prev, aggressiveMode: nextVal }));
+    AsyncStorage.setItem(STORAGE_SHIELD_AGGRESSIVE_KEY, JSON.stringify(nextVal));
+    showToast(nextVal ? 'Đã bật Chế độ chặn gắt gao' : 'Đã tắt Chế độ chặn gắt gao');
   };
 
   // Bật/tắt chế độ Tiết kiệm dữ liệu (Data Saver)
@@ -1842,6 +1898,7 @@ function BrowserMain() {
     const nextVal = !stats.isKeepAwakeActive;
     setStats((prev) => ({ ...prev, isKeepAwakeActive: nextVal }));
     updateWakeLock(nextVal, isVideoPlayingRef.current);
+    AsyncStorage.setItem(STORAGE_KEEP_AWAKE_KEY, JSON.stringify(nextVal));
     showToast(nextVal ? 'Đã bật Giữ màn hình luôn sáng' : 'Đã tắt Giữ màn hình luôn sáng');
   };
 
@@ -1856,17 +1913,22 @@ function BrowserMain() {
     const currentlyActive = !!currentTabObj?.isReaderMode;
     if (currentlyActive) {
       activeWV.injectJavaScript(EXIT_READER_MODE_SCRIPT);
-      setTabs((prev) =>
-        prev.map((t) => (t.id === activeTabId ? { ...t, isReaderMode: false } : t))
-      );
+      setTabs((prev) => {
+        const updated = prev.map((t) => (t.id === activeTabId ? { ...t, isReaderMode: false } : t));
+        persistTabsState(updated);
+        return updated;
+      });
       setStats((prev) => ({ ...prev, isReaderMode: false }));
       showToast('Đã tắt chế độ đọc báo');
     } else {
       activeWV.injectJavaScript(READER_MODE_SCRIPT);
-      setTabs((prev) =>
-        prev.map((t) => (t.id === activeTabId ? { ...t, isReaderMode: true } : t))
-      );
+      setTabs((prev) => {
+        const updated = prev.map((t) => (t.id === activeTabId ? { ...t, isReaderMode: true } : t));
+        persistTabsState(updated);
+        return updated;
+      });
       setStats((prev) => ({ ...prev, isReaderMode: true }));
+      showToast('Đã bật chế độ đọc báo');
     }
   };
 
@@ -2217,6 +2279,10 @@ function BrowserMain() {
                           const mode = stats.dataSaverMode || 'block_images';
                           webViewRefs.current[tab.id]?.injectJavaScript(getDataSaverScript(mode));
                         }
+                        if (tab.isReaderMode) {
+                          webViewRefs.current[tab.id]?.injectJavaScript(READER_MODE_SCRIPT);
+                          setStats((prev) => ({ ...prev, isReaderMode: true }));
+                        }
                         // Chạy các tiện ích mở rộng người dùng đã bật (User Extensions)
                         const extScript = getExtensionsScriptForTab(tab.url, 'document_end');
                         if (extScript) {
@@ -2363,12 +2429,8 @@ function BrowserMain() {
         visible={shieldSheetVisible}
         onClose={() => setShieldSheetVisible(false)}
         stats={stats}
-        onToggleShield={() =>
-          setStats((prev) => ({ ...prev, isShieldActive: !prev.isShieldActive }))
-        }
-        onToggleAggressive={() =>
-          setStats((prev) => ({ ...prev, aggressiveMode: !prev.aggressiveMode }))
-        }
+        onToggleShield={handleToggleShield}
+        onToggleAggressive={handleToggleAggressive}
         onManualZap={handleForceZap}
       />
 
