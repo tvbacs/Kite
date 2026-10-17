@@ -99,7 +99,7 @@ export const FindInPageBar: React.FC<FindInPageBarProps> = ({
       <TextInput
         ref={inputRef}
         style={[styles.input, { color: textCol }]}
-        placeholder="Tìm trong trang (Ctrl + F)..."
+        placeholder="Tìm trong trang..."
         placeholderTextColor={subCol}
         value={query}
         onChangeText={handleChangeText}

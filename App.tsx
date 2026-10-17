@@ -33,6 +33,7 @@ import { DownloadPromptModal } from './src/components/DownloadPromptModal';
 import { PasswordManagerSheet, saveCredentialSecurely } from './src/components/PasswordManagerSheet';
 import { PasswordSavePromptModal } from './src/components/PasswordSavePromptModal';
 import { BrowserMenuSheet } from './src/components/BrowserMenuSheet';
+import { StorageManagerSheet } from './src/components/StorageManagerSheet';
 import { FindInPageBar } from './src/components/FindInPageBar';
 import {
   getFindInPageSearchScript,
@@ -211,6 +212,7 @@ function BrowserMain() {
   const [bookmarkSheetVisible, setBookmarkSheetVisible] = useState<boolean>(false);
   const [downloadSheetVisible, setDownloadSheetVisible] = useState<boolean>(false);
   const [passwordManagerVisible, setPasswordManagerVisible] = useState<boolean>(false);
+  const [storageManagerVisible, setStorageManagerVisible] = useState<boolean>(false);
   const [extensionSheetVisible, setExtensionSheetVisible] = useState<boolean>(false);
   const [extensions, setExtensions] = useState<ExtensionItem[]>(DEFAULT_EXTENSIONS);
   const [browserMenuVisible, setBrowserMenuVisible] = useState<boolean>(false);
@@ -1450,6 +1452,13 @@ function BrowserMain() {
       } else if (data.type === 'KITE_PULL_CANCEL') {
         handlePullCancel();
       } else if (data.type === 'GOOGLE_ACCOUNT_CHOSEN') {
+        const activeUrlLower = (currentTab?.url || '').toLowerCase();
+        const isLegitGoogle =
+          activeUrlLower.includes('accounts.google.com') ||
+          activeUrlLower.includes('myaccount.google.com') ||
+          activeUrlLower.includes('google.com');
+        if (!isLegitGoogle) return;
+
         const isBadName = Boolean(
           data.name &&
           (data.name.toLowerCase().includes('app store') || data.name.toLowerCase().includes('gemini'))
@@ -1471,6 +1480,13 @@ function BrowserMain() {
           showToast(`Đã chuyển sang: ${chosenProfile.email}`);
         }
       } else if (data.type === 'GOOGLE_LOGIN_COMPLETED') {
+        const activeUrlLower = (currentTab?.url || '').toLowerCase();
+        const isLegitGoogle =
+          activeUrlLower.includes('accounts.google.com') ||
+          activeUrlLower.includes('myaccount.google.com') ||
+          activeUrlLower.includes('google.com');
+        if (!isLegitGoogle) return;
+
         const isBadName = Boolean(
           data.name &&
           (data.name.toLowerCase().includes('app store') || data.name.toLowerCase().includes('gemini'))
@@ -1510,6 +1526,12 @@ function BrowserMain() {
           showToast(`Đăng nhập thành công! (${profile.name || profile.email})`);
         }
       } else if (data.type === 'GOOGLE_USER_PROFILE') {
+        const activeUrlLower = (currentTab?.url || '').toLowerCase();
+        const isLegitGoogle =
+          activeUrlLower.includes('accounts.google.com') ||
+          activeUrlLower.includes('myaccount.google.com') ||
+          activeUrlLower.includes('google.com');
+        if (!isLegitGoogle) return;
         const isBadName = Boolean(
           data.name &&
           (data.name.toLowerCase().includes('app store') || data.name.toLowerCase().includes('gemini'))
@@ -1580,12 +1602,24 @@ function BrowserMain() {
         }
       } else if (data.type === 'DETECTED_LOGIN') {
         if (data.website && data.username && data.password) {
-          setPasswordSavePrompt({
-            visible: true,
-            website: data.website,
-            username: data.username,
-            passwordSecret: data.password,
-          });
+          const activeUrl = currentTab?.url || '';
+          const currentDomain = getDomain(activeUrl) || '';
+          const reportedSite = (data.website || '').toLowerCase().trim();
+
+          const isMatchingDomain =
+            !currentDomain ||
+            reportedSite.includes(currentDomain) ||
+            currentDomain.includes(reportedSite) ||
+            reportedSite.endsWith('.' + currentDomain);
+
+          if (isMatchingDomain) {
+            setPasswordSavePrompt({
+              visible: true,
+              website: currentDomain || data.website,
+              username: data.username,
+              passwordSecret: data.password,
+            });
+          }
         }
       }
     } catch (e) {}
@@ -2012,6 +2046,64 @@ function BrowserMain() {
     setDownloadSheetVisible(true);
   };
 
+  // Mở trình quản lý Bộ nhớ & Bộ nhớ đệm của Kite
+  const handleOpenStorageManager = () => {
+    setStorageManagerVisible(true);
+  };
+
+  // Xóa bộ nhớ đệm web: WebView native HTTP & disk cache + Paths.cache
+  const handleClearWebCache = async () => {
+    try {
+      // 1. Xóa cache trên toàn bộ WebView instances
+      Object.values(webViewRefs.current).forEach((ref) => {
+        try {
+          ref?.clearCache(true);
+        } catch {}
+      });
+      // 2. Xóa các tệp trong thư mục cache hệ thống
+      if (Paths.cache && Paths.cache.exists) {
+        const items = Paths.cache.list();
+        for (const item of items) {
+          try {
+            item.delete();
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.log('Error clearing web cache:', e);
+    }
+  };
+
+  // Giải phóng ảnh chụp thẻ duyệt web: xóa tệp snapshot trên ổ cứng & dọn tab state
+  const handleClearTabSnapshots = async () => {
+    try {
+      tabs.forEach((t) => {
+        if (t.snapshotUri && t.id !== activeTabId) {
+          try {
+            const f = new File(t.snapshotUri);
+            if (f.exists) f.delete();
+          } catch {}
+        }
+      });
+      setTabs((prev) => {
+        const updated = prev.map((t) => (t.id !== activeTabId ? { ...t, snapshotUri: undefined } : t));
+        persistTabsState(updated);
+        return updated;
+      });
+    } catch (e) {
+      console.log('Error clearing tab snapshots:', e);
+    }
+  };
+
+  // Xóa lịch sử duyệt web
+  const handleClearBrowsingHistory = async () => {
+    try {
+      await AsyncStorage.removeItem('@kite_browsing_history');
+    } catch (e) {
+      console.log('Error clearing history:', e);
+    }
+  };
+
   // Xác nhận lưu mật khẩu tự động sau khi đăng nhập
   const handleConfirmSavePassword = async () => {
     if (!passwordSavePrompt) return;
@@ -2190,6 +2282,7 @@ function BrowserMain() {
                 onOpenPasswordManager={() => setPasswordManagerVisible(true)}
                 onOpenExtensions={() => setExtensionSheetVisible(true)}
                 onOpenTabs={handleOpenTabSheet}
+                onOpenStorageManager={handleOpenStorageManager}
                 incognitoPin={incognitoPin}
                 onOpenPinSettings={handleOpenPinSettings}
                 userProfile={userProfile}
@@ -2337,10 +2430,16 @@ function BrowserMain() {
                     allowsBackForwardNavigationGestures
                     javaScriptEnabled
                     domStorageEnabled
+                    databaseEnabled={true}
+                    cacheEnabled={true}
+                    cacheMode="LOAD_DEFAULT"
+                    allowFileAccess={false}
+                    allowFileAccessFromFileURLs={false}
+                    allowUniversalAccessFromFileURLs={false}
                     allowsInlineMediaPlayback
                     allowsPictureInPictureMediaPlayback
                     allowsFullscreenVideo
-                    fraudulentWebsiteWarningEnabled={false}
+                    fraudulentWebsiteWarningEnabled={true}
                     onFileDownload={handleFileDownload}
                     mediaPlaybackRequiresUserAction={false}
                     setSupportMultipleWindows={false}
@@ -2534,6 +2633,7 @@ function BrowserMain() {
         onNewTab={() => handleNewTab(isIncognito)}
         onNewIncognitoTab={() => handleNewTab(true)}
         onOpenShield={() => setShieldSheetVisible(true)}
+        onOpenStorageManager={handleOpenStorageManager}
         isReaderMode={Boolean(currentTab?.isReaderMode || stats.isReaderMode)}
         onToggleReaderMode={handleToggleReaderMode}
         isKeepAwakeActive={Boolean(stats.isKeepAwakeActive)}
@@ -2579,6 +2679,24 @@ function BrowserMain() {
         onSelectUrl={handleNavigate}
         currentUrl={activeUrl}
         currentTitle={currentTab?.title}
+      />
+
+      {/* Quản lý Dung lượng & Bộ nhớ đệm (Storage Manager Sheet) */}
+      <StorageManagerSheet
+        visible={storageManagerVisible}
+        onClose={() => setStorageManagerVisible(false)}
+        tabs={tabs.map((t) => ({
+          id: t.id,
+          title: t.title,
+          url: t.url,
+          snapshotUri: t.snapshotUri,
+        }))}
+        activeTabId={activeTabId}
+        onClearWebCache={handleClearWebCache}
+        onClearTabSnapshots={handleClearTabSnapshots}
+        onOpenDownloads={handleOpenDownloads}
+        onClearHistory={handleClearBrowsingHistory}
+        onShowToast={showToast}
       />
 
       {/* THANH VUỐT XUỐNG HÀNH ĐỘNG CỦA KITE */}

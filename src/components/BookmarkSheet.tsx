@@ -386,8 +386,8 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   separator: {
-    height: 0.5,
-    backgroundColor: '#e5e5ea',
+    height: 1,
+    backgroundColor: '#e4e4e7',
     marginLeft: 64,
   },
   emptyContainer: {

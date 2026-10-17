@@ -38,6 +38,7 @@ interface BrowserMenuSheetProps {
   onNewTab: () => void;
   onNewIncognitoTab: () => void;
   onOpenShield: () => void;
+  onOpenStorageManager?: () => void;
   isReaderMode?: boolean;
   onToggleReaderMode?: () => void;
   isKeepAwakeActive?: boolean;
@@ -68,6 +69,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onNewTab,
   onNewIncognitoTab,
   onOpenShield,
+  onOpenStorageManager,
   isReaderMode,
   onToggleReaderMode,
   isKeepAwakeActive,
@@ -372,6 +374,25 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               </TouchableOpacity>
 
               <View style={styles.horizontalDivider} />
+
+              {/* 11. BỘ NHỚ & BỘ NHỚ ĐỆM */}
+              {onOpenStorageManager && (
+                <>
+                  <TouchableOpacity
+                    style={styles.menuRow}
+                    onPress={() => {
+                      onClose();
+                      onOpenStorageManager();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.menuTitle}>Bộ nhớ & Bộ nhớ đệm</Text>
+                    <Feather name="pie-chart" size={20} color={theme.colors.grayDark} />
+                  </TouchableOpacity>
+
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
 
               {/* 11. CÔNG CỤ TÌM KIẾM MẶC ĐỊNH */}
               <TouchableOpacity

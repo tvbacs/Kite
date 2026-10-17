@@ -65,6 +65,7 @@ interface HomeDashboardProps {
   onOpenPasswordManager?: () => void;
   onOpenExtensions?: () => void;
   onOpenTabs?: () => void;
+  onOpenStorageManager?: () => void;
   userProfile?: UserProfile;
   onUpdateProfile?: (profile: UserProfile) => void;
   onShowToast?: (msg: string) => void;
@@ -394,6 +395,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onOpenPasswordManager,
   onOpenExtensions,
   onOpenTabs,
+  onOpenStorageManager,
   userProfile: propUserProfile,
   onUpdateProfile,
   onShowToast,
@@ -1798,6 +1800,24 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     >
                       <Text style={styles.bgOptionTitle}>Lịch sử duyệt web</Text>
                       <Feather name="clock" size={20} color={theme.colors.grayDark} />
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {/* 8. Bộ nhớ & Bộ nhớ đệm */}
+                {onOpenStorageManager && (
+                  <>
+                    <View style={styles.horizontalDivider} />
+                    <TouchableOpacity
+                      style={styles.groupedOptionRow}
+                      onPress={() => {
+                        setEngineModalVisible(false);
+                        onOpenStorageManager();
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.bgOptionTitle}>Bộ nhớ & Bộ nhớ đệm</Text>
+                      <Feather name="pie-chart" size={20} color={theme.colors.grayDark} />
                     </TouchableOpacity>
                   </>
                 )}
