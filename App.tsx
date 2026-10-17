@@ -1932,6 +1932,7 @@ function BrowserMain() {
                     source={{ uri: tab.url }}
                     style={[styles.webView, { backgroundColor: '#ffffff' }]}
                     incognito={tab.isIncognito || isIncognito}
+                    mediaCapturePermissionGrantType="grant"
                     injectedJavaScriptBeforeContentLoaded={
                       stats.isShieldActive ? INJECTED_BEFORE_CONTENT : undefined
                     }

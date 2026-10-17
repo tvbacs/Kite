@@ -10,6 +10,7 @@ import {
   Platform,
   TextInput,
   TouchableWithoutFeedback,
+  KeyboardAvoidingView,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -49,6 +50,10 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
   const [isListening, setIsListening] = useState<boolean>(false);
   const [transcript, setTranscript] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const inputRef = useRef<TextInput>(null);
+  const resultSubscriptionRef = useRef<any>(null);
+  const errorSubscriptionRef = useRef<any>(null);
 
   // Hiệu ứng sóng âm Google 4 màu (Xanh dương, Đỏ, Vàng, Xanh lá)
   const dotAnim1 = useRef(new Animated.Value(0)).current;
@@ -147,6 +152,18 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
         SpeechModule.stop();
       } catch (err) {}
     }
+    if (resultSubscriptionRef.current) {
+      try {
+        resultSubscriptionRef.current.remove();
+      } catch (err) {}
+      resultSubscriptionRef.current = null;
+    }
+    if (errorSubscriptionRef.current) {
+      try {
+        errorSubscriptionRef.current.remove();
+      } catch (err) {}
+      errorSubscriptionRef.current = null;
+    }
   };
 
   /**
@@ -215,7 +232,7 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
     setIsListening(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    // Nếu có SpeechModule native (trên custom build), khởi động microphone trực tiếp
+    // 1. Nếu có SpeechModule native (trên custom build / standalone IPA)
     if (SpeechModule) {
       try {
         const perm = await SpeechModule.requestPermissionsAsync();
@@ -225,23 +242,39 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
           return;
         }
 
-        SpeechModule.start({
-          lang: 'vi-VN',
-          interimResults: true,
-          maxAlternatives: 1,
-          continuous: false,
-        });
+        if (resultSubscriptionRef.current) {
+          resultSubscriptionRef.current.remove();
+          resultSubscriptionRef.current = null;
+        }
+        if (errorSubscriptionRef.current) {
+          errorSubscriptionRef.current.remove();
+          errorSubscriptionRef.current = null;
+        }
 
-        // Lắng nghe kết quả
-        SpeechModule.addListener(
+        resultSubscriptionRef.current = SpeechModule.addListener(
           'result',
           (event: { results: { transcript: string }[]; isFinal: boolean }) => {
             const spoken = event.results?.[0]?.transcript || '';
             if (spoken) {
               setTranscript(spoken);
+              transcriptRef.current = spoken;
             }
           }
         );
+
+        errorSubscriptionRef.current = SpeechModule.addListener(
+          'error',
+          (event: any) => {
+            console.log('SpeechModule error:', event);
+          }
+        );
+
+        await SpeechModule.start({
+          lang: 'vi-VN',
+          interimResults: true,
+          maxAlternatives: 1,
+          continuous: false,
+        });
       } catch (err) {
         console.log('SpeechModule start err:', err);
       }
@@ -267,13 +300,26 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
       return;
     }
 
-    // 2. Nếu người dùng nhấn thả quá nhanh hoặc môi trường Expo Go không có SpeechModule trực tiếp:
-    // Tự động mở Google Voice Search hệ thống (chuẩn xác 100% bằng tiếng Việt)
+    // 2. Nếu có native SpeechModule:
+    if (SpeechModule) {
+      if (holdDuration < 350) {
+        setErrorMessage('Hãy nhấn giữ nút trong khi nói và thả ra khi nói xong.');
+      } else {
+        setErrorMessage('Chưa nghe rõ từ khóa. Hãy nhấn giữ và nói to rõ hơn nhé.');
+      }
+      return;
+    }
+
+    // 3. Nếu là Android (không có SpeechModule trong Expo Go): mở Google Speech Intent
     if (Platform.OS === 'android') {
       launchGoogleSpeechIntent();
-    } else {
-      setErrorMessage('Chưa nghe rõ từ khóa. Hãy nhấn giữ lâu hơn và nói to rõ.');
+      return;
     }
+
+    // 4. Nếu là iOS trong Expo Go (chưa compile custom native module):
+    // Tự động focus ô nhập liệu và hướng dẫn bấm Micro trên bàn phím iPhone
+    inputRef.current?.focus();
+    setErrorMessage('💡 Bàn phím đã mở! Hãy chạm vào biểu tượng Micro 🎙️ ở góc bàn phím iPhone để nói.');
   };
 
   const handleExecuteSearch = (query: string) => {
@@ -294,166 +340,194 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
     >
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={styles.modalBackdrop}>
-          <TouchableWithoutFeedback>
-            <View style={styles.sheetContainer}>
-              {/* Nút đóng ở góc trên bên phải */}
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={onClose}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <Feather name="x" size={20} color="#a1a1aa" />
-              </TouchableOpacity>
-
-              {/* Tiêu đề trạng thái: Nhấn giữ để nói, thả ra để tìm */}
-              <Text style={styles.statusTitle}>
-                {isListening ? 'Đang nghe... (Thả ra để tìm)' : 'Nhấn giữ để nói, thả ra để tìm'}
-              </Text>
-              <Text style={styles.statusSub}>
-                {isListening
-                  ? 'Hãy nói từ khóa bạn muốn tìm kiếm...'
-                  : 'Nhấn giữ nút micro bên dưới hoặc chạm để mở Google Voice'}
-              </Text>
-
-              {/* Hiển thị văn bản nói theo thời gian thực */}
-              <View style={styles.transcriptWrap}>
-                {transcript ? (
-                  <Text style={styles.transcriptText}>"{transcript}"</Text>
-                ) : (
-                  <Text style={styles.transcriptPlaceholder}>
-                    Nội dung bạn nói sẽ xuất hiện tại đây...
-                  </Text>
-                )}
-              </View>
-
-              {/* Thông báo lỗi nếu có */}
-              {errorMessage ? (
-                <Text style={styles.errorText}>{errorMessage}</Text>
-              ) : null}
-
-              {/* Sóng âm 4 màu Google sinh động */}
-              <View style={styles.soundWaveRow}>
-                <Animated.View
-                  style={[
-                    styles.soundDot,
-                    { backgroundColor: '#4285F4', transform: [{ translateY: dotAnim1 }] },
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.soundDot,
-                    { backgroundColor: '#EA4335', transform: [{ translateY: dotAnim2 }] },
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.soundDot,
-                    { backgroundColor: '#FBBC05', transform: [{ translateY: dotAnim3 }] },
-                  ]}
-                />
-                <Animated.View
-                  style={[
-                    styles.soundDot,
-                    { backgroundColor: '#34A853', transform: [{ translateY: dotAnim4 }] },
-                  ]}
-                />
-              </View>
-
-              {/* Nút Micro to tròn ở trung tâm: NHẤN GIỮ ĐỂ NÓI - THẢ RA ĐỂ TÌM */}
-              <View style={styles.micButtonContainer}>
-                <Animated.View
-                  style={[
-                    styles.micPulseRing,
-                    isListening && { transform: [{ scale: pulseAnim }], opacity: 0.35 },
-                  ]}
-                />
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={{ width: '100%' }}
+          >
+            <TouchableWithoutFeedback>
+              <View style={styles.sheetContainer}>
+                {/* Nút đóng ở góc trên bên phải */}
                 <TouchableOpacity
-                  style={[styles.micBigBtn, isListening ? styles.micBigBtnActive : null]}
-                  onPressIn={handlePressIn}
-                  onPressOut={handlePressOut}
-                  activeOpacity={0.85}
-                  delayPressIn={0}
+                  style={styles.closeBtn}
+                  onPress={onClose}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 >
-                  <MaterialCommunityIcons
-                    name={isListening ? 'microphone' : 'microphone-outline'}
-                    size={38}
-                    color="#ffffff"
-                  />
+                  <Feather name="x" size={20} color="#a1a1aa" />
                 </TouchableOpacity>
-              </View>
 
-              {/* Nút mở nhanh Google Voice Search chuẩn xác 100% */}
-              {Platform.OS === 'android' && (
-                <TouchableOpacity
-                  style={styles.googleVoiceDirectBtn}
-                  onPress={launchGoogleSpeechIntent}
-                  activeOpacity={0.75}
-                >
-                  <MaterialCommunityIcons
-                    name="google"
-                    size={16}
-                    color="#4285F4"
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.googleVoiceDirectText}>
-                    Chạm để mở hộp thoại Google Voice
-                  </Text>
-                </TouchableOpacity>
-              )}
+                {/* Tiêu đề trạng thái: Giữ 1 dòng duy nhất, loại bỏ dòng lặp theo yêu cầu người dùng */}
+                <Text style={styles.statusTitle}>
+                  {isListening ? 'Đang nghe bạn nói...' : 'Nhấn giữ để nói, thả ra để tìm'}
+                </Text>
 
-              {/* Nếu đã có kết quả nhận diện, hiển thị nút Tìm kiếm ngay */}
-              {transcript.trim().length > 0 ? (
-                <TouchableOpacity
-                  style={styles.searchNowBtn}
-                  onPress={() => handleExecuteSearch(transcript)}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="search" size={17} color="#ffffff" style={{ marginRight: 8 }} />
-                  <Text style={styles.searchNowBtnText}>Tìm "{transcript}" ngay</Text>
-                </TouchableOpacity>
-              ) : null}
-
-              {/* Gợi ý nói mẫu nhanh */}
-              <View style={styles.quickPromptsSection}>
-                <Text style={styles.quickPromptsLabel}>Hoặc chọn nhanh từ khóa:</Text>
-                <View style={styles.promptChipsRow}>
-                  {QUICK_VOICE_PROMPTS.map((prompt, idx) => (
-                    <TouchableOpacity
-                      key={`prompt-${idx}`}
-                      style={styles.promptChip}
-                      onPress={() => handleExecuteSearch(prompt)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.promptChipText}>{prompt}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Hộp nhập từ khóa dự phòng */}
-              <View style={styles.simulationBanner}>
-                <View style={styles.simInputRow}>
-                  <TextInput
-                    style={styles.simInput}
-                    placeholder="Hoặc gõ nhanh từ khóa tìm kiếm..."
-                    placeholderTextColor="#71717a"
-                    value={transcript}
-                    onChangeText={setTranscript}
-                    onSubmitEditing={() => handleExecuteSearch(transcript)}
-                    returnKeyType="search"
-                  />
-                  {transcript.trim().length > 0 && (
-                    <TouchableOpacity
-                      style={styles.simGoBtn}
-                      onPress={() => handleExecuteSearch(transcript)}
-                    >
-                      <Feather name="arrow-right" size={16} color="#ffffff" />
-                    </TouchableOpacity>
+                {/* Hiển thị văn bản nói theo thời gian thực */}
+                <View style={styles.transcriptWrap}>
+                  {transcript ? (
+                    <Text style={styles.transcriptText}>"{transcript}"</Text>
+                  ) : (
+                    <Text style={styles.transcriptPlaceholder}>
+                      Nội dung bạn nói sẽ xuất hiện tại đây...
+                    </Text>
                   )}
                 </View>
+
+                {/* Thông báo lỗi nếu có */}
+                {errorMessage ? (
+                  <Text style={styles.errorText}>{errorMessage}</Text>
+                ) : null}
+
+                {/* Sóng âm 4 màu Google sinh động */}
+                <View style={styles.soundWaveRow}>
+                  <Animated.View
+                    style={[
+                      styles.soundDot,
+                      { backgroundColor: '#4285F4', transform: [{ translateY: dotAnim1 }] },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.soundDot,
+                      { backgroundColor: '#EA4335', transform: [{ translateY: dotAnim2 }] },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.soundDot,
+                      { backgroundColor: '#FBBC05', transform: [{ translateY: dotAnim3 }] },
+                    ]}
+                  />
+                  <Animated.View
+                    style={[
+                      styles.soundDot,
+                      { backgroundColor: '#34A853', transform: [{ translateY: dotAnim4 }] },
+                    ]}
+                  />
+                </View>
+
+                {/* Nút Micro to tròn ở trung tâm: NHẤN GIỮ ĐỂ NÓI - THẢ RA ĐỂ TÌM */}
+                <View style={styles.micButtonContainer}>
+                  <Animated.View
+                    style={[
+                      styles.micPulseRing,
+                      isListening && { transform: [{ scale: pulseAnim }], opacity: 0.35 },
+                    ]}
+                  />
+                  <TouchableOpacity
+                    style={[styles.micBigBtn, isListening ? styles.micBigBtnActive : null]}
+                    onPressIn={handlePressIn}
+                    onPressOut={handlePressOut}
+                    activeOpacity={0.85}
+                    delayPressIn={0}
+                  >
+                    <MaterialCommunityIcons
+                      name={isListening ? 'microphone' : 'microphone-outline'}
+                      size={38}
+                      color="#ffffff"
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Nút mở nhanh Google Voice Search chuẩn xác 100% trên Android */}
+                {Platform.OS === 'android' && (
+                  <TouchableOpacity
+                    style={styles.googleVoiceDirectBtn}
+                    onPress={launchGoogleSpeechIntent}
+                    activeOpacity={0.75}
+                  >
+                    <MaterialCommunityIcons
+                      name="google"
+                      size={16}
+                      color="#4285F4"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.googleVoiceDirectText}>
+                      Chạm để mở hộp thoại Google Voice
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Nút mở bàn phím & bấm micro trực tiếp trên iPhone */}
+                {!SpeechModule && Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={styles.iosDirectVoiceBtn}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      inputRef.current?.focus();
+                      setErrorMessage('💡 Chạm vào biểu tượng Micro 🎙️ ở góc bàn phím iPhone để nói.');
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <MaterialCommunityIcons
+                      name="microphone"
+                      size={16}
+                      color="#38bdf8"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.iosDirectVoiceText}>
+                      Chạm để mở bàn phím & bấm Micro 🎙️ để nói
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Nếu đã có kết quả nhận diện, hiển thị nút Tìm kiếm ngay */}
+                {transcript.trim().length > 0 ? (
+                  <TouchableOpacity
+                    style={styles.searchNowBtn}
+                    onPress={() => handleExecuteSearch(transcript)}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="search" size={17} color="#ffffff" style={{ marginRight: 8 }} />
+                    <Text style={styles.searchNowBtnText}>Tìm "{transcript}" ngay</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {/* Gợi ý nói mẫu nhanh */}
+                <View style={styles.quickPromptsSection}>
+                  <Text style={styles.quickPromptsLabel}>Hoặc chọn nhanh từ khóa:</Text>
+                  <View style={styles.promptChipsRow}>
+                    {QUICK_VOICE_PROMPTS.map((prompt, idx) => (
+                      <TouchableOpacity
+                        key={`prompt-${idx}`}
+                        style={styles.promptChip}
+                        onPress={() => handleExecuteSearch(prompt)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.promptChipText}>{prompt}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Hộp nhập từ khóa trực tiếp / nhận diện qua bàn phím iOS */}
+                <View style={styles.simulationBanner}>
+                  <View style={styles.simInputRow}>
+                    <TextInput
+                      ref={inputRef}
+                      style={styles.simInput}
+                      placeholder={
+                        Platform.OS === 'ios'
+                          ? 'Chạm & bấm Micro 🎙️ trên bàn phím để nói...'
+                          : 'Hoặc gõ nhanh từ khóa tìm kiếm...'
+                      }
+                      placeholderTextColor="#71717a"
+                      value={transcript}
+                      onChangeText={setTranscript}
+                      onSubmitEditing={() => handleExecuteSearch(transcript)}
+                      returnKeyType="search"
+                    />
+                    {transcript.trim().length > 0 && (
+                      <TouchableOpacity
+                        style={styles.simGoBtn}
+                        onPress={() => handleExecuteSearch(transcript)}
+                      >
+                        <Feather name="arrow-right" size={16} color="#ffffff" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
               </View>
-            </View>
-          </TouchableWithoutFeedback>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
         </View>
       </TouchableWithoutFeedback>
     </Modal>
@@ -598,6 +672,22 @@ const styles = StyleSheet.create({
   },
   googleVoiceDirectText: {
     color: '#93c5fd',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  iosDirectVoiceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    marginBottom: 14,
+  },
+  iosDirectVoiceText: {
+    color: '#7dd3fc',
     fontSize: 12,
     fontWeight: '600',
   },
