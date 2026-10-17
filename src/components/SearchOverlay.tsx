@@ -17,6 +17,7 @@ import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { STORAGE_HISTORY_KEY, HistoryItem } from './HistorySheet';
+import { STORAGE_BOOKMARKS_KEY, DEFAULT_BOOKMARKS, BookmarkItem } from './BookmarkSheet';
 import { SEARCH_ENGINES } from '../constants/searchEngines';
 
 interface SearchOverlayProps {
@@ -47,6 +48,7 @@ interface SwipeableHistoryRowProps {
   onSubmit: (url: string) => void;
   onUrlChange: (text: string) => void;
   onDelete: (id: string) => void;
+  highlightPrefix?: string;
 }
 
 // Hàm trích xuất từ khóa tìm kiếm từ các công cụ tìm kiếm phổ biến (Google, Yahoo, Bing, DuckDuckGo)
@@ -85,6 +87,7 @@ const SwipeableHistoryRow: React.FC<SwipeableHistoryRowProps> = ({
   onSubmit,
   onUrlChange,
   onDelete,
+  highlightPrefix,
 }) => {
   const translateX = useRef(new Animated.Value(0)).current;
   const rowHeight = useRef(new Animated.Value(1)).current;
@@ -211,9 +214,22 @@ const SwipeableHistoryRow: React.FC<SwipeableHistoryRowProps> = ({
             </View>
 
             <View style={styles.textContainer}>
-              <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
-                {displayTitle}
-              </Text>
+              {highlightPrefix &&
+              highlightPrefix.trim().length > 0 &&
+              displayTitle.toLowerCase().startsWith(highlightPrefix.toLowerCase()) ? (
+                <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
+                  <Text style={{ fontWeight: '400' }}>
+                    {displayTitle.slice(0, highlightPrefix.length)}
+                  </Text>
+                  <Text style={{ fontWeight: '700' }}>
+                    {displayTitle.slice(highlightPrefix.length)}
+                  </Text>
+                </Text>
+              ) : (
+                <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
+                  {displayTitle}
+                </Text>
+              )}
               {query ? (
                 <Text style={[styles.subText, { color: subColor }]} numberOfLines={1}>
                   Tìm trên {currentEngineName}
@@ -242,7 +258,7 @@ const SwipeableHistoryRow: React.FC<SwipeableHistoryRowProps> = ({
             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             onPress={() => onUrlChange(displayTitle)}
           >
-            <Feather name="arrow-up-right" size={20} color={subColor} />
+            <Feather name="arrow-up-right" size={20} color="#007aff" />
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -269,7 +285,14 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 47 : 24);
 
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [enginePickerVisible, setEnginePickerVisible] = useState<boolean>(false);
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [userTypedText, setUserTypedText] = useState<string>(inputUrl);
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined);
+  const lastTypedLengthRef = useRef<number>(inputUrl.length);
 
   const getStorageKey = () =>
     userEmail ? `${STORAGE_HISTORY_KEY}_${userEmail.toLowerCase()}` : STORAGE_HISTORY_KEY;
@@ -277,10 +300,20 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   useEffect(() => {
     if (!isIncognito) {
       loadHistory();
+      loadBookmarks();
     } else {
       setHistory([]);
+      setBookmarks([]);
     }
   }, [isIncognito, userEmail]);
+
+  useEffect(() => {
+    if (!inputUrl) {
+      setUserTypedText('');
+      lastTypedLengthRef.current = 0;
+      setSelection(undefined);
+    }
+  }, [inputUrl]);
 
   const loadHistory = async () => {
     if (isIncognito) return;
@@ -294,20 +327,153 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
     }
   };
 
+  const loadBookmarks = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
+      if (stored) {
+        setBookmarks(JSON.parse(stored));
+      } else {
+        setBookmarks(DEFAULT_BOOKMARKS);
+      }
+    } catch (e) {
+      setBookmarks(DEFAULT_BOOKMARKS);
+    }
+  };
+
   const handleDeleteItem = async (id: string) => {
     const updated = history.filter((item) => item.id !== id);
     setHistory(updated);
     await AsyncStorage.setItem(getStorageKey(), JSON.stringify(updated));
   };
 
-  // Lọc lịch sử theo nội dung đang nhập
-  const filteredHistory = inputUrl.trim()
+  // Tự động tìm kiếm gợi ý tức thì từ Google (Search Suggestions)
+  useEffect(() => {
+    if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
+    const q = (userTypedText || inputUrl).trim();
+    if (!q || isIncognito) {
+      setSearchSuggestions([]);
+      return;
+    }
+
+    suggestTimerRef.current = setTimeout(() => {
+      fetch(
+        `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(q)}`
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data) && Array.isArray(data[1])) {
+            const list = data[1].filter(
+              (s: string) =>
+                typeof s === 'string' &&
+                s.trim().length > 0 &&
+                s.toLowerCase() !== q.toLowerCase()
+            );
+            setSearchSuggestions(list.slice(0, 5));
+          }
+        })
+        .catch(() => {});
+    }, 120);
+
+    return () => {
+      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
+    };
+  }, [userTypedText, inputUrl, isIncognito]);
+
+  // Xử lý tự động điền phần còn lại của lịch sử / dấu trang phía sau khi gõ (Inline Autocomplete)
+  const handleTextChange = (newText: string) => {
+    const isForward = newText.length > lastTypedLengthRef.current;
+    lastTypedLengthRef.current = newText.length;
+
+    // Nếu người dùng đang xóa/backspace hoặc chuỗi rỗng: không tự động điền để người dùng xóa tự do
+    if (!isForward || newText.trim().length === 0) {
+      setUserTypedText(newText);
+      setSelection(undefined);
+      onUrlChange(newText);
+      return;
+    }
+
+    // Cập nhật chuỗi thực tế người dùng vừa gõ
+    setUserTypedText(newText);
+
+    if (isIncognito) {
+      setSelection(undefined);
+      onUrlChange(newText);
+      return;
+    }
+
+    const lowerNew = newText.toLowerCase();
+    let bestMatch: string | null = null;
+
+    // 1. Quét tìm trong Lịch sử duyệt web (History): Ưu tiên từ khóa tìm kiếm (query), sau đó đến domain URL sạch, rồi đến tiêu đề
+    for (const h of history) {
+      const q = extractSearchQuery(h.url);
+      if (q) {
+        const cleanQ = q.trim();
+        if (cleanQ.toLowerCase().startsWith(lowerNew) && cleanQ.length > newText.length) {
+          bestMatch = cleanQ;
+          break;
+        }
+      }
+
+      const cleanUrl = h.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+      if (cleanUrl.toLowerCase().startsWith(lowerNew) && cleanUrl.length > newText.length) {
+        bestMatch = cleanUrl;
+        break;
+      }
+
+      if (h.title) {
+        const cleanTitle = h.title.trim();
+        if (cleanTitle.toLowerCase().startsWith(lowerNew) && cleanTitle.length > newText.length) {
+          bestMatch = cleanTitle;
+          break;
+        }
+      }
+    }
+
+    // 2. Nếu chưa có trong lịch sử, quét tiếp trong Dấu trang (Bookmarks)
+    if (!bestMatch) {
+      for (const bm of bookmarks) {
+        const cleanUrl = bm.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+        if (cleanUrl.toLowerCase().startsWith(lowerNew) && cleanUrl.length > newText.length) {
+          bestMatch = cleanUrl;
+          break;
+        }
+        if (bm.title) {
+          const cleanTitle = bm.title.trim();
+          if (cleanTitle.toLowerCase().startsWith(lowerNew) && cleanTitle.length > newText.length) {
+            bestMatch = cleanTitle;
+            break;
+          }
+        }
+      }
+    }
+
+    if (bestMatch) {
+      // Giữ nguyên casing người dùng vừa gõ, điền tiếp phần đuôi còn lại phía sau
+      const suffix = bestMatch.slice(newText.length);
+      const fullCompleted = newText + suffix;
+
+      onUrlChange(fullCompleted);
+      setSelection({
+        start: newText.length,
+        end: fullCompleted.length,
+      });
+    } else {
+      setSelection(undefined);
+      onUrlChange(newText);
+    }
+  };
+
+  const filterQuery = (userTypedText || inputUrl).trim();
+
+  // Lọc lịch sử theo nội dung đang nhập (lọc theo nội dung người dùng thực tế gõ)
+  const filteredHistory = filterQuery
     ? history.filter((h) => {
         const q = extractSearchQuery(h.url);
         const titleToMatch = q || h.title;
         return (
-          titleToMatch.toLowerCase().includes(inputUrl.toLowerCase()) ||
-          h.url.toLowerCase().includes(inputUrl.toLowerCase())
+          titleToMatch.toLowerCase().includes(filterQuery.toLowerCase()) ||
+          h.url.toLowerCase().includes(filterQuery.toLowerCase())
         );
       })
     : history;
@@ -347,7 +513,16 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           <TextInput
             style={[styles.input, { color: textColor }]}
             value={inputUrl}
-            onChangeText={onUrlChange}
+            onChangeText={handleTextChange}
+            selection={selection}
+            onSelectionChange={(e) => {
+              const sel = e.nativeEvent.selection;
+              if (sel.start === sel.end && selection) {
+                setSelection(undefined);
+                setUserTypedText(inputUrl);
+                lastTypedLengthRef.current = inputUrl.length;
+              }
+            }}
             placeholder={`Tìm trên ${currentEngineName} hoặc nhập URL`}
             placeholderTextColor={subColor}
             autoFocus
@@ -356,7 +531,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
             keyboardType={Platform.OS === 'ios' ? 'web-search' : 'default'}
             returnKeyType="search"
             onSubmitEditing={() => onSubmit(inputUrl)}
-            selectTextOnFocus
+            selectTextOnFocus={!userTypedText}
           />
 
           {/* Nút lưu Dấu trang (Bookmark) ngay trên thanh URL */}
@@ -377,7 +552,12 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           {inputUrl.length > 0 && (
             <TouchableOpacity
               style={styles.pillActionBtn}
-              onPress={() => onUrlChange('')}
+              onPress={() => {
+                setUserTypedText('');
+                lastTypedLengthRef.current = 0;
+                setSelection(undefined);
+                onUrlChange('');
+              }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Feather name="x-circle" size={16} color={subColor} />
@@ -431,7 +611,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                   Tìm "{inputUrl.trim()}" trên {currentEngineName}
                 </Text>
               </View>
-              <Feather name="arrow-up-right" size={19} color={subColor} />
+              <Feather name="arrow-up-right" size={19} color="#007aff" />
             </TouchableOpacity>
 
             {/* Gợi ý mở trang web trực tiếp nếu người dùng gõ tên miền thương hiệu không có đuôi (ví dụ: yahoo, youtube, facebook) */}
@@ -449,11 +629,66 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                     Đi tới https://{inputUrl.trim().toLowerCase()}.com
                   </Text>
                 </View>
-                <Feather name="arrow-up-right" size={19} color={subColor} />
+                <Feather name="arrow-up-right" size={19} color="#007aff" />
               </TouchableOpacity>
             )}
           </>
         )}
+
+        {/* Các gợi ý tìm kiếm tức thì từ Google (Search Suggestions) */}
+        {!isIncognito &&
+          searchSuggestions.length > 0 &&
+          searchSuggestions.map((sug, idx) => {
+            const prefixLen = filterQuery.length;
+            const startsWithQuery = sug.toLowerCase().startsWith(filterQuery.toLowerCase());
+            const prefixPart = startsWithQuery ? sug.slice(0, prefixLen) : '';
+            const restPart = startsWithQuery ? sug.slice(prefixLen) : sug;
+
+            return (
+              <View
+                key={`sug-${idx}`}
+                style={[styles.swipeContainer, { borderBottomColor: borderCol }]}
+              >
+                <View style={[styles.historyRowInner, { backgroundColor: bg }]}>
+                  <TouchableOpacity
+                    style={styles.historyRowContent}
+                    onPress={() => onSubmit(sug)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.iconCircle}>
+                      <Feather name="search" size={17} color={subColor} />
+                    </View>
+                    <View style={styles.textContainer}>
+                      <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
+                        {startsWithQuery ? (
+                          <>
+                            <Text style={{ fontWeight: '400' }}>{prefixPart}</Text>
+                            <Text style={{ fontWeight: '700' }}>{restPart}</Text>
+                          </>
+                        ) : (
+                          sug
+                        )}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Nút mũi tên ↗ điền vào ô tìm kiếm */}
+                  <TouchableOpacity
+                    style={styles.arrowBtn}
+                    hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                    onPress={() => {
+                      setUserTypedText(sug);
+                      lastTypedLengthRef.current = sug.length;
+                      setSelection(undefined);
+                      onUrlChange(sug);
+                    }}
+                  >
+                    <Feather name="arrow-up-right" size={20} color="#007aff" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
 
         {/* Danh sách các mục lịch sử gần đây (CHỈ HIỂN THỊ KHI KHÔNG PHẢI ẨN DANH) */}
         {!isIncognito && filteredHistory.length > 0 && (
@@ -479,8 +714,14 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 bgColor={bg}
                 currentEngineName={currentEngineName}
                 onSubmit={onSubmit}
-                onUrlChange={onUrlChange}
+                onUrlChange={(selectedText) => {
+                  setUserTypedText(selectedText);
+                  lastTypedLengthRef.current = selectedText.length;
+                  setSelection(undefined);
+                  onUrlChange(selectedText);
+                }}
                 onDelete={handleDeleteItem}
+                highlightPrefix={filterQuery}
               />
             );
           })}
