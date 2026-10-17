@@ -343,6 +343,66 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
     await AsyncStorage.setItem(getStorageKey(), JSON.stringify(updated));
   };
 
+  // Tìm từ khóa / URL khớp nhất từ lịch sử người dùng để làm gợi ý mờ phía sau (Ghost Text) và mục gợi ý trên cùng
+  const ghostMatch = useMemo<{
+    fullText: string;
+    suffix: string;
+    isUrl: boolean;
+    url?: string;
+    title?: string;
+  } | null>(() => {
+    if (isIncognito) return null;
+    const q = (userTypedText || inputUrl).trim();
+    if (!q || q.length < 1) return null;
+    const lowerQ = q.toLowerCase();
+
+    // 1. Quét từ khóa tìm kiếm (query) trong lịch sử trước
+    for (const h of history) {
+      const extractedQuery = extractSearchQuery(h.url);
+      if (extractedQuery) {
+        const cleanQuery = extractedQuery.trim();
+        if (cleanQuery.toLowerCase().startsWith(lowerQ) && cleanQuery.length > q.length) {
+          return {
+            fullText: cleanQuery,
+            suffix: cleanQuery.slice(q.length),
+            isUrl: false,
+          };
+        }
+      }
+    }
+
+    // 2. Quét tên miền trang web sạch từ lịch sử (history) và dấu trang (bookmarks)
+    for (const h of history) {
+      const cleanUrl = h.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+      if (cleanUrl.toLowerCase().startsWith(lowerQ) && cleanUrl.length > q.length) {
+        return {
+          fullText: cleanUrl,
+          suffix: cleanUrl.slice(q.length),
+          isUrl: true,
+          url: h.url,
+          title: h.title,
+        };
+      }
+    }
+
+    for (const bm of bookmarks) {
+      const cleanUrl = bm.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+      if (cleanUrl.toLowerCase().startsWith(lowerQ) && cleanUrl.length > q.length) {
+        return {
+          fullText: cleanUrl,
+          suffix: cleanUrl.slice(q.length),
+          isUrl: true,
+          url: bm.url,
+          title: bm.title,
+        };
+      }
+    }
+
+    return null;
+  }, [history, bookmarks, userTypedText, inputUrl, isIncognito]);
+
+  const ghostSuffix = ghostMatch?.suffix || '';
+
   // Gợi ý tìm kiếm: CHỈ gợi ý các từ khóa và nội dung mà người dùng ĐÃ TÌM TRONG LỊCH SỬ trước đó
   const historySearchSuggestions = useMemo(() => {
     if (isIncognito) return [];
@@ -351,7 +411,11 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
     const lowerQ = q.toLowerCase();
 
     const seen = new Set<string>();
-    const list: { text: string; isSearchQuery: boolean }[] = [];
+    if (ghostMatch) {
+      seen.add(ghostMatch.fullText.toLowerCase());
+    }
+
+    const list: { text: string; isSearchQuery: boolean; url?: string; title?: string }[] = [];
 
     // 1. Quét tìm các từ khóa tìm kiếm (search queries) mà người dùng từng tìm trước đây trong lịch sử
     for (const item of history) {
@@ -373,8 +437,14 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
         const lowerTitle = cleanTitle.toLowerCase();
         if (!cleanTitle.startsWith('http') && lowerTitle.includes(lowerQ) && !seen.has(lowerTitle)) {
           seen.add(lowerTitle);
-          list.push({ text: cleanTitle, isSearchQuery: false });
+          list.push({ text: cleanTitle, isSearchQuery: false, url: item.url, title: cleanTitle });
         }
+      }
+      const cleanUrl = item.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
+      const lowerUrl = cleanUrl.toLowerCase();
+      if (lowerUrl.includes(lowerQ) && !seen.has(lowerUrl)) {
+        seen.add(lowerUrl);
+        list.push({ text: cleanUrl, isSearchQuery: false, url: item.url, title: item.title });
       }
     }
 
@@ -386,43 +456,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
       if (!aStarts && bStarts) return 1;
       return a.text.length - b.text.length;
     }).slice(0, 5);
-  }, [history, userTypedText, inputUrl, isIncognito]);
-
-  // Tìm từ khóa / URL khớp nhất từ lịch sử người dùng để làm gợi ý mờ phía sau (Ghost Text)
-  const ghostSuffix = useMemo(() => {
-    if (isIncognito) return '';
-    const q = (userTypedText || inputUrl).trim();
-    if (!q || q.length < 1) return '';
-    const lowerQ = q.toLowerCase();
-
-    // 1. Quét từ khóa tìm kiếm (query) trong lịch sử trước
-    for (const h of history) {
-      const extractedQuery = extractSearchQuery(h.url);
-      if (extractedQuery) {
-        const cleanQuery = extractedQuery.trim();
-        if (cleanQuery.toLowerCase().startsWith(lowerQ) && cleanQuery.length > q.length) {
-          return cleanQuery.slice(q.length);
-        }
-      }
-    }
-
-    // 2. Quét tên miền trang web sạch từ lịch sử (history) và dấu trang (bookmarks)
-    for (const h of history) {
-      const cleanUrl = h.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
-      if (cleanUrl.toLowerCase().startsWith(lowerQ) && cleanUrl.length > q.length) {
-        return cleanUrl.slice(q.length);
-      }
-    }
-
-    for (const bm of bookmarks) {
-      const cleanUrl = bm.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');
-      if (cleanUrl.toLowerCase().startsWith(lowerQ) && cleanUrl.length > q.length) {
-        return cleanUrl.slice(q.length);
-      }
-    }
-
-    return '';
-  }, [history, bookmarks, userTypedText, inputUrl, isIncognito]);
+  }, [history, userTypedText, inputUrl, isIncognito, ghostMatch]);
 
   // Khi người dùng gõ phím: CHỈ cập nhật nội dung gõ, TUYỆT ĐỐI KHÔNG tự động fill chèn chữ vào ô nhập
   const handleTextChange = (newText: string) => {
@@ -490,6 +524,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                     { color: isIncognito ? '#6b7280' : '#a1a1aa' },
                   ]}
                   numberOfLines={1}
+                  ellipsizeMode="tail"
                 >
                   {ghostSuffix}
                 </Text>
@@ -508,54 +543,57 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
               keyboardType={Platform.OS === 'ios' ? 'web-search' : 'default'}
               returnKeyType="search"
               onSubmitEditing={() => {
-                const target = ghostSuffix ? `${inputUrl.trim()}${ghostSuffix}` : inputUrl;
+                const target = ghostMatch?.fullText || (ghostSuffix ? `${inputUrl.trim()}${ghostSuffix}` : inputUrl);
                 onSubmit(target);
               }}
               selectTextOnFocus={!userTypedText}
             />
           </View>
 
-          {/* Nút lưu Dấu trang (Bookmark) ngay trên thanh URL */}
-          {onToggleBookmark && inputUrl.trim().length > 0 && (
-            <TouchableOpacity
-              style={styles.pillActionBtn}
-              onPress={onToggleBookmark}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather
-                name="bookmark"
-                size={18}
-                color={isBookmarked ? '#007aff' : subColor}
-              />
-            </TouchableOpacity>
-          )}
+          {/* Cụm nút thao tác bên phải: Cố định bên phải và không bị textfield đè lên */}
+          <View style={styles.rightActionsGroup}>
+            {/* Nút lưu Dấu trang (Bookmark) ngay trên thanh URL */}
+            {onToggleBookmark && inputUrl.trim().length > 0 && (
+              <TouchableOpacity
+                style={styles.pillActionBtn}
+                onPress={onToggleBookmark}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              >
+                <Feather
+                  name="bookmark"
+                  size={18}
+                  color={isBookmarked ? '#007aff' : subColor}
+                />
+              </TouchableOpacity>
+            )}
 
-          {inputUrl.length > 0 && (
-            <TouchableOpacity
-              style={styles.pillActionBtn}
-              onPress={() => {
-                setUserTypedText('');
-                lastTypedLengthRef.current = 0;
-                setSelection(undefined);
-                onUrlChange('');
-              }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather name="x-circle" size={16} color={subColor} />
-            </TouchableOpacity>
-          )}
+            {inputUrl.length > 0 && (
+              <TouchableOpacity
+                style={styles.pillActionBtn}
+                onPress={() => {
+                  setUserTypedText('');
+                  lastTypedLengthRef.current = 0;
+                  setSelection(undefined);
+                  onUrlChange('');
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+              >
+                <Feather name="x-circle" size={16} color={subColor} />
+              </TouchableOpacity>
+            )}
 
-          {/* Quét mã QR */}
-          {!inputUrl && onScanQr && (
-            <TouchableOpacity
-              style={styles.pillActionBtn}
-              onPress={onScanQr}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              activeOpacity={0.7}
-            >
-              <Feather name="maximize" size={17} color={textColor} />
-            </TouchableOpacity>
-          )}
+            {/* Quét mã QR */}
+            {!inputUrl && onScanQr && (
+              <TouchableOpacity
+                style={styles.pillActionBtn}
+                onPress={onScanQr}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <Feather name="maximize" size={17} color={textColor} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         <TouchableOpacity
@@ -576,27 +614,63 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Nếu đang gõ, hiển thị gợi ý tìm kiếm trên công cụ tìm kiếm */}
+        {/* Nếu người dùng đang gõ:
+            Dòng 1: Hiện đầy đủ mục gợi ý khớp với ghost text (để người dùng bấm vào luôn như Chrome) HOẶC Đi tới https://...com
+            Dòng 2: Tìm "<inputUrl>" trên Google (được đưa xuống dưới Đi tới theo yêu cầu)
+        */}
         {inputUrl.trim().length > 0 && (
           <>
-            <TouchableOpacity
-              style={[styles.historyRow, { borderBottomColor: borderCol }]}
-              onPress={() => onSubmit(inputUrl.trim())}
-              activeOpacity={0.7}
-            >
-              <View style={styles.iconCircle}>
-                <Feather name="search" size={17} color={subColor} />
-              </View>
-              <View style={styles.textContainer}>
-                <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
-                  Tìm "{inputUrl.trim()}" trên {currentEngineName}
-                </Text>
-              </View>
-              <Feather name="arrow-up-right" size={19} color="#007aff" />
-            </TouchableOpacity>
-
-            {/* Gợi ý mở trang web trực tiếp nếu người dùng gõ tên miền thương hiệu không có đuôi (ví dụ: yahoo, youtube, facebook) */}
-            {/^[a-zA-Z0-9-]{2,20}$/.test(inputUrl.trim()) && !inputUrl.includes('.') && (
+            {/* DÒNG 1: GỢI Ý ĐẦY ĐỦ (GIỐNG CHROME) HOẶC ĐI TỚI WEBSITE */}
+            {ghostMatch ? (
+              <TouchableOpacity
+                style={[styles.historyRow, { borderBottomColor: borderCol }]}
+                onPress={() => {
+                  if (ghostMatch.isUrl) {
+                    onSubmit(ghostMatch.url || `https://${ghostMatch.fullText}`);
+                  } else {
+                    onSubmit(ghostMatch.fullText);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.iconCircle}>
+                  <Feather
+                    name={ghostMatch.isUrl ? 'globe' : 'clock'}
+                    size={17}
+                    color={subColor}
+                  />
+                </View>
+                <View style={styles.textContainer}>
+                  <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
+                    {ghostMatch.isUrl ? (
+                      <>
+                        <Text style={{ fontWeight: '400', color: subColor }}>Đi tới </Text>
+                        <Text style={{ fontWeight: '400' }}>
+                          https://{inputUrl.trim().replace(/^https?:\/\//i, '')}
+                        </Text>
+                        <Text style={{ fontWeight: '700' }}>{ghostMatch.suffix}</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={{ fontWeight: '400' }}>{inputUrl.trim()}</Text>
+                        <Text style={{ fontWeight: '700' }}>{ghostMatch.suffix}</Text>
+                      </>
+                    )}
+                  </Text>
+                  {ghostMatch.title && ghostMatch.isUrl ? (
+                    <Text style={[styles.subText, { color: subColor }]} numberOfLines={1}>
+                      {ghostMatch.title}
+                    </Text>
+                  ) : !ghostMatch.isUrl ? (
+                    <Text style={[styles.subText, { color: subColor }]} numberOfLines={1}>
+                      Lịch sử tìm kiếm
+                    </Text>
+                  ) : null}
+                </View>
+                <Feather name="arrow-up-right" size={19} color="#007aff" />
+              </TouchableOpacity>
+            ) : /^[a-zA-Z0-9-]{2,20}$/.test(inputUrl.trim()) && !inputUrl.includes('.') ? (
+              /* Nếu không có ghost match nhưng người dùng gõ tên miền (như vidsnaps, google, fb): ĐƯA "ĐI TỚI" LÊN TRÊN "TÌM" */
               <TouchableOpacity
                 style={[styles.historyRow, { borderBottomColor: borderCol }]}
                 onPress={() => onSubmit(`https://${inputUrl.trim().toLowerCase()}.com`)}
@@ -612,7 +686,24 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 </View>
                 <Feather name="arrow-up-right" size={19} color="#007aff" />
               </TouchableOpacity>
-            )}
+            ) : null}
+
+            {/* DÒNG 2: TÌM TRÊN GOOGLE (NẰM DƯỚI ĐI TỚI THEO ĐÚNG YÊU CẦU CỦA USER) */}
+            <TouchableOpacity
+              style={[styles.historyRow, { borderBottomColor: borderCol }]}
+              onPress={() => onSubmit(inputUrl.trim())}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconCircle}>
+                <Feather name="search" size={17} color={subColor} />
+              </View>
+              <View style={styles.textContainer}>
+                <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
+                  Tìm "{inputUrl.trim()}" trên {currentEngineName}
+                </Text>
+              </View>
+              <Feather name="arrow-up-right" size={19} color="#007aff" />
+            </TouchableOpacity>
           </>
         )}
 
@@ -843,6 +934,8 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     position: 'relative',
+    overflow: 'hidden',
+    marginRight: 4,
   },
   ghostTextContainer: {
     position: 'absolute',
@@ -852,6 +945,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   ghostBaseText: {
     fontSize: 15,
@@ -860,6 +954,7 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   ghostSuffixText: {
+    flex: 1,
     fontSize: 15,
     padding: 0,
     margin: 0,
@@ -871,8 +966,13 @@ const styles = StyleSheet.create({
     margin: 0,
     height: '100%',
   },
+  rightActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 5,
+  },
   pillActionBtn: {
-    padding: 6,
+    padding: 5,
     marginLeft: 2,
     justifyContent: 'center',
     alignItems: 'center',
