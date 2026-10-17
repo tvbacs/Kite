@@ -335,11 +335,10 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
           >
             {/* 1. TỔNG QUAN DUNG LƯỢNG */}
             <View style={styles.summaryCard}>
-              <View style={styles.summaryTop}>
-                <View>
-                  <Text style={styles.summaryLabel}>Dung lượng Kite đang dùng</Text>
-                  <Text style={styles.summaryValue}>{formatBytes(totalKiteUsage)}</Text>
-                </View>
+              <Text style={styles.summaryLabel}>Dung lượng Kite đang dùng</Text>
+
+              <View style={styles.summaryValueRow}>
+                <Text style={styles.summaryValue}>{formatBytes(totalKiteUsage)}</Text>
                 <TouchableOpacity
                   style={[styles.optimizeBtn, (isLoading || isCleaning) && styles.btnDisabled]}
                   onPress={handleSmartOptimize}
@@ -349,10 +348,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
                   {isCleaning ? (
                     <ActivityIndicator size="small" color={theme.colors.white} />
                   ) : (
-                    <>
-                      <Feather name="zap" size={15} color={theme.colors.white} />
-                      <Text style={styles.optimizeBtnText}>Tối ưu hóa ngay</Text>
-                    </>
+                    <Text style={styles.optimizeBtnText}>Tối ưu hóa ngay</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -586,11 +582,15 @@ const styles = StyleSheet.create({
     padding: 18,
     marginTop: 6,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
-  summaryTop: {
+  summaryValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: 6,
+    marginBottom: 2,
   },
   summaryLabel: {
     fontSize: theme.typography.fontSize.xs,
@@ -603,16 +603,14 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.textPrimary,
-    marginTop: 4,
   },
   optimizeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
     backgroundColor: theme.colors.accentBlue,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
     borderRadius: theme.radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   btnDisabled: {
     opacity: 0.6,
