@@ -676,8 +676,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
     backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   countBadgeText: {
     fontSize: 11.5,
@@ -691,8 +689,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   actionRow: {
     flexDirection: 'row',
@@ -709,8 +705,6 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 10,
     backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   importBtnText: {
     fontSize: 13,
@@ -740,8 +734,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 38,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   searchInput: {
     flex: 1,
@@ -790,8 +782,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   extCardTopRow: {
     flexDirection: 'row',

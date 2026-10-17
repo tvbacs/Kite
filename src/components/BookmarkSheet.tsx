@@ -320,8 +320,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   searchBar: {
     flexDirection: 'row',
@@ -331,8 +329,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 40,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   searchIcon: {
     marginRight: 8,
@@ -352,8 +348,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   bookmarkRow: {
     flexDirection: 'row',
@@ -424,8 +418,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   addBookmarkText: {
     fontSize: 14,
@@ -441,8 +433,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   addFormTitle: {
     fontSize: 15,
@@ -458,8 +448,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#09090b',
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   formBtnRow: {
     flexDirection: 'row',

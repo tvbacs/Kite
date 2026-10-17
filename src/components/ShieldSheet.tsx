@@ -141,8 +141,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.xl,
     paddingVertical: 4,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   optionRow: {
     flexDirection: 'row',

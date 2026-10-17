@@ -574,8 +574,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 6,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   quickActionItem: {
     flex: 1,
@@ -610,15 +608,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
   },
   menuTitle: {
     flex: 1,
@@ -629,7 +625,7 @@ const styles = StyleSheet.create({
   horizontalDivider: {
     height: theme.divider.height,
     backgroundColor: theme.divider.backgroundColor,
-    marginHorizontal: 8,
+    marginHorizontal: 16,
   },
   engineRightGroup: {
     flexDirection: 'row',

@@ -194,6 +194,13 @@ function BrowserMain() {
   const currentTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const activeUrl = currentTab?.url || null;
 
+  // Đồng bộ trạng thái isIncognito theo đúng tab đang active hiện tại
+  useEffect(() => {
+    if (currentTab) {
+      setIsIncognito(Boolean(currentTab.isIncognito));
+    }
+  }, [currentTab?.id, currentTab?.isIncognito]);
+
   const [inputUrl, setInputUrl] = useState<string>('');
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -2144,7 +2151,7 @@ function BrowserMain() {
     }
   };
 
-  const isCurrentIncognito = Boolean(currentTab?.isIncognito || isIncognito);
+  const isCurrentIncognito = Boolean(currentTab ? currentTab.isIncognito : isIncognito);
   const appBg = isCurrentIncognito ? '#202124' : '#ffffff';
   const viewportBg = activeUrl !== null ? '#ffffff' : appBg;
   const normalTabsCount = tabs.filter((t) => !t.isIncognito).length;
@@ -2253,7 +2260,7 @@ function BrowserMain() {
             currentEngineName={SEARCH_ENGINES[currentEngineId]?.name || 'Google'}
             currentEngineId={currentEngineId}
             onChangeEngine={handleChangeEngine}
-            isIncognito={isIncognito}
+            isIncognito={isCurrentIncognito}
             isBookmarked={isCurrentBookmarked}
             onToggleBookmark={() =>
               handleToggleBookmarkCurrentPage(inputUrl, currentTab?.title)
@@ -2272,7 +2279,7 @@ function BrowserMain() {
                 }}
                 currentEngineId={currentEngineId}
                 onChangeEngine={handleChangeEngine}
-                isIncognito={isIncognito}
+                isIncognito={isCurrentIncognito}
                 onToggleIncognito={handleToggleIncognito}
                 onSearchByImage={handleSearchByImage}
                 onScanQr={() => setQrModalVisible(true)}

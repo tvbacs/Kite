@@ -582,8 +582,6 @@ const styles = StyleSheet.create({
     padding: 18,
     marginTop: 6,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   summaryValueRow: {
     flexDirection: 'row',
@@ -644,8 +642,6 @@ const styles = StyleSheet.create({
   breakdownCard: {
     backgroundColor: theme.colors.sheetCard,
     borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
     overflow: 'hidden',
     marginBottom: 16,
   },

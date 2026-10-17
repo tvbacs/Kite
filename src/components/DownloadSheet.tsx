@@ -218,20 +218,10 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
                   Linking.openURL('shareddocuments://').catch(() => {});
                 }}
                 activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Feather name="folder" size={13} color="#18181b" />
-                <Text style={styles.openFilesBtnText}>Mở app Tệp</Text>
+                <Feather name="folder" size={17} color="#18181b" />
               </TouchableOpacity>
-
-              {downloads.length > 0 && (
-                <TouchableOpacity
-                  style={styles.clearAllBtn}
-                  onPress={handleClearAll}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.clearAllBtnText}>Xóa</Text>
-                </TouchableOpacity>
-              )}
 
               <TouchableOpacity
                 style={styles.closeBtn}
@@ -427,33 +417,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   openFilesBtn: {
-    flexDirection: 'row',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.colors.sheetCard,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     alignItems: 'center',
-    gap: 4,
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: theme.colors.sheetCard,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  openFilesBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#18181b',
-  },
-  clearAllBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: theme.colors.sheetCard,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  clearAllBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#71717a',
+    justifyContent: 'center',
   },
   closeBtn: {
     width: 32,
@@ -471,8 +442,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 38,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   searchInput: {
     flex: 1,
@@ -493,8 +462,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 14,
     backgroundColor: theme.colors.sheetCard,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   filterChipActive: {
     backgroundColor: theme.colors.accentBlue,
@@ -551,8 +518,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.sheetCard,
     borderRadius: theme.radius.md,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   fileIconBox: {
     width: 44,

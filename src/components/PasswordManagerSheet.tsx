@@ -960,8 +960,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.xl,
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   checkupTitle: {
     fontSize: 15.5,
@@ -992,8 +990,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 18,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   addPasswordRowBtnText: {
     fontSize: theme.typography.fontSize.base,
@@ -1010,8 +1006,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: theme.radius.xl,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   credRowItem: {
     flexDirection: 'row',
@@ -1144,8 +1138,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 18,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   bottomPillBtnText: {
     fontSize: 13.5,

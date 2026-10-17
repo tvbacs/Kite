@@ -2560,20 +2560,18 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.xl,
     overflow: 'hidden',
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   groupedOptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
   },
   horizontalDivider: {
     height: theme.divider.height,
     backgroundColor: theme.divider.backgroundColor,
-    marginHorizontal: 8,
+    marginHorizontal: 16,
   },
   bgOptionItem: {
     flexDirection: 'row',

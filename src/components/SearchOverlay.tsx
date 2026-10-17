@@ -241,7 +241,7 @@ const SwipeableHistoryRow: React.FC<SwipeableHistoryRowProps> = ({
             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             onPress={() => onUrlChange(displayTitle)}
           >
-            <Feather name="arrow-up-right" size={20} color="#007aff" />
+            <Feather name="arrow-up-right" size={20} color={subColor} />
           </TouchableOpacity>
         </Animated.View>
       </View>
@@ -419,14 +419,14 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
               activeOpacity={0.7}
             >
               <View style={styles.iconCircle}>
-                <Feather name="search" size={18} color="#007aff" />
+                <Feather name="search" size={17} color={subColor} />
               </View>
               <View style={styles.textContainer}>
-                <Text style={[styles.mainText, { color: '#007aff' }]} numberOfLines={1}>
+                <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
                   Tìm "{inputUrl.trim()}" trên {currentEngineName}
                 </Text>
               </View>
-              <Feather name="arrow-up-right" size={20} color="#007aff" />
+              <Feather name="arrow-up-right" size={19} color={subColor} />
             </TouchableOpacity>
 
             {/* Gợi ý mở trang web trực tiếp nếu người dùng gõ tên miền thương hiệu không có đuôi (ví dụ: yahoo, youtube, facebook) */}
@@ -436,15 +436,15 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 onPress={() => onSubmit(`https://${inputUrl.trim().toLowerCase()}.com`)}
                 activeOpacity={0.7}
               >
-                <View style={[styles.iconCircle, { backgroundColor: '#eef2ff' }]}>
-                  <Feather name="globe" size={16} color="#4f46e5" />
+                <View style={styles.iconCircle}>
+                  <Feather name="globe" size={17} color={subColor} />
                 </View>
                 <View style={styles.textContainer}>
-                  <Text style={[styles.mainText, { color: '#4f46e5' }]} numberOfLines={1}>
+                  <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
                     Đi tới https://{inputUrl.trim().toLowerCase()}.com
                   </Text>
                 </View>
-                <Feather name="arrow-up-right" size={20} color="#4f46e5" />
+                <Feather name="arrow-up-right" size={19} color={subColor} />
               </TouchableOpacity>
             )}
           </>

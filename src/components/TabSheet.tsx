@@ -134,13 +134,44 @@ export const TabSheet: React.FC<TabSheetProps> = ({
     }
   };
 
+  const handleDonePress = () => {
+    const currentTab = tabs.find((t) => t.id === activeTabId);
+    if (activeMode === 'normal') {
+      // Đang ở chế độ tab thường: luôn đóng về tab thường, không bao giờ để nhảy sang tab ẩn danh
+      if (currentTab && !currentTab.isIncognito) {
+        onClose();
+        return;
+      }
+      if (normalTabs.length > 0) {
+        const target = normalTabs.slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0))[0] || normalTabs[0];
+        onSelectTab(target.id);
+        onClose();
+      } else {
+        onNewTab(false);
+        onClose();
+      }
+    } else {
+      // Đang ở chế độ tab ẩn danh:
+      if (currentTab && currentTab.isIncognito) {
+        onClose();
+        return;
+      }
+      if (incognitoTabs.length > 0) {
+        const target = incognitoTabs.slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0))[0] || incognitoTabs[0];
+        handleCardPress(target);
+      } else {
+        handleCreateIncognitoTab();
+      }
+    }
+  };
+
   return (
     <Modal
       visible={visible}
       animationType="slide"
       transparent={true}
       presentationStyle="overFullScreen"
-      onRequestClose={onClose}
+      onRequestClose={handleDonePress}
     >
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
@@ -153,7 +184,7 @@ export const TabSheet: React.FC<TabSheetProps> = ({
           {/* Nút đóng / quay lại bên trái */}
           <TouchableOpacity
             style={styles.circleBtn}
-            onPress={onClose}
+            onPress={handleDonePress}
             activeOpacity={0.7}
           >
             <Feather name="arrow-left" size={20} color="#09090b" />
@@ -347,7 +378,7 @@ export const TabSheet: React.FC<TabSheetProps> = ({
           </TouchableOpacity>
 
           {/* Nút 'Xong' ở bên phải */}
-          <TouchableOpacity style={styles.doneBtn} onPress={onClose} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.doneBtn} onPress={handleDonePress} activeOpacity={0.7}>
             <Text style={styles.doneBtnText}>Xong</Text>
           </TouchableOpacity>
         </View>
@@ -833,14 +864,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   actionFrame: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
     overflow: 'hidden',
     marginBottom: 14,
   },

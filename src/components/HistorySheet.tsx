@@ -241,8 +241,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 10,
     height: 40,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   searchIcon: {
     marginRight: 8,
@@ -265,8 +263,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 12,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   favicon: {
     width: 24,
