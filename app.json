@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Kite",
+    "slug": "kite",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logokite.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/logokite.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#09090b"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.workspace.kite",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logokite.png",
+        "backgroundColor": "#09090b"
+      },
+      "package": "com.workspace.kite"
+    },
+    "web": {
+      "favicon": "./assets/logokite.png"
+    },
+    "plugins": [
+      "expo-sharing",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Cho phép Kite truy cập microphone để tìm kiếm bằng giọng nói.",
+          "speechRecognitionPermission": "Cho phép Kite nhận diện giọng nói tiếng Việt."
+        }
+      ]
+    ]
+  }
+}

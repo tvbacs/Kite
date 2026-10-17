@@ -1,0 +1,83 @@
+name: Build Kite iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'assets/**'
+      - 'App.tsx'
+      - 'app.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'babel.config.js'
+      - '.github/workflows/build-ios.yml'
+
+jobs:
+  build-ios:
+    name: Build Unsigned iOS IPA
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
+
+    steps:
+      - name: 1. Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set Xcode Version to 16.2
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.2'
+
+      - name: 3. Verify Xcode Version
+        run: |
+          xcodebuild -version
+
+      - name: 4. Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 5. Install Node dependencies
+        run: npm install
+
+      - name: 6. Expo Prebuild (Generate Native iOS Project)
+        run: npx expo prebuild --platform ios --clean
+
+      - name: 7. Install CocoaPods Dependencies
+        working-directory: ios
+        run: pod install --repo-update
+
+      - name: 8. Build Native iOS App Binary
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -workspace Kite.xcworkspace \
+            -scheme Kite \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: 9. Package App into IPA
+        working-directory: ios
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/Kite.app Payload/
+          zip -r Kite.ipa Payload
+          mkdir -p ../dist
+          mv Kite.ipa ../dist/Kite.ipa
+
+      - name: 10. Upload IPA to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kite-iOS-IPA
+          path: dist/Kite.ipa
+          retention-days: 14
