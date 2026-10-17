@@ -105,6 +105,7 @@ function BrowserMain() {
   const userInitiatedRef = useRef<boolean>(false);
   const closedTabsRef = useRef<BrowserTab[]>([]);
   const isVideoPlayingRef = useRef<boolean>(false);
+  const isRestoredRef = useRef<boolean>(false);
 
   // Quản lý hệ thống Thẻ (Tabs)
   const [tabs, setTabs] = useState<BrowserTab[]>([
@@ -114,6 +115,10 @@ function BrowserMain() {
   // Lưu trạng thái cuộn, URL và snapshot của các thẻ vào AsyncStorage
   const persistTabsState = async (tabsList: BrowserTab[], currentActiveId?: string) => {
     try {
+      let idToSave = currentActiveId || activeTabId;
+      if (tabsList.length > 0 && !tabsList.some((t) => t.id === idToSave)) {
+        idToSave = tabsList[tabsList.length - 1]?.id || '';
+      }
       const toPersist = tabsList.map((t) => ({
         id: t.id,
         url: t.url,
@@ -122,13 +127,12 @@ function BrowserMain() {
         isIncognito: t.isIncognito,
         snapshotUri: t.snapshotUri,
         frozenState: t.frozenState,
-        lastActiveAt: t.lastActiveAt,
+        lastActiveAt: t.id === idToSave ? Date.now() : t.lastActiveAt,
       }));
-      await AsyncStorage.setItem(STORAGE_PERSISTED_TABS_KEY, JSON.stringify(toPersist));
-      const idToSave = currentActiveId || activeTabId;
-      if (idToSave) {
-        await AsyncStorage.setItem(STORAGE_ACTIVE_TAB_ID_KEY, idToSave);
-      }
+      await Promise.all([
+        AsyncStorage.setItem(STORAGE_PERSISTED_TABS_KEY, JSON.stringify(toPersist)),
+        idToSave ? AsyncStorage.setItem(STORAGE_ACTIVE_TAB_ID_KEY, idToSave) : Promise.resolve(),
+      ]);
     } catch (e) {}
   };
 
@@ -371,7 +375,7 @@ function BrowserMain() {
       }
     });
 
-    // Khôi phục danh sách thẻ, URL và mở đúng thẻ gần nhất người dùng vừa xem
+    // Khôi phục danh sách thẻ, URL và mở chính xác thẻ người dùng đang xem trước khi reload
     Promise.all([
       AsyncStorage.getItem(STORAGE_PERSISTED_TABS_KEY),
       AsyncStorage.getItem(STORAGE_ACTIVE_TAB_ID_KEY),
@@ -380,11 +384,11 @@ function BrowserMain() {
         try {
           const savedTabs: BrowserTab[] = JSON.parse(tabsData);
           if (Array.isArray(savedTabs) && savedTabs.length > 0) {
-            // Xác định thẻ gần nhất người dùng vừa xem:
+            // Xác định chính xác thẻ đang mở:
             // 1. Thẻ có id trùng với savedActiveId
             // 2. Hoặc thẻ có lastActiveAt mới nhất
             // 3. Hoặc thẻ cuối cùng trong danh sách
-            let targetTab = savedTabs.find((t) => t.id === savedActiveId);
+            let targetTab = savedActiveId ? savedTabs.find((t) => t.id === savedActiveId) : null;
             if (!targetTab) {
               const sortedByRecent = [...savedTabs].sort(
                 (a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0)
@@ -392,17 +396,9 @@ function BrowserMain() {
               targetTab = sortedByRecent[0] || savedTabs[savedTabs.length - 1];
             }
 
-            // Khi mở lại app, ưu tiên mở thẻ thông thường để bảo mật quyền riêng tư cho các thẻ ẩn danh
-            if (targetTab.isIncognito) {
-              const normalFallback = savedTabs.find((t) => !t.isIncognito);
-              if (normalFallback) {
-                targetTab = normalFallback;
-              }
-            }
-
             const targetId = targetTab.id;
 
-            // Giữ đúng thẻ gần nhất hoạt động (isSleeping: false), đóng băng các thẻ còn lại để bảo vệ RAM
+            // Giữ đúng thẻ đang mở hoạt động (isSleeping: false), đóng băng các thẻ còn lại để bảo vệ RAM
             const initializedTabs = savedTabs.map((t) => ({
               ...t,
               isSleeping: t.id !== targetId,
@@ -412,9 +408,13 @@ function BrowserMain() {
             setActiveTabId(targetId);
             setInputUrl(targetTab.url || '');
             setIsIncognito(!!targetTab.isIncognito);
+            if (targetTab.isIncognito) {
+              setIsIncognitoUnlocked(true);
+            }
           }
         } catch (e) {}
       }
+      isRestoredRef.current = true;
     });
 
     // Khôi phục cài đặt Chế độ tiết kiệm dữ liệu
@@ -485,13 +485,16 @@ function BrowserMain() {
 
   // Tự động ghi nhớ thẻ đang xem gần nhất vào bộ nhớ để khi vào lại browser sẽ mở đúng trang đó
   useEffect(() => {
-    if (activeTabId && !isIncognito) {
+    if (!isRestoredRef.current) return;
+    if (activeTabId) {
       AsyncStorage.setItem(STORAGE_ACTIVE_TAB_ID_KEY, activeTabId).catch(() => {});
-      setTabs((prev) =>
-        prev.map((t) => (t.id === activeTabId ? { ...t, lastActiveAt: Date.now() } : t))
-      );
+      setTabs((prev) => {
+        const updated = prev.map((t) => (t.id === activeTabId ? { ...t, lastActiveAt: Date.now() } : t));
+        persistTabsState(updated, activeTabId);
+        return updated;
+      });
     }
-  }, [activeTabId, isIncognito]);
+  }, [activeTabId]);
 
   // Tạm dừng video & âm thanh trên các tab nền để tiết kiệm pin và dữ liệu
   useEffect(() => {
@@ -786,7 +789,7 @@ function BrowserMain() {
     };
     setTabs((prev) => {
       const updated = [...prev, newTabObj];
-      persistTabsState(updated);
+      persistTabsState(updated, newId);
       return updated;
     });
     setActiveTabId(newId);
@@ -847,10 +850,10 @@ function BrowserMain() {
     }
 
     const remaining = tabs.filter((t) => t.id !== id);
-    setTabs(remaining);
-    persistTabsState(remaining);
+    let nextActiveId = activeTabId;
     if (activeTabId === id) {
       const nextActive = remaining[remaining.length - 1];
+      nextActiveId = nextActive.id;
       setActiveTabId(nextActive.id);
       setInputUrl(nextActive.url);
       setIsIncognito(!!nextActive.isIncognito);
@@ -861,12 +864,16 @@ function BrowserMain() {
               ? { ...t, isSleeping: false, lastActiveAt: Date.now() }
               : t
           );
-          persistTabsState(updated);
+          persistTabsState(updated, nextActiveId);
           return updated;
         });
+        scheduleProcessPooling(nextActive.id);
+        return;
       }
       scheduleProcessPooling(nextActive.id);
     }
+    setTabs(remaining);
+    persistTabsState(remaining, nextActiveId);
   };
 
   // Khôi phục thẻ vừa đóng gần nhất
@@ -886,7 +893,7 @@ function BrowserMain() {
     };
     setTabs((prev) => {
       const updated = [...prev, newTab];
-      persistTabsState(updated);
+      persistTabsState(updated, newId);
       return updated;
     });
     setActiveTabId(newId);
@@ -1188,7 +1195,7 @@ function BrowserMain() {
         // Giữ tối đa 1 đến 2 WebView trong RAM: mọi tab nền khác đều ở trạng thái ngủ
         return { ...t, isSleeping: true };
       });
-      persistTabsState(updated);
+      persistTabsState(updated, id);
       return updated;
     });
 
