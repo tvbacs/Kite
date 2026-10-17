@@ -33,6 +33,13 @@ import { DownloadPromptModal } from './src/components/DownloadPromptModal';
 import { PasswordManagerSheet, saveCredentialSecurely } from './src/components/PasswordManagerSheet';
 import { PasswordSavePromptModal } from './src/components/PasswordSavePromptModal';
 import { BrowserMenuSheet } from './src/components/BrowserMenuSheet';
+import { FindInPageBar } from './src/components/FindInPageBar';
+import {
+  getFindInPageSearchScript,
+  getFindInPageNextScript,
+  getFindInPagePrevScript,
+  getFindInPageClearScript,
+} from './src/services/findInPageScript';
 import {
   ExtensionSheet,
   STORAGE_EXTENSIONS_KEY,
@@ -216,6 +223,11 @@ function BrowserMain() {
     username: string;
     passwordSecret: string;
   } | null>(null);
+  const [findInPageVisible, setFindInPageVisible] = useState<boolean>(false);
+  const [findInPageStats, setFindInPageStats] = useState<{ total: number; current: number }>({
+    total: 0,
+    current: 0,
+  });
 
   // Sinh mã script tiện ích mở rộng phù hợp với URL của tab
   const getExtensionsScriptForTab = (
@@ -648,7 +660,9 @@ function BrowserMain() {
 
   useEffect(() => {
     checkBookmarkStatus(activeUrl);
-  }, [activeUrl]);
+    setFindInPageVisible(false);
+    setFindInPageStats({ total: 0, current: 0 });
+  }, [activeUrl, activeTabId]);
 
   // Thêm hoặc gỡ Dấu trang cho trang hiện tại
   const handleToggleBookmarkCurrentPage = async (
@@ -1365,6 +1379,11 @@ function BrowserMain() {
         showToast(`Đã chặn nhảy trang: ${data.url || 'Quảng cáo'}`);
       } else if (data.type === 'MANUAL_ZAP_SUCCESS') {
         showToast(`Đã xóa ${data.count || 0} lớp phủ`);
+      } else if (data.type === 'FIND_IN_PAGE_RESULT') {
+        setFindInPageStats({
+          total: data.total || 0,
+          current: data.current || 0,
+        });
       } else if (data.type === 'READER_MODE_STATE') {
         const isActive = !!data.active;
         setTabs((prev) =>
@@ -1940,6 +1959,37 @@ function BrowserMain() {
     showToast(`Đã lưu tài khoản ${website} vào Keychain`);
   };
 
+  // Xử lý Tìm trong trang (Ctrl + F)
+  const handleFindInPageSearch = (query: string) => {
+    const activeWV = getActiveWebView();
+    if (activeWV) {
+      activeWV.injectJavaScript(getFindInPageSearchScript(query));
+    }
+  };
+
+  const handleFindInPageNext = () => {
+    const activeWV = getActiveWebView();
+    if (activeWV) {
+      activeWV.injectJavaScript(getFindInPageNextScript());
+    }
+  };
+
+  const handleFindInPagePrev = () => {
+    const activeWV = getActiveWebView();
+    if (activeWV) {
+      activeWV.injectJavaScript(getFindInPagePrevScript());
+    }
+  };
+
+  const handleFindInPageClose = () => {
+    setFindInPageVisible(false);
+    setFindInPageStats({ total: 0, current: 0 });
+    const activeWV = getActiveWebView();
+    if (activeWV) {
+      activeWV.injectJavaScript(getFindInPageClearScript());
+    }
+  };
+
   const isCurrentIncognito = Boolean(currentTab?.isIncognito || isIncognito);
   const appBg = isCurrentIncognito ? '#202124' : '#ffffff';
   const viewportBg = activeUrl !== null ? '#ffffff' : appBg;
@@ -2320,12 +2370,6 @@ function BrowserMain() {
           setStats((prev) => ({ ...prev, aggressiveMode: !prev.aggressiveMode }))
         }
         onManualZap={handleForceZap}
-        isDesktop={currentTab?.isDesktop}
-        onToggleDesktop={handleToggleDesktopMode}
-        onToggleDataSaver={handleToggleDataSaver}
-        onChangeDataSaverMode={handleChangeDataSaverMode}
-        onToggleKeepAwake={handleToggleKeepAwake}
-        onToggleReaderMode={handleToggleReaderMode}
       />
 
       {/* Máy quét mã QR (QR Code Scanner) */}
@@ -2415,7 +2459,13 @@ function BrowserMain() {
             showToast('Đang tải lại trang...');
           }
         }}
-        onOpenSearchScreenLens={handleSearchScreenWithLens}
+        onFindInPage={() => {
+          if (!activeUrl) {
+            showToast('Chỉ tìm được trên trang web');
+            return;
+          }
+          setFindInPageVisible(true);
+        }}
         onOpenDownloads={handleOpenDownloads}
         onOpenPasswordManager={() => setPasswordManagerVisible(true)}
         onOpenExtensions={() => setExtensionSheetVisible(true)}
@@ -2424,6 +2474,12 @@ function BrowserMain() {
         onNewTab={() => handleNewTab(isIncognito)}
         onNewIncognitoTab={() => handleNewTab(true)}
         onOpenShield={() => setShieldSheetVisible(true)}
+        isReaderMode={Boolean(currentTab?.isReaderMode || stats.isReaderMode)}
+        onToggleReaderMode={handleToggleReaderMode}
+        isKeepAwakeActive={Boolean(stats.isKeepAwakeActive)}
+        onToggleKeepAwake={handleToggleKeepAwake}
+        isDataSaverActive={Boolean(stats.isDataSaverActive)}
+        onToggleDataSaver={handleToggleDataSaver}
       />
 
       {/* Quản lý Tiện ích mở rộng (Extension Sheet) */}
@@ -2472,6 +2528,19 @@ function BrowserMain() {
         isPulling={isPulling}
         activeAction={activePullAction}
         topInset={activeUrl !== null ? topInset + 24 : topInset}
+        isIncognito={isIncognito}
+      />
+
+      {/* THANH TÌM TRONG TRANG (CTRL + F) */}
+      <FindInPageBar
+        visible={findInPageVisible}
+        totalMatches={findInPageStats.total}
+        currentMatch={findInPageStats.current}
+        onSearch={handleFindInPageSearch}
+        onNext={handleFindInPageNext}
+        onPrev={handleFindInPagePrev}
+        onClose={handleFindInPageClose}
+        topInset={topInset}
         isIncognito={isIncognito}
       />
     </View>

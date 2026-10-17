@@ -9,6 +9,7 @@ import {
   Platform,
   Share,
   Image,
+  Switch,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,7 +27,8 @@ interface BrowserMenuSheetProps {
   onToggleBookmark?: () => void;
   onToggleDesktop?: () => void;
   onReload?: () => void;
-  onOpenSearchScreenLens: () => void;
+  onOpenSearchScreenLens?: () => void;
+  onFindInPage?: () => void;
   onOpenDownloads: () => void;
   onOpenPasswordManager: () => void;
   onOpenExtensions: () => void;
@@ -35,6 +37,12 @@ interface BrowserMenuSheetProps {
   onNewTab: () => void;
   onNewIncognitoTab: () => void;
   onOpenShield: () => void;
+  isReaderMode?: boolean;
+  onToggleReaderMode?: () => void;
+  isKeepAwakeActive?: boolean;
+  onToggleKeepAwake?: () => void;
+  isDataSaverActive?: boolean;
+  onToggleDataSaver?: () => void;
 }
 
 export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
@@ -50,6 +58,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onToggleDesktop,
   onReload,
   onOpenSearchScreenLens,
+  onFindInPage,
   onOpenDownloads,
   onOpenPasswordManager,
   onOpenExtensions,
@@ -58,6 +67,12 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onNewTab,
   onNewIncognitoTab,
   onOpenShield,
+  isReaderMode,
+  onToggleReaderMode,
+  isKeepAwakeActive,
+  onToggleKeepAwake,
+  isDataSaverActive,
+  onToggleDataSaver,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
@@ -100,7 +115,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
           activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
         >
-          {/* Thanh kéo */}
+          {/* Thanh kéo Sheet */}
           <View style={styles.dragHandle} />
 
           {/* Tiêu đề trang web hiện tại */}
@@ -190,216 +205,261 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
             </TouchableOpacity>
           </View>
 
-          <View style={styles.divider} />
-
-          {/* Danh sách các tính năng tiện ích */}
-          <ScrollView style={styles.menuScroll} showsVerticalScrollIndicator={false}>
-            {/* 1. TÌM KIẾM TRÊN MÀN HÌNH BẰNG GOOGLE ỐNG KÍNH */}
-            <TouchableOpacity
-              style={[styles.menuRow, styles.featuredRow]}
-              onPress={() => {
-                onClose();
-                onOpenSearchScreenLens();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#e0f2fe' }]}>
-                <Feather name="maximize" size={18} color="#0284c7" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <View style={styles.badgeTitleRow}>
-                  <Text style={[styles.menuTitle, { color: '#0284c7' }]}>
-                    Tìm kiếm trên màn hình bằng Google Ống kính
-                  </Text>
-                  <View style={styles.lensBadge}>
-                    <Text style={styles.lensBadgeText}>Ống kính</Text>
-                  </View>
+          {/* Danh sách các tính năng được gom vào 1 Container duy nhất */}
+          <ScrollView
+            style={styles.menuScroll}
+            contentContainerStyle={styles.menuScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.menuGroupCard}>
+              {/* 1. TÌM TRONG TRANG (Ctrl + F) */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  if (onFindInPage) {
+                    onFindInPage();
+                  } else if (onOpenSearchScreenLens) {
+                    onOpenSearchScreenLens();
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Tìm trong trang</Text>
+                  <Text style={styles.menuSubtitle}>Tìm kiếm từ khóa trên trang web (Ctrl + F)</Text>
                 </View>
-                <Text style={styles.menuSubtitle}>
-                  Chụp ảnh màn hình & tìm kiếm tức thì với Google Lens
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#0284c7" />
-            </TouchableOpacity>
+                <Feather name="search" size={20} color="#27272a" />
+              </TouchableOpacity>
 
-            {/* 2. TỆP ĐÃ TẢI XUỐNG */}
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                onClose();
-                onOpenDownloads();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#eef2ff' }]}>
-                <Feather name="download" size={18} color="#4f46e5" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Tệp đã tải xuống</Text>
-                <Text style={styles.menuSubtitle}>Mở thư mục Kite trong ứng dụng Tệp</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              <View style={styles.horizontalDivider} />
 
-            {/* 3. TRÌNH QUẢN LÝ MẬT KHẨU */}
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                onClose();
-                onOpenPasswordManager();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#e8f0fe' }]}>
-                <Feather name="key" size={18} color="#1a73e8" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Trình quản lý mật khẩu</Text>
-                <Text style={styles.menuSubtitle}>Bảo mật bằng Apple Keychain & Face ID</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              {/* 2. CHẾ ĐỘ ĐỌC BÁO (READER MODE) */}
+              {onToggleReaderMode && (
+                <>
+                  <View style={styles.menuRow}>
+                    <View style={styles.menuTextContainer}>
+                      <Text style={styles.menuTitle}>Chế độ đọc báo (Reader Mode)</Text>
+                      <Text style={styles.menuSubtitle}>Bóc tách nội dung chính, đọc sạch không mỏi mắt</Text>
+                    </View>
+                    <Switch
+                      value={!!isReaderMode}
+                      onValueChange={onToggleReaderMode}
+                      trackColor={{ false: '#d1d5db', true: '#007aff' }}
+                      ios_backgroundColor="#d1d5db"
+                      thumbColor="#ffffff"
+                    />
+                  </View>
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
 
-            {/* 4. TIỆN ÍCH MỞ RỘNG (EXTENSIONS) */}
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                onClose();
-                onOpenExtensions();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#f5f3ff' }]}>
-                <Feather name="box" size={18} color="#7c3aed" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Tiện ích mở rộng (Extensions)</Text>
-                <Text style={styles.menuSubtitle}>Nhập script .js, chặn quảng cáo & tùy biến web</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              {/* 3. GIỮ MÀN HÌNH LUÔN SÁNG */}
+              {onToggleKeepAwake && (
+                <>
+                  <View style={styles.menuRow}>
+                    <View style={styles.menuTextContainer}>
+                      <Text style={styles.menuTitle}>Giữ màn hình luôn sáng</Text>
+                      <Text style={styles.menuSubtitle}>Không tắt màn hình khi xem phim & lướt web</Text>
+                    </View>
+                    <Switch
+                      value={!!isKeepAwakeActive}
+                      onValueChange={onToggleKeepAwake}
+                      trackColor={{ false: '#d1d5db', true: '#007aff' }}
+                      ios_backgroundColor="#d1d5db"
+                      thumbColor="#ffffff"
+                    />
+                  </View>
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
 
-            <View style={styles.divider} />
+              {/* 4. TIẾT KIỆM DỮ LIỆU */}
+              {onToggleDataSaver && (
+                <>
+                  <View style={styles.menuRow}>
+                    <View style={styles.menuTextContainer}>
+                      <Text style={styles.menuTitle}>Tiết kiệm dữ liệu</Text>
+                      <Text style={styles.menuSubtitle}>Tối ưu gói cước di động 4G/5G giới hạn dung lượng</Text>
+                    </View>
+                    <Switch
+                      value={!!isDataSaverActive}
+                      onValueChange={onToggleDataSaver}
+                      trackColor={{ false: '#d1d5db', true: '#007aff' }}
+                      ios_backgroundColor="#d1d5db"
+                      thumbColor="#ffffff"
+                    />
+                  </View>
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
 
-            {/* 5. DẤU TRANG */}
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                onClose();
-                onOpenBookmarks();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#fffbeb' }]}>
-                <Feather name="bookmark" size={18} color="#d97706" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Dấu trang</Text>
-                <Text style={styles.menuSubtitle}>Các trang web bạn đã đánh dấu lưu lại</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              {/* 5. TỆP ĐÃ TẢI XUỐNG */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  onOpenDownloads();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Tệp đã tải xuống</Text>
+                  <Text style={styles.menuSubtitle}>Mở thư mục Kite trong ứng dụng Tệp</Text>
+                </View>
+                <Feather name="download" size={20} color="#27272a" />
+              </TouchableOpacity>
 
-            {/* 5. LỊCH SỬ DUYỆT WEB */}
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                onClose();
-                onOpenHistory();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#f5f3ff' }]}>
-                <Feather name="clock" size={18} color="#7c3aed" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Lịch sử duyệt web</Text>
-                <Text style={styles.menuSubtitle}>Tìm lại các trang web bạn đã truy cập gần đây</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              <View style={styles.horizontalDivider} />
 
-            {/* 6. THẺ MỚI & THẺ ẨN DANH */}
-            <View style={styles.divider} />
+              {/* 6. TRÌNH QUẢN LÝ MẬT KHẨU */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  onOpenPasswordManager();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Trình quản lý mật khẩu</Text>
+                  <Text style={styles.menuSubtitle}>Quản lý tài khoản & mật khẩu an toàn (Keychain)</Text>
+                </View>
+                <Feather name="key" size={20} color="#27272a" />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                onClose();
-                onNewTab();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#f4f4f5' }]}>
-                <Feather name="plus-circle" size={18} color="#09090b" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Thẻ mới</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              <View style={styles.horizontalDivider} />
 
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                onClose();
-                onNewIncognitoTab();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#27272a' }]}>
-                <Feather name="eye-off" size={18} color="#ffffff" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Thẻ ẩn danh mới</Text>
-                <Text style={styles.menuSubtitle}>Duyệt web riêng tư không lưu lịch sử</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              {/* 7. TIỆN ÍCH MỞ RỘNG (EXTENSIONS) */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  onOpenExtensions();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Tiện ích mở rộng (Extensions)</Text>
+                  <Text style={styles.menuSubtitle}>Nhập script .js, chặn quảng cáo & tùy biến web</Text>
+                </View>
+                <Feather name="box" size={20} color="#27272a" />
+              </TouchableOpacity>
 
-            {/* 7. KHIÊN KITE SHIELD */}
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                onClose();
-                onOpenShield();
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#ecfdf5' }]}>
-                <Feather name="shield" size={18} color="#059669" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <Text style={styles.menuTitle}>Khiên Kite Shield & Chặn quảng cáo</Text>
-                <Text style={styles.menuSubtitle}>Tùy chỉnh chặn pop-up, tiết kiệm dữ liệu</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              <View style={styles.horizontalDivider} />
 
-            {/* 8. CÔNG CỤ TÌM KIẾM MẶC ĐỊNH */}
-            <TouchableOpacity
-              style={styles.menuRow}
-              onPress={() => {
-                setEngineModalVisible(true);
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: '#fef3c7' }]}>
-                <Feather name="search" size={18} color="#d97706" />
-              </View>
-              <View style={styles.menuTextContainer}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {/* 8. DẤU TRANG */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  onOpenBookmarks();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Dấu trang</Text>
+                  <Text style={styles.menuSubtitle}>Các trang web bạn đã đánh dấu lưu lại</Text>
+                </View>
+                <Feather name="bookmark" size={20} color="#27272a" />
+              </TouchableOpacity>
+
+              <View style={styles.horizontalDivider} />
+
+              {/* 9. LỊCH SỬ DUYỆT WEB */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  onOpenHistory();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Lịch sử duyệt web</Text>
+                  <Text style={styles.menuSubtitle}>Tìm lại các trang web bạn đã truy cập gần đây</Text>
+                </View>
+                <Feather name="clock" size={20} color="#27272a" />
+              </TouchableOpacity>
+
+              <View style={styles.horizontalDivider} />
+
+              {/* 10. KHIÊN KITE SHIELD */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  onOpenShield();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Khiên Kite Shield & Chặn quảng cáo</Text>
+                  <Text style={styles.menuSubtitle}>Tùy chỉnh chặn pop-up, chống cướp tab</Text>
+                </View>
+                <Feather name="shield" size={20} color="#27272a" />
+              </TouchableOpacity>
+
+              <View style={styles.horizontalDivider} />
+
+              {/* 11. CÔNG CỤ TÌM KIẾM MẶC ĐỊNH */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  setEngineModalVisible(true);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
                   <Text style={styles.menuTitle}>Công cụ tìm kiếm</Text>
+                  <Text style={styles.menuSubtitle}>Google, Yahoo, Bing hoặc DuckDuckGo</Text>
+                </View>
+                <View style={styles.engineRightGroup}>
                   <View style={styles.engineBadge}>
                     <Text style={styles.engineBadgeText}>
                       {SEARCH_ENGINES[currentEngineId]?.name || 'Google'}
                     </Text>
                   </View>
+                  <Feather name="compass" size={20} color="#27272a" />
                 </View>
-                <Text style={styles.menuSubtitle}>Google, Yahoo, Bing, DuckDuckGo</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color="#a1a1aa" />
-            </TouchableOpacity>
+              </TouchableOpacity>
+
+              <View style={styles.horizontalDivider} />
+
+              {/* 12. THẺ MỚI */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  onNewTab();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Thẻ mới</Text>
+                  <Text style={styles.menuSubtitle}>Mở một thẻ duyệt web mới</Text>
+                </View>
+                <Feather name="plus-circle" size={20} color="#27272a" />
+              </TouchableOpacity>
+
+              <View style={styles.horizontalDivider} />
+
+              {/* 13. THẺ ẨN DANH MỚI */}
+              <TouchableOpacity
+                style={styles.menuRow}
+                onPress={() => {
+                  onClose();
+                  onNewIncognitoTab();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={styles.menuTextContainer}>
+                  <Text style={styles.menuTitle}>Thẻ ẩn danh mới</Text>
+                  <Text style={styles.menuSubtitle}>Duyệt web riêng tư không lưu lịch sử</Text>
+                </View>
+                <Feather name="eye-off" size={20} color="#27272a" />
+              </TouchableOpacity>
+            </View>
           </ScrollView>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -467,30 +527,31 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
-    maxHeight: '85%',
-    paddingHorizontal: 20,
+    maxHeight: '86%',
+    paddingHorizontal: 16,
     paddingTop: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowRadius: 16,
+    elevation: 20,
   },
   dragHandle: {
     width: 38,
-    height: 5,
-    borderRadius: 2.5,
+    height: 4.5,
+    borderRadius: 3,
     backgroundColor: '#d4d4d8',
     alignSelf: 'center',
     marginBottom: 12,
   },
   siteHeader: {
     alignItems: 'center',
-    paddingBottom: 10,
+    marginBottom: 14,
+    paddingHorizontal: 10,
   },
   siteTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#09090b',
     textAlign: 'center',
   },
@@ -501,16 +562,16 @@ const styles = StyleSheet.create({
   },
   quickActionsBar: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
+    backgroundColor: '#f4f4f5',
+    borderRadius: 16,
     paddingVertical: 10,
-    backgroundColor: '#f8fafc',
-    borderRadius: 18,
-    marginBottom: 12,
+    paddingHorizontal: 6,
+    marginBottom: 14,
   },
   quickActionItem: {
-    alignItems: 'center',
-    gap: 6,
     flex: 1,
+    alignItems: 'center',
   },
   quickActionIconBox: {
     width: 44,
@@ -519,90 +580,73 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   quickActionLabel: {
     fontSize: 11,
     fontWeight: '600',
     color: '#52525b',
   },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#e4e4e7',
-    marginVertical: 6,
-  },
   menuScroll: {
     maxHeight: 450,
+  },
+  menuScrollContent: {
+    paddingBottom: 16,
+  },
+  menuGroupCard: {
+    backgroundColor: '#f4f4f5',
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 6,
-    borderRadius: 14,
-  },
-  featuredRow: {
-    backgroundColor: '#f0f9ff',
-    paddingHorizontal: 10,
-    marginVertical: 4,
-    borderWidth: 1,
-    borderColor: '#bae6fd',
-  },
-  menuIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
+    justifyContent: 'space-between',
+    paddingVertical: 13,
+    paddingHorizontal: 16,
   },
   menuTextContainer: {
     flex: 1,
-    marginRight: 8,
-  },
-  badgeTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  lensBadge: {
-    backgroundColor: '#0284c7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  lensBadgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: '700',
+    marginRight: 12,
   },
   menuTitle: {
-    fontSize: 14,
+    fontSize: 14.5,
     fontWeight: '600',
-    color: '#09090b',
+    color: '#18181b',
   },
   menuSubtitle: {
     fontSize: 12,
     color: '#71717a',
     marginTop: 2,
+    lineHeight: 16,
+  },
+  horizontalDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#e4e4e7',
+    marginLeft: 16,
+  },
+  engineRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   engineBadge: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#e4e4e7',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
   },
   engineBadgeText: {
-    color: '#007aff',
+    color: '#18181b',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   engineBackdrop: {
     flex: 1,

@@ -10,12 +10,6 @@ interface ShieldSheetProps {
   onToggleShield: () => void;
   onToggleAggressive: () => void;
   onManualZap: () => void;
-  isDesktop?: boolean;
-  onToggleDesktop?: () => void;
-  onToggleDataSaver?: () => void;
-  onChangeDataSaverMode?: (mode: 'block_images' | 'compress_images') => void;
-  onToggleKeepAwake?: () => void;
-  onToggleReaderMode?: () => void;
 }
 
 export const ShieldSheet: React.FC<ShieldSheetProps> = ({
@@ -25,12 +19,6 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
   onToggleShield,
   onToggleAggressive,
   onManualZap,
-  isDesktop,
-  onToggleDesktop,
-  onToggleDataSaver,
-  onChangeDataSaverMode,
-  onToggleKeepAwake,
-  onToggleReaderMode,
 }) => {
   return (
     <Modal
@@ -87,8 +75,9 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
             </View>
           </View>
 
-          {/* Các tùy chọn */}
+          {/* Các tùy chọn chuyên sâu về Chặn quảng cáo */}
           <View style={styles.optionsList}>
+            {/* 1. Bảo vệ chủ động */}
             <View style={styles.optionRow}>
               <View style={styles.optionInfo}>
                 <Text style={styles.optionTitle}>Bảo vệ chủ động</Text>
@@ -97,12 +86,14 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
               <Switch
                 value={stats.isShieldActive}
                 onValueChange={onToggleShield}
-                trackColor={{ false: '#e4e4e7', true: '#007aff' }}
+                trackColor={{ false: '#d1d5db', true: '#007aff' }}
+                ios_backgroundColor="#d1d5db"
                 thumbColor="#ffffff"
               />
             </View>
 
-            <View style={styles.optionRow}>
+            {/* 2. Chế độ triệt để */}
+            <View style={[styles.optionRow, { borderBottomWidth: 0 }]}>
               <View style={styles.optionInfo}>
                 <Text style={styles.optionTitle}>Chế độ triệt để</Text>
                 <Text style={styles.optionDesc}>Xóa mọi element che mờ khung xem video</Text>
@@ -110,144 +101,11 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
               <Switch
                 value={stats.aggressiveMode}
                 onValueChange={onToggleAggressive}
-                trackColor={{ false: '#e4e4e7', true: '#007aff' }}
+                trackColor={{ false: '#d1d5db', true: '#007aff' }}
+                ios_backgroundColor="#d1d5db"
                 thumbColor="#ffffff"
               />
             </View>
-
-            {onToggleDesktop && (
-              <View style={styles.optionRow}>
-                <View style={styles.optionInfo}>
-                  <Text style={styles.optionTitle}>Trang web máy tính</Text>
-                  <Text style={styles.optionDesc}>Đổi sang bản desktop để tải đủ server & chất lượng</Text>
-                </View>
-                <Switch
-                  value={!!isDesktop}
-                  onValueChange={onToggleDesktop}
-                  trackColor={{ false: '#e4e4e7', true: '#007aff' }}
-                  thumbColor="#ffffff"
-                />
-              </View>
-            )}
-
-            {onToggleDataSaver && (
-              <View style={styles.optionBlock}>
-                <View style={styles.optionRow}>
-                  <View style={styles.optionInfo}>
-                    <Text style={styles.optionTitle}>Tiết kiệm dữ liệu</Text>
-                    <Text style={styles.optionDesc}>Tối ưu gói cước di động 4G/5G giới hạn dung lượng</Text>
-                  </View>
-                  <Switch
-                    value={!!stats.isDataSaverActive}
-                    onValueChange={onToggleDataSaver}
-                    trackColor={{ false: '#e4e4e7', true: '#007aff' }}
-                    thumbColor="#ffffff"
-                  />
-                </View>
-
-                {stats.isDataSaverActive && onChangeDataSaverMode && (
-                  <View style={styles.dataSaverSubMenu}>
-                    <TouchableOpacity
-                      style={[
-                        styles.dataSaverModeBtn,
-                        (stats.dataSaverMode === 'block_images' || !stats.dataSaverMode) &&
-                          styles.dataSaverModeBtnActive,
-                      ]}
-                      onPress={() => onChangeDataSaverMode('block_images')}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.dataSaverModeHeader}>
-                        <Feather
-                          name="eye-off"
-                          size={15}
-                          color={
-                            stats.dataSaverMode === 'block_images' || !stats.dataSaverMode
-                              ? '#007aff'
-                              : '#71717a'
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.dataSaverModeTitle,
-                            (stats.dataSaverMode === 'block_images' || !stats.dataSaverMode) &&
-                              styles.dataSaverModeTitleActive,
-                          ]}
-                        >
-                          Tắt tải hình ảnh (Khuyên dùng)
-                        </Text>
-                      </View>
-                      <Text style={styles.dataSaverModeDesc}>
-                        Chặn 100% nạp ảnh, chạm vào ảnh bất kỳ để tải riêng ảnh đó
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.dataSaverModeBtn,
-                        stats.dataSaverMode === 'compress_images' &&
-                          styles.dataSaverModeBtnActive,
-                      ]}
-                      onPress={() => onChangeDataSaverMode('compress_images')}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.dataSaverModeHeader}>
-                        <Feather
-                          name="zap"
-                          size={15}
-                          color={
-                            stats.dataSaverMode === 'compress_images'
-                              ? '#007aff'
-                              : '#71717a'
-                          }
-                        />
-                        <Text
-                          style={[
-                            styles.dataSaverModeTitle,
-                            stats.dataSaverMode === 'compress_images' &&
-                              styles.dataSaverModeTitleActive,
-                          ]}
-                        >
-                          Nén & Tối ưu ảnh nhẹ
-                        </Text>
-                      </View>
-                      <Text style={styles.dataSaverModeDesc}>
-                        Bỏ ảnh retina 2x/3x độ nét cao, chỉ nạp khi cuộn tới
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {onToggleKeepAwake && (
-              <View style={styles.optionRow}>
-                <View style={styles.optionInfo}>
-                  <Text style={styles.optionTitle}>Giữ màn hình luôn sáng</Text>
-                  <Text style={styles.optionDesc}>Không tắt màn hình khi xem phim & lướt web</Text>
-                </View>
-                <Switch
-                  value={!!stats.isKeepAwakeActive}
-                  onValueChange={onToggleKeepAwake}
-                  trackColor={{ false: '#e4e4e7', true: '#007aff' }}
-                  thumbColor="#ffffff"
-                />
-              </View>
-            )}
-
-            {onToggleReaderMode && (
-              <View style={styles.optionRow}>
-                <View style={styles.optionInfo}>
-                  <Text style={styles.optionTitle}>Chế độ đọc báo (Reader Mode)</Text>
-                  <Text style={styles.optionDesc}>Bóc tách nội dung chính, đọc sạch không quảng cáo & mỏi mắt</Text>
-                </View>
-                <Switch
-                  value={!!stats.isReaderMode}
-                  onValueChange={onToggleReaderMode}
-                  trackColor={{ false: '#e4e4e7', true: '#007aff' }}
-                  thumbColor="#ffffff"
-                />
-              </View>
-            )}
           </View>
 
           {/* Nút Phá khóa khẩn cấp - Nền Blue #007aff */}
@@ -278,23 +136,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
-    paddingTop: 12,
-    paddingBottom: 38,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 36,
   },
   sheetDragHandle: {
     width: 36,
-    height: 5,
-    borderRadius: 2.5,
+    height: 4,
     backgroundColor: '#d4d4d8',
+    borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   titleRow: {
     flexDirection: 'row',
@@ -302,14 +160,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
     color: '#09090b',
   },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   closeBtn: {
     padding: 4,
@@ -319,18 +177,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#f4f4f5',
     borderRadius: 16,
     paddingVertical: 14,
-    marginBottom: 24,
+    paddingHorizontal: 12,
+    marginBottom: 18,
+    alignItems: 'center',
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#e4e4e7',
-  },
   statNumber: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#007aff',
     marginBottom: 2,
@@ -338,81 +194,59 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 11,
     color: '#71717a',
+    fontWeight: '500',
+  },
+  statDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#e4e4e7',
   },
   optionsList: {
-    gap: 18,
-    marginBottom: 24,
+    backgroundColor: '#f4f4f5',
+    borderRadius: 16,
+    paddingVertical: 4,
+    marginBottom: 20,
   },
   optionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e4e4e7',
   },
   optionInfo: {
     flex: 1,
     marginRight: 12,
   },
   optionTitle: {
-    fontSize: 14,
-    color: '#09090b',
+    fontSize: 15,
     fontWeight: '600',
-    marginBottom: 2,
+    color: '#09090b',
   },
   optionDesc: {
     fontSize: 12,
     color: '#71717a',
-  },
-  optionBlock: {
-    backgroundColor: '#ffffff',
-  },
-  dataSaverSubMenu: {
-    marginTop: 10,
-    paddingLeft: 4,
-    gap: 8,
-  },
-  dataSaverModeBtn: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  dataSaverModeBtnActive: {
-    borderColor: '#007aff',
-    backgroundColor: '#eff6ff',
-  },
-  dataSaverModeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 3,
-  },
-  dataSaverModeTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  dataSaverModeTitleActive: {
-    color: '#007aff',
-    fontWeight: '700',
-  },
-  dataSaverModeDesc: {
-    fontSize: 11,
-    color: '#64748b',
-    lineHeight: 15,
+    marginTop: 2,
   },
   actionButton: {
-    height: 46,
-    backgroundColor: '#007aff',
-    borderRadius: 14,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007aff',
+    paddingVertical: 14,
+    borderRadius: 16,
     gap: 8,
+    shadowColor: '#007aff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   actionBtnText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
 });
