@@ -323,9 +323,15 @@ export const VIDEO_SNIFFER_SCRIPT = `
     };
   } catch(e) {}
 
-  // 5. Quét định kỳ mỗi 1.5s
-  scanDomElements();
-  setInterval(scanDomElements, 1500);
+  // 5. Quét định kỳ DOM một cách mượt mà và tiết kiệm CPU
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(scanDomElements, 400);
+    }, { once: true });
+  } else {
+    setTimeout(scanDomElements, 400);
+  }
+  setInterval(scanDomElements, 2500);
 })();
 true;
 `;

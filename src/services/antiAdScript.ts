@@ -28,25 +28,43 @@ export const INJECTED_BEFORE_CONTENT = `
   var BLOCKED_GAMBLING_KEYWORDS = ${serializedGamblingKeywords};
   var COMMERCE_DOMAINS = ${serializedCommerceDomains};
 
-  // 1. Tiêm bộ CSS chặn quảng cáo gom nhóm 1 lần duy nhất để tối ưu tối đa tốc độ phân giải DOM
-  try {
-    var styleEl = document.createElement('style');
-    styleEl.type = 'text/css';
-    styleEl.id = 'kite-shield-ad-block-css';
-    styleEl.textContent = AD_SELECTORS.join(', ') + ' { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; height: 0 !important; width: 0 !important; max-height: 0 !important; overflow: hidden !important; }';
-    (document.head || document.documentElement).appendChild(styleEl);
-  } catch(e) {}
+  // 1. Tiêm bộ CSS chặn quảng cáo gom nhóm an toàn, không gián đoạn luồng streaming HTML của WebKit
+  function injectAdStyle() {
+    try {
+      if (document.getElementById('kite-shield-ad-block-css')) return;
+      var target = document.head || document.documentElement;
+      if (!target) return;
+      var styleEl = document.createElement('style');
+      styleEl.type = 'text/css';
+      styleEl.id = 'kite-shield-ad-block-css';
+      styleEl.textContent = AD_SELECTORS.join(', ') + ' { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; height: 0 !important; width: 0 !important; max-height: 0 !important; overflow: hidden !important; }';
+      target.appendChild(styleEl);
+    } catch(e) {}
+  }
+  if (document.head) {
+    injectAdStyle();
+  } else {
+    document.addEventListener('DOMContentLoaded', injectAdStyle, { once: true });
+  }
 
   // 1b. Tối ưu tốc độ tải trang: DNS prefetch và preconnect cho CDN
-  try {
-    var prefetchHosts = ['//fonts.googleapis.com', '//fonts.gstatic.com', '//cdnjs.cloudflare.com'];
-    prefetchHosts.forEach(function(h) {
-      var l = document.createElement('link');
-      l.rel = 'dns-prefetch';
-      l.href = h;
-      (document.head || document.documentElement).appendChild(l);
-    });
-  } catch(e) {}
+  function injectPrefetch() {
+    try {
+      if (!document.head) return;
+      var prefetchHosts = ['//fonts.googleapis.com', '//fonts.gstatic.com', '//cdnjs.cloudflare.com'];
+      prefetchHosts.forEach(function(h) {
+        var l = document.createElement('link');
+        l.rel = 'dns-prefetch';
+        l.href = h;
+        document.head.appendChild(l);
+      });
+    } catch(e) {}
+  }
+  if (document.head) {
+    injectPrefetch();
+  } else {
+    document.addEventListener('DOMContentLoaded', injectPrefetch, { once: true });
+  }
 
   // 2. Khóa hoàn toàn window.open với đầy đủ thuộc tính giả lập (tránh lỗi script video player bị crash)
   var fakeWin = {
@@ -122,8 +140,22 @@ export const INJECTED_BEFORE_CONTENT = `
   };
 
   // 5. Kiểm tra URL đích có phải là mạng quảng cáo hoặc nhà cái cá cược không
+  var _adDomainMap = null;
+  function getAdDomainMap() {
+    if (!_adDomainMap) {
+      _adDomainMap = {};
+      for (var i = 0; i < BLOCKED_DOMAINS.length; i++) {
+        _adDomainMap[BLOCKED_DOMAINS[i]] = true;
+      }
+      for (var k = 0; k < COMMERCE_DOMAINS.length; k++) {
+        _adDomainMap[COMMERCE_DOMAINS[k]] = true;
+      }
+    }
+    return _adDomainMap;
+  }
+
   function isKnownAdOrGambling(urlStr) {
-    if (!urlStr) return false;
+    if (!urlStr || typeof urlStr !== 'string') return false;
     try {
       var u = new URL(urlStr, window.location.href);
       var h = u.hostname.toLowerCase();
@@ -143,22 +175,16 @@ export const INJECTED_BEFORE_CONTENT = `
         return false;
       }
 
-      // So khớp chính xác hostname với danh sách mạng quảng cáo
-      for (var i = 0; i < BLOCKED_DOMAINS.length; i++) {
-        var d = BLOCKED_DOMAINS[i];
-        if (h === d || h.endsWith('.' + d) || (d.length > 3 && h.includes(d))) return true;
-      }
+      // So khớp O(1) hostname và subdomain với danh sách mạng quảng cáo
+      var map = getAdDomainMap();
+      if (map[h]) return true;
+      var dotIdx = h.indexOf('.');
+      if (dotIdx !== -1 && map[h.slice(dotIdx + 1)]) return true;
 
       // So khớp tên miền con với danh sách từ khóa nhà cái
       for (var j = 0; j < BLOCKED_GAMBLING_KEYWORDS.length; j++) {
         var g = BLOCKED_GAMBLING_KEYWORDS[j];
         if (h.includes(g)) return true;
-      }
-
-      // Kiểm tra chuyển hướng ép mở trang mua sắm
-      for (var k = 0; k < COMMERCE_DOMAINS.length; k++) {
-        var c = COMMERCE_DOMAINS[k];
-        if (h === c || h.endsWith('.' + c)) return true;
       }
     } catch(e) {}
     return false;

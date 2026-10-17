@@ -419,6 +419,7 @@ function BrowserMain() {
       const activeWV = getActiveWebView();
       if (activeUrl && activeWV) {
         setIsLoading(true);
+        setLoadProgress(0.15);
         triggerLoadingSafetyTimer();
         activeWV.reload();
         showToast('Đang tải lại trang...');
@@ -1118,12 +1119,12 @@ function BrowserMain() {
     }
   };
 
-  // Tự động hủy xoay loading sau 4.5 giây để tránh kẹt loading do kết nối ngầm của web
+  // Tự động hủy xoay loading sau 8 giây để tránh kẹt loading do kết nối ngầm của web
   const triggerLoadingSafetyTimer = () => {
     if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
     loadingTimerRef.current = setTimeout(() => {
       setIsLoading(false);
-    }, 4500);
+    }, 8000);
   };
 
   // Kiểm tra thông minh: chuỗi nhập vào là URL hay từ khóa tìm kiếm
@@ -2913,7 +2914,7 @@ function BrowserMain() {
               style={[
                 styles.loadingBarProgress,
                 {
-                  width: `${Math.max(12, Math.min(100, (loadProgress || 0.2) * 100))}%`,
+                  width: `${Math.max(10, Math.min(100, (loadProgress || 0.15) * 100))}%`,
                   backgroundColor: isCurrentIncognito ? '#60a5fa' : '#007aff',
                 },
               ]}
@@ -3039,11 +3040,10 @@ function BrowserMain() {
                     style={[styles.webView, { backgroundColor: '#ffffff' }]}
                     incognito={Boolean(tab.isIncognito)}
                     mediaCapturePermissionGrantType="grant"
-                    injectedJavaScriptBeforeContentLoadedForMainFrameOnly={false}
+                    injectedJavaScriptBeforeContentLoadedForMainFrameOnly={true}
                     injectedJavaScriptForMainFrameOnly={false}
                     injectedJavaScriptBeforeContentLoaded={
                       ((stats.isShieldActive ? INJECTED_BEFORE_CONTENT : '') +
-                        VIDEO_SNIFFER_SCRIPT +
                         getExtensionsScriptForTab(tab.url, 'document_start')) ||
                       undefined
                     }
@@ -3061,21 +3061,22 @@ function BrowserMain() {
                     onLoadStart={() => {
                       if (tab.id === activeTabId) {
                         setIsLoading(true);
+                        setLoadProgress(0.15);
                         triggerLoadingSafetyTimer();
                       }
                     }}
                     onLoadProgress={({ nativeEvent }) => {
                       if (tab.id === activeTabId) {
-                        setLoadProgress(nativeEvent.progress);
-                        if (nativeEvent.progress >= 0.8) {
-                          setIsLoading(false);
-                        }
+                        setLoadProgress(Math.max(0.15, nativeEvent.progress));
                       }
                     }}
                     onLoadEnd={() => {
                       if (tab.id === activeTabId) {
-                        setIsLoading(false);
+                        if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
                         setLoadProgress(1);
+                        setTimeout(() => {
+                          setIsLoading(false);
+                        }, 250);
                         if (stats.isDataSaverActive) {
                           const mode = stats.dataSaverMode || 'block_images';
                           webViewRefs.current[tab.id]?.injectJavaScript(getDataSaverScript(mode));
@@ -3420,6 +3421,7 @@ function BrowserMain() {
           const activeWV = getActiveWebView();
           if (activeWV) {
             setIsLoading(true);
+            setLoadProgress(0.15);
             triggerLoadingSafetyTimer();
             activeWV.reload();
             showToast('Đang tải lại trang...');
