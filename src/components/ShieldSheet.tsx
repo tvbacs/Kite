@@ -43,37 +43,10 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
 
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.titleRow}>
-              <Feather name="shield" size={18} color="#18181b" />
-              <Text style={styles.title}>Kite Shield</Text>
-              <View
-                style={[
-                  styles.statusDot,
-                  { backgroundColor: stats.isShieldActive ? '#18181b' : '#a1a1aa' },
-                ]}
-              />
-            </View>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Feather name="x" size={18} color="#71717a" />
+            <Text style={styles.title}>Kite Shield</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Feather name="x" size={18} color={theme.colors.textSecondary} />
             </TouchableOpacity>
-          </View>
-
-          {/* Thống kê chặn */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.blockedOverlays}</Text>
-              <Text style={styles.statLabel}>Lớp phủ xóa</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.blockedPopups}</Text>
-              <Text style={styles.statLabel}>Pop-up chặn</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>{stats.blockedAds}</Text>
-              <Text style={styles.statLabel}>Nhảy tab chặn</Text>
-            </View>
           </View>
 
           {/* Các tùy chọn chuyên sâu về Chặn quảng cáo */}
@@ -155,56 +128,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#09090b',
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    fontSize: theme.typography.fontSize.xl,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.textPrimary,
   },
   closeBtn: {
     padding: 4,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#f4f4f5',
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    marginBottom: 18,
-    alignItems: 'center',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#18181b',
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: '#71717a',
-    fontWeight: '500',
-  },
-  statDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: '#e4e4e7',
-  },
   optionsList: {
-    backgroundColor: '#f4f4f5',
-    borderRadius: 16,
+    backgroundColor: theme.colors.cardSecondary,
+    borderRadius: theme.radius.xl,
     paddingVertical: 4,
     marginBottom: 20,
   },
