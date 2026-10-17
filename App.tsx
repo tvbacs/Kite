@@ -60,7 +60,7 @@ const STORAGE_ACTIVE_TAB_ID_KEY = '@kite_active_tab_id';
 const STORAGE_DATA_SAVER_KEY = '@kite_data_saver_mode';
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
-const MOBILE_USER_AGENT =
+const GOOGLE_AUTH_USER_AGENT =
   Platform.OS === 'ios'
     ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
     : 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36';
@@ -1497,18 +1497,6 @@ function BrowserMain() {
       if (isAdDomain) {
         setStats((prev) => ({ ...prev, blockedAds: prev.blockedAds + 1 }));
         showToast(`Đã chặn mạng quảng cáo: ${host}`);
-        if (activeUrl && activeUrl.startsWith('http')) {
-          setTimeout(() => {
-            const activeWV = getActiveWebView();
-            if (activeWV) {
-              activeWV.injectJavaScript(`
-                if (!document.body || !document.body.children || document.body.children.length === 0) {
-                  window.location.replace(${JSON.stringify(activeUrl)});
-                }
-              `);
-            }
-          }, 150);
-        }
         return false;
       }
 
@@ -1520,18 +1508,6 @@ function BrowserMain() {
       if (isGambling) {
         setStats((prev) => ({ ...prev, blockedAds: prev.blockedAds + 1 }));
         showToast(`Đã chặn web cá cược: ${domainLabel}`);
-        if (activeUrl && activeUrl.startsWith('http')) {
-          setTimeout(() => {
-            const activeWV = getActiveWebView();
-            if (activeWV) {
-              activeWV.injectJavaScript(`
-                if (!document.body || !document.body.children || document.body.children.length === 0) {
-                  window.location.replace(${JSON.stringify(activeUrl)});
-                }
-              `);
-            }
-          }, 150);
-        }
         return false;
       }
 
@@ -1558,18 +1534,6 @@ function BrowserMain() {
         if (isCommerceHijack) {
           setStats((prev) => ({ ...prev, blockedAds: prev.blockedAds + 1 }));
           showToast(`Đã chặn cướp tab sang: ${targetDomain}`);
-          if (activeUrl && activeUrl.startsWith('http')) {
-            setTimeout(() => {
-              const activeWV = getActiveWebView();
-              if (activeWV) {
-                activeWV.injectJavaScript(`
-                  if (!document.body || !document.body.children || document.body.children.length === 0) {
-                    window.location.replace(${JSON.stringify(activeUrl)});
-                  }
-                `);
-              }
-            }, 150);
-          }
           return false;
         }
       }
@@ -1842,6 +1806,21 @@ function BrowserMain() {
 
       {/* Vùng duyệt Web hoặc Màn hình tìm kiếm & Lịch sử hoặc Trang trống mặc định */}
       <View style={[styles.viewport, { backgroundColor: viewportBg }]}>
+        {/* Thanh tiến trình tải trang (Loading Progress Bar) */}
+        {isLoading && activeUrl !== null && (
+          <View style={styles.loadingBarTrack} pointerEvents="none">
+            <View
+              style={[
+                styles.loadingBarProgress,
+                {
+                  width: `${Math.max(12, Math.min(100, (loadProgress || 0.2) * 100))}%`,
+                  backgroundColor: isCurrentIncognito ? '#60a5fa' : '#007aff',
+                },
+              ]}
+            />
+          </View>
+        )}
+
         {isEditing ? (
           /* MÀN HÌNH TÌM KIẾM & LỊCH SỬ DUYỆT WEB DUY NHẤT CỦA KITE */
           <SearchOverlay
@@ -2033,7 +2012,12 @@ function BrowserMain() {
                           tab.url?.includes('searchbyimage') ||
                           tab.url?.includes('images.google.com')
                         ? DESKTOP_USER_AGENT
-                        : MOBILE_USER_AGENT
+                        : tab.url?.includes('accounts.google.com') ||
+                          tab.url?.includes('myaccount.google.com') ||
+                          tab.url?.includes('oauth2.googleapis.com') ||
+                          tab.url?.includes('supabase.co/auth')
+                        ? GOOGLE_AUTH_USER_AGENT
+                        : undefined
                     }
                   />
                 </View>
@@ -2208,6 +2192,19 @@ const styles = StyleSheet.create({
   },
   webView: {
     flex: 1,
+  },
+  loadingBarTrack: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    zIndex: 9999,
+  },
+  loadingBarProgress: {
+    height: '100%',
+    borderRadius: 1.5,
   },
   toastContainer: {
     position: 'absolute',
