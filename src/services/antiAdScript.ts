@@ -75,6 +75,12 @@ export const INJECTED_BEFORE_CONTENT = `
 
   try {
     window.open = function(url, target, features) {
+      if (url && typeof url === 'string' && url.trim().length > 0 && !url.startsWith('javascript:')) {
+        if (!isKnownAdOrGambling(url)) {
+          window.location.href = url;
+          return window;
+        }
+      }
       window.__kite_blocked_popups++;
       try {
         window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -288,6 +294,11 @@ export const INJECTED_BEFORE_CONTENT = `
           }));
         } catch(err) {}
         return false;
+      }
+
+      // Đảm bảo các liên kết target="_blank" hợp lệ mở bình thường trên iOS WKWebView
+      if (anchor.target === '_blank' || anchor.getAttribute('target') === '_blank') {
+        anchor.target = '_self';
       }
     }
 
