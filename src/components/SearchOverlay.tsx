@@ -459,7 +459,6 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
         {!isIncognito && filteredHistory.length > 0 && (
           <View style={styles.historySectionHeader}>
             <Text style={[styles.historySectionTitle, { color: subColor }]}>GẦN ĐÂY</Text>
-            <Text style={[styles.swipeHintText, { color: subColor }]}>Vuốt sang trái để xóa</Text>
           </View>
         )}
 
@@ -652,10 +651,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,
-  },
-  swipeHintText: {
-    fontSize: 11,
-    fontStyle: 'italic',
   },
   historyRow: {
     flexDirection: 'row',
