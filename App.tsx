@@ -209,17 +209,30 @@ function BrowserMain() {
     } catch (e) {}
   };
 
-  // Chụp ảnh màn hình tab đang mở để phục vụ cơ chế "Snapshot & Swap"
+  // Chụp ảnh màn hình tab đang mở để lưu trữ ảnh xem trước bền vững cho Grid Tabs
   const captureActiveSnapshot = async (tabId: string): Promise<string | null> => {
     try {
       const view = webViewContainerRefs.current[tabId];
       if (!view) return null;
-      const uri = await captureRef(view, {
+      const tmpUri = await captureRef(view, {
         format: 'jpg',
-        quality: 0.6,
+        quality: 0.65,
         result: 'tmpfile',
       });
-      return uri;
+      if (!tmpUri) return null;
+
+      // Lưu trữ snapshot cố định vào Paths.document để không bị iOS xóa ngẫu nhiên
+      try {
+        const destFile = new File(Paths.document, `tab_snapshot_${tabId}.jpg`);
+        if (destFile.exists) {
+          try { destFile.delete(); } catch {}
+        }
+        const tmp = new File(tmpUri);
+        tmp.copy(destFile);
+        return destFile.uri;
+      } catch (e) {
+        return tmpUri;
+      }
     } catch (e) {
       return null;
     }
@@ -1187,8 +1200,14 @@ function BrowserMain() {
     }
   };
 
-  const executeNewTab = (isIncognitoMode: boolean) => {
+  const executeNewTab = async (isIncognitoMode: boolean) => {
     Keyboard.dismiss();
+    const prevActiveId = activeTabId;
+    let prevSnap: string | null = null;
+    try {
+      prevSnap = await captureActiveSnapshot(prevActiveId);
+    } catch (e) {}
+
     const newId = `tab-${Date.now()}`;
     const newTabObj: BrowserTab = {
       id: newId,
@@ -1199,7 +1218,9 @@ function BrowserMain() {
       isSleeping: false,
     };
     setTabs((prev) => {
-      const updated = [...prev, newTabObj];
+      const updated = prev.map((t) =>
+        t.id === prevActiveId && prevSnap ? { ...t, snapshotUri: prevSnap } : t
+      ).concat(newTabObj);
       persistTabsState(updated, newId);
       return updated;
     });
@@ -1222,6 +1243,10 @@ function BrowserMain() {
   const handleCloseTab = (id: string) => {
     delete webViewRefs.current[id];
     delete webViewContainerRefs.current[id];
+    try {
+      const snapFile = new File(Paths.document, `tab_snapshot_${id}.jpg`);
+      if (snapFile.exists) snapFile.delete();
+    } catch {}
     setDetectedMediaByTab((prev) => {
       if (!prev[id]) return prev;
       const copy = { ...prev };
@@ -1636,21 +1661,21 @@ function BrowserMain() {
 
   // Mở danh sách Grid Tabs: Tự động chụp ảnh snapshot của tab hiện tại để Grid luôn có ảnh xem trước mới nhất
   const handleOpenTabSheet = async () => {
-    if (currentTab?.url) {
-      try {
+    try {
+      if (currentTab?.url) {
         webViewRefs.current[activeTabId]?.injectJavaScript(getCaptureTabStateScript(activeTabId));
-        const snap = await captureActiveSnapshot(activeTabId);
-        if (snap) {
-          setTabs((prev) => {
-            const updated = prev.map((t) =>
-              t.id === activeTabId ? { ...t, snapshotUri: snap } : t
-            );
-            persistTabsState(updated);
-            return updated;
-          });
-        }
-      } catch (e) {}
-    }
+      }
+      const snap = await captureActiveSnapshot(activeTabId);
+      if (snap) {
+        setTabs((prev) => {
+          const updated = prev.map((t) =>
+            t.id === activeTabId ? { ...t, snapshotUri: snap } : t
+          );
+          persistTabsState(updated);
+          return updated;
+        });
+      }
+    } catch (e) {}
     setTabSheetVisible(true);
   };
 
@@ -2851,47 +2876,55 @@ function BrowserMain() {
           <>
             {/* 1. MÀN HÌNH HOME DASHBOARD (Hiển thị khi tab hiện tại là trang mới url === null) */}
             {activeUrl === null && (
-              <HomeDashboard
-                activeTabId={activeTabId}
-                onSelectUrl={handleNavigate}
-                onFocusSearch={() => {
-                  setInputUrl('');
-                  setIsEditing(true);
+              <View
+                ref={(ref) => {
+                  webViewContainerRefs.current[activeTabId] = ref;
                 }}
-                currentEngineId={currentEngineId}
-                onChangeEngine={handleChangeEngine}
-                isIncognito={isCurrentIncognito}
-                onToggleIncognito={handleToggleIncognito}
-                onSearchByImage={handleSearchByImage}
-                onScanQr={() => setQrModalVisible(true)}
-                onOpenBookmarks={() => setBookmarkSheetVisible(true)}
-                onOpenHistory={() => setHistorySheetVisible(true)}
-                onOpenDownloads={handleOpenDownloads}
-                onOpenPasswordManager={() => setPasswordManagerVisible(true)}
-                onOpenExtensions={() => setExtensionSheetVisible(true)}
-                onOpenTabs={handleOpenTabSheet}
-                onOpenStorageManager={handleOpenStorageManager}
-                incognitoPin={incognitoPin}
-                onOpenPinSettings={handleOpenPinSettings}
-                userProfile={userProfile}
-                onUpdateProfile={(p) => {
-                  setUserProfile(p);
-                  userProfileRef.current = p;
-                  if (p.isLoggedIn && p.email) {
-                    AsyncStorage.setItem('@kite_user_profile', JSON.stringify(p));
-                  } else {
-                    AsyncStorage.removeItem('@kite_user_profile');
-                  }
-                }}
-                syncAllAccounts={syncAllAccounts}
-                onToggleSyncAccounts={handleToggleSyncAccounts}
-                onSwitchAccount={handleSwitchAccount}
-                onShowToast={showToast}
-                onPullMove={handlePullMove}
-                onPullEnd={handlePullEnd}
-                onPullCancel={handlePullCancel}
-                pullDistance={pullDistance}
-              />
+                collapsable={false}
+                style={{ flex: 1, backgroundColor: '#ffffff' }}
+              >
+                <HomeDashboard
+                  activeTabId={activeTabId}
+                  onSelectUrl={handleNavigate}
+                  onFocusSearch={() => {
+                    setInputUrl('');
+                    setIsEditing(true);
+                  }}
+                  currentEngineId={currentEngineId}
+                  onChangeEngine={handleChangeEngine}
+                  isIncognito={isCurrentIncognito}
+                  onToggleIncognito={handleToggleIncognito}
+                  onSearchByImage={handleSearchByImage}
+                  onScanQr={() => setQrModalVisible(true)}
+                  onOpenBookmarks={() => setBookmarkSheetVisible(true)}
+                  onOpenHistory={() => setHistorySheetVisible(true)}
+                  onOpenDownloads={handleOpenDownloads}
+                  onOpenPasswordManager={() => setPasswordManagerVisible(true)}
+                  onOpenExtensions={() => setExtensionSheetVisible(true)}
+                  onOpenTabs={handleOpenTabSheet}
+                  onOpenStorageManager={handleOpenStorageManager}
+                  incognitoPin={incognitoPin}
+                  onOpenPinSettings={handleOpenPinSettings}
+                  userProfile={userProfile}
+                  onUpdateProfile={(p) => {
+                    setUserProfile(p);
+                    userProfileRef.current = p;
+                    if (p.isLoggedIn && p.email) {
+                      AsyncStorage.setItem('@kite_user_profile', JSON.stringify(p));
+                    } else {
+                      AsyncStorage.removeItem('@kite_user_profile');
+                    }
+                  }}
+                  syncAllAccounts={syncAllAccounts}
+                  onToggleSyncAccounts={handleToggleSyncAccounts}
+                  onSwitchAccount={handleSwitchAccount}
+                  onShowToast={showToast}
+                  onPullMove={handlePullMove}
+                  onPullEnd={handlePullEnd}
+                  onPullCancel={handlePullCancel}
+                  pullDistance={pullDistance}
+                />
+              </View>
             )}
 
             {/* 2. CÁC TAB WEB CHẠY ĐỘC LẬP TRONG BỘ NHỚ (KHÔNG RELOAD KHI CHUYỂN TAB) */}
@@ -2982,7 +3015,7 @@ function BrowserMain() {
                             getRestoreTabStateScript(tab.frozenState)
                           );
                         }
-                        // Chụp ảnh snapshot nền của tab để Grid Tabs luôn sẵn sàng ảnh xem trước tĩnh
+                        // Chụp ảnh snapshot của tab sau khi DOM và video player đã render đầy đủ
                         setTimeout(() => {
                           captureActiveSnapshot(tab.id).then((snap) => {
                             if (snap) {
@@ -2995,7 +3028,21 @@ function BrowserMain() {
                               });
                             }
                           });
-                        }, 750);
+                        }, 1600);
+
+                        setTimeout(() => {
+                          captureActiveSnapshot(tab.id).then((snap) => {
+                            if (snap) {
+                              setTabs((prev) => {
+                                const updated = prev.map((t) =>
+                                  t.id === tab.id ? { ...t, snapshotUri: snap } : t
+                                );
+                                persistTabsState(updated);
+                                return updated;
+                              });
+                            }
+                          });
+                        }, 3500);
                       }
                     }}
                     onError={(syntheticEvent) => {

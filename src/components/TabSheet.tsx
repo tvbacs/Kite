@@ -67,6 +67,7 @@ export const TabSheet: React.FC<TabSheetProps> = ({
     isIncognito ? 'incognito' : 'normal'
   );
   const [isPinUnlocking, setIsPinUnlocking] = useState<boolean>(false);
+  const [failedSnapshotIds, setFailedSnapshotIds] = useState<{ [tabId: string]: boolean }>({});
   const pendingUnlockActionRef = useRef<(() => void) | null>(null);
   const prevVisibleRef = useRef<boolean>(visible);
 
@@ -379,24 +380,57 @@ export const TabSheet: React.FC<TabSheetProps> = ({
                       </TouchableOpacity>
                     </View>
 
-                    {/* Vùng xem trước nội dung thẻ: Chỉ hiển thị ảnh snapshot khi tab thực sự có URL trang web */}
-                    {Boolean(tab.snapshotUri && tab.url && tab.url.trim().length > 0) ? (
+                    {/* Vùng xem trước nội dung thẻ: Luôn hiển thị ảnh chụp của lần truy cập sau cùng mới nhất */}
+                    {Boolean(tab.snapshotUri && !failedSnapshotIds[tab.id]) ? (
                       <View style={styles.cardSnapshotContainer}>
                         <Image
                           source={{ uri: tab.snapshotUri }}
                           style={styles.cardSnapshotImage}
                           resizeMode="cover"
+                          onError={() => {
+                            setFailedSnapshotIds((prev) => ({ ...prev, [tab.id]: true }));
+                          }}
                         />
+                      </View>
+                    ) : !tab.url ? (
+                      /* Thẻ mới: Hiển thị preview giao diện thu nhỏ Google & lối tắt như Cốc Cốc */
+                      <View style={styles.miniHomeContainer}>
+                        <View style={styles.miniGoogleBox}>
+                          <Text style={styles.miniGoogleG}>G</Text>
+                          <Text style={styles.miniGoogleO1}>o</Text>
+                          <Text style={styles.miniGoogleO2}>o</Text>
+                          <Text style={styles.miniGoogleG2}>g</Text>
+                          <Text style={styles.miniGoogleL}>l</Text>
+                          <Text style={styles.miniGoogleE}>e</Text>
+                        </View>
+                        <View style={styles.miniSearchInput}>
+                          <Feather name="search" size={9} color="#9ca3af" style={{ marginRight: 4 }} />
+                          <Text style={styles.miniSearchPlaceholder} numberOfLines={1}>
+                            Tìm trên Google...
+                          </Text>
+                        </View>
+                        <View style={styles.miniShortcutsRow}>
+                          <View style={[styles.miniShortcutTile, { backgroundColor: '#10b981' }]}>
+                            <Feather name="film" size={9} color="#ffffff" />
+                          </View>
+                          <View style={[styles.miniShortcutTile, { backgroundColor: '#3b82f6' }]}>
+                            <Feather name="globe" size={9} color="#ffffff" />
+                          </View>
+                          <View style={[styles.miniShortcutTile, { backgroundColor: '#f59e0b' }]}>
+                            <Feather name="play" size={9} color="#ffffff" />
+                          </View>
+                          <View style={[styles.miniShortcutTile, { backgroundColor: '#ef4444' }]}>
+                            <Feather name="video" size={9} color="#ffffff" />
+                          </View>
+                        </View>
                       </View>
                     ) : (
                       <View style={styles.cardPreviewBody}>
                         <View style={styles.cardEmptyIconCircle}>
-                          <Feather name="globe" size={24} color="#a1a1aa" />
+                          <Feather name="globe" size={24} color="#007aff" />
                         </View>
                         <Text style={styles.previewDomainText} numberOfLines={2}>
-                          {tab.url
-                            ? tab.url.replace('https://', '').replace('http://', '')
-                            : 'Trang trống'}
+                          {tab.url.replace('https://', '').replace('http://', '').split('/')[0]}
                         </Text>
                       </View>
                     )}
@@ -725,11 +759,12 @@ const styles = StyleSheet.create({
   },
   tabCard: {
     width: '48%',
-    height: 220,
+    height: 224,
     backgroundColor: '#ffffff',
-    borderRadius: 18,
+    borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 0,
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
@@ -737,13 +772,13 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   activeTabCard: {
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#007aff',
     shadowColor: '#007aff',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 5,
   },
   activeDot: {
     width: 7,
@@ -822,6 +857,54 @@ const styles = StyleSheet.create({
     color: '#71717a',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  miniHomeContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  miniGoogleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  miniGoogleG: { fontSize: 17, fontWeight: '800', color: '#4285F4' },
+  miniGoogleO1: { fontSize: 17, fontWeight: '800', color: '#EA4335' },
+  miniGoogleO2: { fontSize: 17, fontWeight: '800', color: '#FBBC05' },
+  miniGoogleG2: { fontSize: 17, fontWeight: '800', color: '#4285F4' },
+  miniGoogleL: { fontSize: 17, fontWeight: '800', color: '#34A853' },
+  miniGoogleE: { fontSize: 17, fontWeight: '800', color: '#EA4335' },
+  miniSearchInput: {
+    width: '100%',
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    marginBottom: 10,
+  },
+  miniSearchPlaceholder: {
+    fontSize: 9,
+    color: '#94a3b8',
+    flex: 1,
+  },
+  miniShortcutsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  miniShortcutTile: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bottomNav: {
     paddingTop: 10,
