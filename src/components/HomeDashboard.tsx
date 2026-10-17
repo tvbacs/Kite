@@ -60,6 +60,8 @@ interface HomeDashboardProps {
   onScanQr?: () => void;
   onOpenBookmarks?: () => void;
   onOpenHistory?: () => void;
+  onOpenDownloads?: () => void;
+  onOpenPasswordManager?: () => void;
   onOpenTabs?: () => void;
   userProfile?: UserProfile;
   onUpdateProfile?: (profile: UserProfile) => void;
@@ -386,6 +388,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onScanQr,
   onOpenBookmarks,
   onOpenHistory,
+  onOpenDownloads,
+  onOpenPasswordManager,
   onOpenTabs,
   userProfile: propUserProfile,
   onUpdateProfile,
@@ -1729,6 +1733,98 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     />
                   </View>
                 </TouchableOpacity>
+
+                {/* 3. Tệp đã tải xuống */}
+                {onOpenDownloads && (
+                  <>
+                    <View style={styles.horizontalDivider} />
+                    <TouchableOpacity
+                      style={styles.groupedOptionRow}
+                      onPress={() => {
+                        setEngineModalVisible(false);
+                        onOpenDownloads();
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bgOptionTitle}>Tệp đã tải xuống</Text>
+                        <Text style={styles.bgOptionSub}>Quản lý tài liệu và hình ảnh đã tải</Text>
+                      </View>
+                      <View style={styles.rightCircleBtn}>
+                        <Feather name="download" size={18} color="#000000" />
+                      </View>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {/* 4. Trình quản lý mật khẩu */}
+                {onOpenPasswordManager && (
+                  <>
+                    <View style={styles.horizontalDivider} />
+                    <TouchableOpacity
+                      style={styles.groupedOptionRow}
+                      onPress={() => {
+                        setEngineModalVisible(false);
+                        onOpenPasswordManager();
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bgOptionTitle}>Trình quản lý mật khẩu</Text>
+                        <Text style={styles.bgOptionSub}>Xem và sao chép mật khẩu đã lưu</Text>
+                      </View>
+                      <View style={styles.rightCircleBtn}>
+                        <Feather name="key" size={18} color="#000000" />
+                      </View>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {/* 5. Dấu trang */}
+                {onOpenBookmarks && (
+                  <>
+                    <View style={styles.horizontalDivider} />
+                    <TouchableOpacity
+                      style={styles.groupedOptionRow}
+                      onPress={() => {
+                        setEngineModalVisible(false);
+                        onOpenBookmarks();
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bgOptionTitle}>Dấu trang</Text>
+                        <Text style={styles.bgOptionSub}>Các trang web bạn đã lưu</Text>
+                      </View>
+                      <View style={styles.rightCircleBtn}>
+                        <Feather name="bookmark" size={18} color="#000000" />
+                      </View>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {/* 6. Lịch sử duyệt web */}
+                {onOpenHistory && (
+                  <>
+                    <View style={styles.horizontalDivider} />
+                    <TouchableOpacity
+                      style={styles.groupedOptionRow}
+                      onPress={() => {
+                        setEngineModalVisible(false);
+                        onOpenHistory();
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bgOptionTitle}>Lịch sử duyệt web</Text>
+                        <Text style={styles.bgOptionSub}>Danh sách trang web đã truy cập</Text>
+                      </View>
+                      <View style={styles.rightCircleBtn}>
+                        <Feather name="clock" size={18} color="#000000" />
+                      </View>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </ScrollView>
           </TouchableOpacity>

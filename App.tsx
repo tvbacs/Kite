@@ -8,7 +8,9 @@ import {
   Platform,
   Linking,
   Share,
+  TouchableOpacity,
 } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +28,9 @@ import { ImageSearchModal } from './src/components/ImageSearchModal';
 import { QRScannerModal } from './src/components/QRScannerModal';
 import { HistorySheet, STORAGE_HISTORY_KEY, HistoryItem } from './src/components/HistorySheet';
 import { BookmarkSheet, STORAGE_BOOKMARKS_KEY, DEFAULT_BOOKMARKS, BookmarkItem } from './src/components/BookmarkSheet';
+import { DownloadSheet, STORAGE_DOWNLOADS_KEY, DownloadedItem } from './src/components/DownloadSheet';
+import { PasswordManagerSheet } from './src/components/PasswordManagerSheet';
+import { BrowserMenuSheet } from './src/components/BrowserMenuSheet';
 import {
   BLOCKED_DOMAINS,
   BLOCKED_GAMBLING_KEYWORDS,
@@ -180,9 +185,13 @@ function BrowserMain() {
   const [shieldSheetVisible, setShieldSheetVisible] = useState<boolean>(false);
   const [tabSheetVisible, setTabSheetVisible] = useState<boolean>(false);
   const [lensModalVisible, setLensModalVisible] = useState<boolean>(false);
+  const [lensScreenShotUri, setLensScreenShotUri] = useState<string | null>(null);
   const [qrModalVisible, setQrModalVisible] = useState<boolean>(false);
   const [historySheetVisible, setHistorySheetVisible] = useState<boolean>(false);
   const [bookmarkSheetVisible, setBookmarkSheetVisible] = useState<boolean>(false);
+  const [downloadSheetVisible, setDownloadSheetVisible] = useState<boolean>(false);
+  const [passwordManagerVisible, setPasswordManagerVisible] = useState<boolean>(false);
+  const [browserMenuVisible, setBrowserMenuVisible] = useState<boolean>(false);
   const [isCurrentBookmarked, setIsCurrentBookmarked] = useState<boolean>(false);
 
   // Cập nhật trạng thái giữ sáng màn hình (Wake Lock)
@@ -692,7 +701,26 @@ function BrowserMain() {
 
   // Tìm kiếm bằng hình ảnh (Search by Image)
   const handleSearchByImage = () => {
+    setLensScreenShotUri(null);
     setLensModalVisible(true);
+  };
+
+  // Tìm kiếm trên màn hình bằng Google Ống kính (Screen search with Google Lens)
+  const handleSearchScreenWithLens = async () => {
+    if (!activeUrl) {
+      setLensScreenShotUri(null);
+      setLensModalVisible(true);
+      return;
+    }
+    showToast('Đang chụp màn hình & quét Google Lens...');
+    try {
+      const snap = await captureActiveSnapshot(activeTabId);
+      setLensScreenShotUri(snap || null);
+      setLensModalVisible(true);
+    } catch (e) {
+      setLensScreenShotUri(null);
+      setLensModalVisible(true);
+    }
   };
 
   // Tự động hủy xoay loading sau 4.5 giây để tránh kẹt loading do kết nối ngầm của web
@@ -1739,13 +1767,34 @@ function BrowserMain() {
     }
   };
 
-  // Xử lý tải tệp xuống trên iOS và kết hợp Share Sheet để người dùng lưu vào Files
+  // Xử lý tải tệp xuống trên iOS và kết hợp Share Sheet để người dùng lưu vào Files & Lưu vào danh sách tải xuống
   const handleFileDownload = async ({ nativeEvent }: { nativeEvent: { downloadUrl: string } }) => {
     const { downloadUrl } = nativeEvent;
     if (!downloadUrl) return;
-    showToast('Đang tải tệp...');
+    showToast('Đang tải tệp xuống...');
     try {
       const downloadedFile = await File.downloadFileAsync(downloadUrl, Paths.cache, { idempotent: true });
+      const cleanName =
+        downloadedFile?.name ||
+        downloadUrl.split('/').pop()?.split('?')[0] ||
+        `file_${Date.now()}`;
+
+      // Tự động lưu vào danh sách Tệp đã tải xuống của Kite
+      try {
+        const stored = await AsyncStorage.getItem(STORAGE_DOWNLOADS_KEY);
+        const list: DownloadedItem[] = stored ? JSON.parse(stored) : [];
+        const newItem: DownloadedItem = {
+          id: `dl-${Date.now()}`,
+          fileName: cleanName,
+          uri: downloadedFile.uri,
+          fileSize: downloadedFile.size || 0,
+          timestamp: Date.now(),
+          sourceUrl: downloadUrl,
+        };
+        const updated = [newItem, ...list.filter((i) => i.uri !== downloadedFile.uri)];
+        await AsyncStorage.setItem(STORAGE_DOWNLOADS_KEY, JSON.stringify(updated));
+      } catch (e) {}
+
       const canShare = await Sharing.isAvailableAsync();
       if (canShare && downloadedFile?.uri) {
         await Sharing.shareAsync(downloadedFile.uri);
@@ -1754,7 +1803,7 @@ function BrowserMain() {
       } else {
         await Share.share({ url: downloadUrl });
       }
-      showToast('Tải xuống hoàn tất!');
+      showToast(`Đã tải: ${cleanName}`);
     } catch (e) {
       Share.share({ url: downloadUrl });
     }
@@ -1774,7 +1823,7 @@ function BrowserMain() {
         backgroundColor={appBg}
       />
 
-      {/* VÙNG TOP BAR: Dòng chữ chúc mừng Kite màu xanh blue ở trên cùng khi duyệt web */}
+      {/* VÙNG TOP BAR: Header có nút khiên bên trái, lời chúc ở giữa và NÚT 3 CHẤM BÊN PHẢI */}
       {activeUrl !== null && !isEditing && (
         <View
           style={[
@@ -1790,6 +1839,23 @@ function BrowserMain() {
           onTouchEnd={handleHeaderTouchEnd}
         >
           <View style={styles.webTopGreetingRow}>
+            {/* Nút Khiên chặn quảng cáo bên trái */}
+            <TouchableOpacity
+              style={styles.webTopIconBtn}
+              onPress={() => setShieldSheetVisible(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Feather
+                name="shield"
+                size={16}
+                color={stats.isShieldActive ? (isIncognito ? '#93c5fd' : '#007aff') : '#a1a1aa'}
+              />
+              {stats.blockedAds + stats.blockedPopups > 0 && (
+                <View style={styles.headerBadgeDot} />
+              )}
+            </TouchableOpacity>
+
             <Text
               style={[
                 styles.webTopGreetingText,
@@ -1799,6 +1865,20 @@ function BrowserMain() {
             >
               Kite chúc bạn một ngày tốt lành!
             </Text>
+
+            {/* Nút 3 chấm mở Menu tiện ích bên phải */}
+            <TouchableOpacity
+              style={styles.webTopIconBtn}
+              onPress={() => setBrowserMenuVisible(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Feather
+                name="more-horizontal"
+                size={20}
+                color={isIncognito ? '#e8eaed' : '#27272a'}
+              />
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -1861,6 +1941,8 @@ function BrowserMain() {
                 onScanQr={() => setQrModalVisible(true)}
                 onOpenBookmarks={() => setBookmarkSheetVisible(true)}
                 onOpenHistory={() => setHistorySheetVisible(true)}
+                onOpenDownloads={() => setDownloadSheetVisible(true)}
+                onOpenPasswordManager={() => setPasswordManagerVisible(true)}
                 onOpenTabs={handleOpenTabSheet}
                 incognitoPin={incognitoPin}
                 onOpenPinSettings={handleOpenPinSettings}
@@ -2116,11 +2198,62 @@ function BrowserMain() {
       {/* Khung ngắm tìm kiếm bằng hình ảnh (Kite Lens) */}
       <ImageSearchModal
         visible={lensModalVisible}
-        onClose={() => setLensModalVisible(false)}
+        onClose={() => {
+          setLensModalVisible(false);
+          setLensScreenShotUri(null);
+        }}
         onSearchResult={(url) => {
           setLensModalVisible(false);
+          setLensScreenShotUri(null);
           handleNavigate(url);
         }}
+        initialImageUri={lensScreenShotUri}
+      />
+
+      {/* Quản lý tệp đã tải xuống (Download Sheet) */}
+      <DownloadSheet
+        visible={downloadSheetVisible}
+        onClose={() => setDownloadSheetVisible(false)}
+        onShowToast={showToast}
+      />
+
+      {/* Trình quản lý mật khẩu (Password Manager) */}
+      <PasswordManagerSheet
+        visible={passwordManagerVisible}
+        onClose={() => setPasswordManagerVisible(false)}
+        onSelectUrl={handleNavigate}
+        onShowToast={showToast}
+      />
+
+      {/* Menu trình duyệt 3 chấm Header (Browser Menu Sheet) */}
+      <BrowserMenuSheet
+        visible={browserMenuVisible}
+        onClose={() => setBrowserMenuVisible(false)}
+        currentUrl={activeUrl}
+        currentTitle={currentTab?.title}
+        isDesktop={currentTab?.isDesktop}
+        isBookmarked={isCurrentBookmarked}
+        onToggleBookmark={() =>
+          handleToggleBookmarkCurrentPage(activeUrl, currentTab?.title)
+        }
+        onToggleDesktop={handleToggleDesktopMode}
+        onReload={() => {
+          const activeWV = getActiveWebView();
+          if (activeWV) {
+            setIsLoading(true);
+            triggerLoadingSafetyTimer();
+            activeWV.reload();
+            showToast('Đang tải lại trang...');
+          }
+        }}
+        onOpenSearchScreenLens={handleSearchScreenWithLens}
+        onOpenDownloads={() => setDownloadSheetVisible(true)}
+        onOpenPasswordManager={() => setPasswordManagerVisible(true)}
+        onOpenBookmarks={() => setBookmarkSheetVisible(true)}
+        onOpenHistory={() => setHistorySheetVisible(true)}
+        onNewTab={() => handleNewTab(isIncognito)}
+        onNewIncognitoTab={() => handleNewTab(true)}
+        onOpenShield={() => setShieldSheetVisible(true)}
       />
 
       {/* Khóa mã PIN bảo mật cho Thẻ ẩn danh */}
@@ -2227,18 +2360,34 @@ const styles = StyleSheet.create({
   },
   webTopBar: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   webTopGreetingRow: {
-    height: 24,
+    height: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+  },
+  webTopIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    position: 'relative',
   },
   webTopGreetingText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
     letterSpacing: -0.1,
+  },
+  headerBadgeDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#22c55e',
   },
 });

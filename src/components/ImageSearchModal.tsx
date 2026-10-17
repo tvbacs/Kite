@@ -21,12 +21,14 @@ interface ImageSearchModalProps {
   visible: boolean;
   onClose: () => void;
   onSearchResult: (url: string) => void;
+  initialImageUri?: string | null;
 }
 
 export const ImageSearchModal: React.FC<ImageSearchModalProps> = ({
   visible,
   onClose,
   onSearchResult,
+  initialImageUri,
 }) => {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24);
@@ -44,16 +46,19 @@ export const ImageSearchModal: React.FC<ImageSearchModalProps> = ({
   const [additionalQuery, setAdditionalQuery] = useState<string>('');
 
   useEffect(() => {
-    if (visible && (!permission || !permission.granted)) {
-      requestPermission();
-    }
-    if (!visible) {
+    if (visible) {
+      if (initialImageUri) {
+        handleProcessImage(initialImageUri);
+      } else if (!permission || !permission.granted) {
+        requestPermission();
+      }
+    } else {
       setCapturedImage(null);
       setLensResultUrl(null);
       setAdditionalQuery('');
       setIsProcessing(false);
     }
-  }, [visible]);
+  }, [visible, initialImageUri]);
 
   // Upload ảnh và lấy liên kết tìm kiếm Google Ống kính
   const handleProcessImage = async (imageUri: string) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   ScrollView,
   Platform,
   Keyboard,
+  Animated,
+  PanResponder,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,6 +28,192 @@ interface SearchOverlayProps {
   isBookmarked?: boolean;
   onToggleBookmark?: () => void;
 }
+
+interface SwipeableHistoryRowProps {
+  item: HistoryItem;
+  displayTitle: string;
+  textColor: string;
+  subColor: string;
+  borderCol: string;
+  bgColor: string;
+  onSubmit: (url: string) => void;
+  onUrlChange: (text: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const SwipeableHistoryRow: React.FC<SwipeableHistoryRowProps> = ({
+  item,
+  displayTitle,
+  textColor,
+  subColor,
+  borderCol,
+  bgColor,
+  onSubmit,
+  onUrlChange,
+  onDelete,
+}) => {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const rowHeight = useRef(new Animated.Value(1)).current;
+  const isDeletingRef = useRef(false);
+  const isOpenRef = useRef(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (isDeletingRef.current) return;
+        const initial = isOpenRef.current ? -80 : 0;
+        const target = initial + gestureState.dx;
+        if (target <= 0) {
+          translateX.setValue(Math.max(-120, target));
+        } else {
+          translateX.setValue(0);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (isDeletingRef.current) return;
+        const currentOffset = isOpenRef.current ? -80 : 0;
+        const effectiveDx = currentOffset + gestureState.dx;
+
+        // Nếu vuốt mạnh sang trái: xóa luôn
+        if (effectiveDx < -140) {
+          triggerDelete();
+          return;
+        }
+
+        // Nếu vuốt qua ngưỡng -40: mở nút Xóa
+        if (effectiveDx < -40) {
+          isOpenRef.current = true;
+          Animated.spring(translateX, {
+            toValue: -80,
+            useNativeDriver: true,
+            bounciness: 4,
+          }).start();
+        } else {
+          isOpenRef.current = false;
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 4,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  const triggerDelete = () => {
+    if (isDeletingRef.current) return;
+    isDeletingRef.current = true;
+    Animated.timing(translateX, {
+      toValue: -400,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      Animated.timing(rowHeight, {
+        toValue: 0,
+        duration: 140,
+        useNativeDriver: false,
+      }).start(() => {
+        onDelete(item.id);
+      });
+    });
+  };
+
+  const closeSwipe = () => {
+    if (isOpenRef.current) {
+      isOpenRef.current = false;
+      Animated.spring(translateX, {
+        toValue: 0,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  return (
+    <Animated.View
+      style={{
+        overflow: 'hidden',
+        maxHeight: rowHeight.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, 80],
+        }),
+        opacity: rowHeight,
+      }}
+    >
+      <View style={[styles.swipeContainer, { borderBottomColor: borderCol }]}>
+        {/* Nút Xóa đỏ ẩn bên dưới khi vuốt ngang */}
+        <TouchableOpacity
+          style={styles.deleteActionBtn}
+          onPress={triggerDelete}
+          activeOpacity={0.8}
+        >
+          <Feather name="trash-2" size={17} color="#ffffff" />
+          <Text style={styles.deleteActionText}>Xóa</Text>
+        </TouchableOpacity>
+
+        {/* Nội dung hàng có thể vuốt trượt */}
+        <Animated.View
+          style={[
+            styles.historyRowInner,
+            {
+              backgroundColor: bgColor,
+              transform: [{ translateX }],
+            },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <TouchableOpacity
+            style={styles.historyRowContent}
+            onPress={() => {
+              if (isOpenRef.current) {
+                closeSwipe();
+              } else {
+                onSubmit(item.url);
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <View style={styles.iconCircle}>
+              <Feather name="clock" size={18} color={subColor} />
+            </View>
+
+            <View style={styles.textContainer}>
+              <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
+                {displayTitle}
+              </Text>
+              {item.title !== item.url && !item.url.includes('google.com/search') && (
+                <Text style={[styles.subText, { color: subColor }]} numberOfLines={1}>
+                  {item.url.replace(/^https?:\/\//i, '').replace(/\/$/, '')}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {/* Nút xóa nhanh bằng cách chạm */}
+          <TouchableOpacity
+            style={styles.quickDeleteBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            onPress={triggerDelete}
+            activeOpacity={0.6}
+          >
+            <Feather name="x" size={16} color={subColor} />
+          </TouchableOpacity>
+
+          {/* Nút mũi tên ↗ điền vào ô tìm kiếm */}
+          <TouchableOpacity
+            style={styles.arrowBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            onPress={() => onUrlChange(displayTitle)}
+          >
+            <Feather name="arrow-up-right" size={20} color="#007aff" />
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
+    </Animated.View>
+  );
+};
 
 export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   inputUrl,
@@ -188,6 +376,13 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
         )}
 
         {/* Danh sách các mục lịch sử gần đây (CHỈ HIỂN THỊ KHI KHÔNG PHẢI ẨN DANH) */}
+        {!isIncognito && filteredHistory.length > 0 && (
+          <View style={styles.historySectionHeader}>
+            <Text style={[styles.historySectionTitle, { color: subColor }]}>GẦN ĐÂY</Text>
+            <Text style={[styles.swipeHintText, { color: subColor }]}>Vuốt sang trái để xóa</Text>
+          </View>
+        )}
+
         {!isIncognito &&
           filteredHistory.map((item) => {
             // Trích xuất từ khóa tìm kiếm nếu là link Google
@@ -201,36 +396,18 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
             }
 
             return (
-              <TouchableOpacity
+              <SwipeableHistoryRow
                 key={item.id}
-                style={[styles.historyRow, { borderBottomColor: borderCol }]}
-                onPress={() => onSubmit(item.url)}
-                activeOpacity={0.65}
-              >
-                <View style={styles.iconCircle}>
-                  <Feather name="clock" size={18} color={subColor} />
-                </View>
-
-                <View style={styles.textContainer}>
-                  <Text style={[styles.mainText, { color: textColor }]} numberOfLines={1}>
-                    {displayTitle}
-                  </Text>
-                  {item.title !== item.url && !item.url.includes('google.com/search') && (
-                    <Text style={[styles.subText, { color: subColor }]} numberOfLines={1}>
-                      {item.url.replace(/^https?:\/\//i, '').replace(/\/$/, '')}
-                    </Text>
-                  )}
-                </View>
-
-                {/* Bấm vào mũi tên ↗ để điền từ khóa vào thanh tìm kiếm mà chưa duyệt ngay */}
-                <TouchableOpacity
-                  style={styles.arrowBtn}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  onPress={() => onUrlChange(displayTitle)}
-                >
-                  <Feather name="arrow-up-right" size={20} color="#007aff" />
-                </TouchableOpacity>
-              </TouchableOpacity>
+                item={item}
+                displayTitle={displayTitle}
+                textColor={textColor}
+                subColor={subColor}
+                borderCol={borderCol}
+                bgColor={bg}
+                onSubmit={onSubmit}
+                onUrlChange={onUrlChange}
+                onDelete={handleDeleteItem}
+              />
             );
           })}
 
@@ -328,11 +505,65 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginTop: 6,
   },
+  historySectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  historySectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  swipeHintText: {
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  swipeContainer: {
+    position: 'relative',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  deleteActionBtn: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 76,
+    backgroundColor: '#ef4444',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+  },
+  deleteActionText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  historyRowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  historyRowContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  quickDeleteBtn: {
+    padding: 6,
+    marginRight: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   iconCircle: {
     width: 32,
@@ -341,7 +572,7 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 8,
   },
   mainText: {
     fontSize: 15,
