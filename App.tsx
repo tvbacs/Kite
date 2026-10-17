@@ -114,17 +114,16 @@ function BrowserMain() {
   // Lưu trạng thái cuộn, URL và snapshot của các thẻ vào AsyncStorage
   const persistTabsState = async (tabsList: BrowserTab[], currentActiveId?: string) => {
     try {
-      const toPersist = tabsList
-        .filter((t) => !t.isIncognito)
-        .map((t) => ({
-          id: t.id,
-          url: t.url,
-          title: t.title,
-          isDesktop: t.isDesktop,
-          snapshotUri: t.snapshotUri,
-          frozenState: t.frozenState,
-          lastActiveAt: t.lastActiveAt,
-        }));
+      const toPersist = tabsList.map((t) => ({
+        id: t.id,
+        url: t.url,
+        title: t.title,
+        isDesktop: t.isDesktop,
+        isIncognito: t.isIncognito,
+        snapshotUri: t.snapshotUri,
+        frozenState: t.frozenState,
+        lastActiveAt: t.lastActiveAt,
+      }));
       await AsyncStorage.setItem(STORAGE_PERSISTED_TABS_KEY, JSON.stringify(toPersist));
       const idToSave = currentActiveId || activeTabId;
       if (idToSave) {
@@ -393,6 +392,14 @@ function BrowserMain() {
               targetTab = sortedByRecent[0] || savedTabs[savedTabs.length - 1];
             }
 
+            // Khi mở lại app, ưu tiên mở thẻ thông thường để bảo mật quyền riêng tư cho các thẻ ẩn danh
+            if (targetTab.isIncognito) {
+              const normalFallback = savedTabs.find((t) => !t.isIncognito);
+              if (normalFallback) {
+                targetTab = normalFallback;
+              }
+            }
+
             const targetId = targetTab.id;
 
             // Giữ đúng thẻ gần nhất hoạt động (isSleeping: false), đóng băng các thẻ còn lại để bảo vệ RAM
@@ -404,7 +411,7 @@ function BrowserMain() {
             setTabs(initializedTabs);
             setActiveTabId(targetId);
             setInputUrl(targetTab.url || '');
-            setIsIncognito(false);
+            setIsIncognito(!!targetTab.isIncognito);
           }
         } catch (e) {}
       }
