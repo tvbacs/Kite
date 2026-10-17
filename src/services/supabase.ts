@@ -109,6 +109,19 @@ export async function handleAuthCallbackUrl(url: string): Promise<UserProfile | 
       }
     }
 
+    // 3. Fallback: Kiểm tra xem Supabase client đã có session ngầm chưa
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (sessionData && sessionData.session && sessionData.session.user) {
+      const user = sessionData.session.user;
+      const meta = user.user_metadata || {};
+      return {
+        isLoggedIn: true,
+        name: meta.full_name || meta.name || user.email?.split('@')[0] || 'Người dùng',
+        email: user.email || '',
+        avatarUrl: meta.avatar_url || meta.picture || '',
+      };
+    }
+
     return null;
   } catch (e) {
     console.warn('Lỗi xử lý Auth Callback URL:', e);

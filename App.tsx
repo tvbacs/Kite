@@ -51,7 +51,7 @@ import { captureRef } from 'react-native-view-shot';
 import { PullDownBar, PullActionType } from './src/components/PullDownBar';
 import { ShieldStats, BrowserTab, UserProfile, TabFrozenState, DataSaverMode } from './src/types/browser';
 import { PinModal } from './src/components/PinModal';
-import { handleAuthCallbackUrl, upsertCloudProfile } from './src/services/supabase';
+import { supabase, handleAuthCallbackUrl, upsertCloudProfile } from './src/services/supabase';
 
 const STORAGE_ENGINE_KEY = '@kite_search_engine';
 const STORAGE_PIN_KEY = '@kite_incognito_pin';
@@ -325,6 +325,22 @@ function BrowserMain() {
             setUserProfile(parsed);
           }
         } catch (e) {}
+      }
+    });
+
+    const { data: authSub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const u = session.user;
+        const meta = u.user_metadata || {};
+        const profile: UserProfile = {
+          isLoggedIn: true,
+          name: meta.full_name || meta.name || u.email?.split('@')[0] || 'Người dùng',
+          email: u.email || '',
+          avatarUrl: meta.avatar_url || meta.picture || '',
+        };
+        setUserProfile(profile);
+        await AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
+        await upsertCloudProfile(u.id, profile);
       }
     });
 
@@ -1367,9 +1383,10 @@ function BrowserMain() {
       return true;
     }
 
-    // 1. Bắt Callback hoàn tất trả về App (kite://auth-callback hoặc URL chứa session token)
+    // 1. Bắt Callback hoàn tất trả về App (kite://auth-callback hoặc localhost:3000 hoặc URL chứa session token)
     if (
       reqUrl.startsWith('kite://auth-callback') ||
+      reqUrl.includes('localhost:3000') ||
       (reqUrl.includes('auth-callback') && (reqUrl.includes('access_token=') || reqUrl.includes('code='))) ||
       (!reqUrl.includes('supabase.co/auth/v1/callback') && reqUrl.includes('access_token='))
     ) {
@@ -1379,11 +1396,11 @@ function BrowserMain() {
           AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
           upsertCloudProfile(profile.email || 'user', profile);
           showToast(`Đăng nhập Google thành công! (${profile.name})`);
-          setTabs((prev) =>
-            prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
-          );
-          setInputUrl('');
         }
+        setTabs((prev) =>
+          prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
+        );
+        setInputUrl('');
       });
       return false;
     }
@@ -1521,6 +1538,7 @@ function BrowserMain() {
     if (
       navState.url &&
       (navState.url.startsWith('kite://auth-callback') ||
+        navState.url.includes('localhost:3000') ||
         (navState.url.includes('auth-callback') &&
           (navState.url.includes('access_token=') || navState.url.includes('code='))) ||
         (!navState.url.includes('supabase.co/auth/v1/callback') && navState.url.includes('access_token=')))
@@ -1531,11 +1549,11 @@ function BrowserMain() {
           AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
           upsertCloudProfile(profile.email || 'user', profile);
           showToast(`Đăng nhập Google thành công! (${profile.name})`);
-          setTabs((prev) =>
-            prev.map((t) => (t.id === tabId ? { ...t, url: '', title: 'Trang mới' } : t))
-          );
-          setInputUrl('');
         }
+        setTabs((prev) =>
+          prev.map((t) => (t.id === tabId ? { ...t, url: '', title: 'Trang mới' } : t))
+        );
+        setInputUrl('');
       });
       return;
     }
