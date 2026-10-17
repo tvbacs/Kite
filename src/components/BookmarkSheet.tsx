@@ -43,6 +43,7 @@ interface BookmarkSheetProps {
   onSelectUrl: (url: string) => void;
   currentUrl?: string | null;
   currentTitle?: string | null;
+  userEmail?: string;
 }
 
 export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
@@ -51,6 +52,7 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
   onSelectUrl,
   currentUrl,
   currentTitle,
+  userEmail,
 }) => {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24);
@@ -62,21 +64,25 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
   const [addTitle, setAddTitle] = useState<string>('');
   const [addUrl, setAddUrl] = useState<string>('');
 
+  const getStorageKey = () =>
+    userEmail ? `${STORAGE_BOOKMARKS_KEY}_${userEmail.toLowerCase()}` : STORAGE_BOOKMARKS_KEY;
+
   useEffect(() => {
     if (visible) {
       loadBookmarks();
       setIsAddMode(false);
     }
-  }, [visible]);
+  }, [visible, userEmail]);
 
   const loadBookmarks = async () => {
     try {
-      const data = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
+      const key = getStorageKey();
+      const data = await AsyncStorage.getItem(key);
       if (data) {
         setBookmarks(JSON.parse(data));
       } else {
         setBookmarks(DEFAULT_BOOKMARKS);
-        await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(DEFAULT_BOOKMARKS));
+        await AsyncStorage.setItem(key, JSON.stringify(DEFAULT_BOOKMARKS));
       }
     } catch (e) {
       console.log('Error loading bookmarks:', e);
@@ -86,7 +92,7 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
   const saveBookmarks = async (newList: BookmarkItem[]) => {
     setBookmarks(newList);
     try {
-      await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(newList));
+      await AsyncStorage.setItem(getStorageKey(), JSON.stringify(newList));
     } catch (e) {}
   };
 

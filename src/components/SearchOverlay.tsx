@@ -32,6 +32,7 @@ interface SearchOverlayProps {
   isIncognito: boolean;
   isBookmarked?: boolean;
   onToggleBookmark?: () => void;
+  userEmail?: string;
 }
 
 interface SwipeableHistoryRowProps {
@@ -262,6 +263,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   isIncognito,
   isBookmarked,
   onToggleBookmark,
+  userEmail,
 }) => {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 47 : 24);
@@ -269,18 +271,21 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [enginePickerVisible, setEnginePickerVisible] = useState<boolean>(false);
 
+  const getStorageKey = () =>
+    userEmail ? `${STORAGE_HISTORY_KEY}_${userEmail.toLowerCase()}` : STORAGE_HISTORY_KEY;
+
   useEffect(() => {
     if (!isIncognito) {
       loadHistory();
     } else {
       setHistory([]);
     }
-  }, [isIncognito]);
+  }, [isIncognito, userEmail]);
 
   const loadHistory = async () => {
     if (isIncognito) return;
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_HISTORY_KEY);
+      const stored = await AsyncStorage.getItem(getStorageKey());
       if (stored) {
         setHistory(JSON.parse(stored));
       }
@@ -292,7 +297,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   const handleDeleteItem = async (id: string) => {
     const updated = history.filter((item) => item.id !== id);
     setHistory(updated);
-    await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(getStorageKey(), JSON.stringify(updated));
   };
 
   // Lọc lịch sử theo nội dung đang nhập

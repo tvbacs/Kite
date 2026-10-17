@@ -30,12 +30,14 @@ interface HistorySheetProps {
   visible: boolean;
   onClose: () => void;
   onSelectUrl: (url: string) => void;
+  userEmail?: string;
 }
 
 export const HistorySheet: React.FC<HistorySheetProps> = ({
   visible,
   onClose,
   onSelectUrl,
+  userEmail,
 }) => {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 48 : 24);
@@ -44,15 +46,18 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  const getStorageKey = () =>
+    userEmail ? `${STORAGE_HISTORY_KEY}_${userEmail.toLowerCase()}` : STORAGE_HISTORY_KEY;
+
   useEffect(() => {
     if (visible) {
       loadHistory();
     }
-  }, [visible]);
+  }, [visible, userEmail]);
 
   const loadHistory = async () => {
     try {
-      const data = await AsyncStorage.getItem(STORAGE_HISTORY_KEY);
+      const data = await AsyncStorage.getItem(getStorageKey());
       if (data) {
         setHistory(JSON.parse(data));
       }
@@ -72,7 +77,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
           style: 'destructive',
           onPress: async () => {
             setHistory([]);
-            await AsyncStorage.removeItem(STORAGE_HISTORY_KEY);
+            await AsyncStorage.removeItem(getStorageKey());
           },
         },
       ]
@@ -82,7 +87,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
   const handleDeleteItem = async (id: string) => {
     const updated = history.filter((item) => item.id !== id);
     setHistory(updated);
-    await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(getStorageKey(), JSON.stringify(updated));
   };
 
   const filteredHistory = history.filter(

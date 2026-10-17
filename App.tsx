@@ -79,6 +79,7 @@ const STORAGE_ENGINE_KEY = '@kite_search_engine';
 const STORAGE_PIN_KEY = '@kite_incognito_pin';
 const STORAGE_PERSISTED_TABS_KEY = '@kite_persisted_tabs_state';
 const STORAGE_ACTIVE_TAB_ID_KEY = '@kite_active_tab_id';
+const STORAGE_SYNC_ACCOUNTS_KEY = '@kite_sync_all_accounts';
 const STORAGE_DATA_SAVER_KEY = '@kite_data_saver_mode';
 const STORAGE_KEEP_AWAKE_KEY = '@kite_keep_awake';
 const STORAGE_SHIELD_ACTIVE_KEY = '@kite_shield_active';
@@ -132,13 +133,41 @@ function BrowserMain() {
   const isVideoPlayingRef = useRef<boolean>(false);
   const isRestoredRef = useRef<boolean>(false);
 
+  // Trạng thái tài khoản người dùng
+  const [userProfile, setUserProfile] = useState<UserProfile>({
+    isLoggedIn: false,
+    name: '',
+    email: '',
+    avatarUrl: '',
+  });
+  const userProfileRef = useRef<UserProfile>(userProfile);
+
+  // Trạng thái đồng bộ toàn bộ tài khoản (true: dùng chung tabs, shortcuts, lịch sử; false: riêng biệt từng tài khoản)
+  const [syncAllAccounts, setSyncAllAccounts] = useState<boolean>(false);
+  const syncAllAccountsRef = useRef<boolean>(false);
+  const profileTabsRef = useRef<
+    Record<string, { tabs: BrowserTab[]; activeTabId: string; isIncognito: boolean }>
+  >({});
+
+  useEffect(() => {
+    syncAllAccountsRef.current = syncAllAccounts;
+  }, [syncAllAccounts]);
+
+  useEffect(() => {
+    userProfileRef.current = userProfile;
+  }, [userProfile]);
+
   // Quản lý hệ thống Thẻ (Tabs)
   const [tabs, setTabs] = useState<BrowserTab[]>([
     { id: 'tab-1', url: '', title: 'Trang mới', lastActiveAt: Date.now(), isSleeping: false },
   ]);
 
   // Lưu trạng thái cuộn, URL và snapshot của các thẻ thường vào AsyncStorage (TUYỆT ĐỐI KHÔNG LƯU THẺ ẨN DANH)
-  const persistTabsState = async (tabsList: BrowserTab[], currentActiveId?: string) => {
+  const persistTabsState = async (
+    tabsList: BrowserTab[],
+    currentActiveId?: string,
+    overrideEmail?: string
+  ) => {
     try {
       const normalTabs = tabsList.filter((t) => !t.isIncognito);
       if (normalTabs.length === 0) return;
@@ -158,9 +187,22 @@ function BrowserMain() {
         frozenState: t.frozenState,
         lastActiveAt: t.id === idToSave ? Date.now() : t.lastActiveAt,
       }));
+
+      const activeEmail =
+        overrideEmail ||
+        (userProfileRef.current.isLoggedIn ? userProfileRef.current.email : undefined);
+      const isSync = syncAllAccountsRef.current;
+
+      const tabsKey = (!isSync && activeEmail)
+        ? `@kite_persisted_tabs_state_${activeEmail.toLowerCase()}`
+        : STORAGE_PERSISTED_TABS_KEY;
+      const activeIdKey = (!isSync && activeEmail)
+        ? `@kite_active_tab_id_${activeEmail.toLowerCase()}`
+        : STORAGE_ACTIVE_TAB_ID_KEY;
+
       await Promise.all([
-        AsyncStorage.setItem(STORAGE_PERSISTED_TABS_KEY, JSON.stringify(toPersist)),
-        idToSave ? AsyncStorage.setItem(STORAGE_ACTIVE_TAB_ID_KEY, idToSave) : Promise.resolve(),
+        AsyncStorage.setItem(tabsKey, JSON.stringify(toPersist)),
+        idToSave ? AsyncStorage.setItem(activeIdKey, idToSave) : Promise.resolve(),
       ]);
     } catch (e) {}
   };
@@ -306,13 +348,7 @@ function BrowserMain() {
     isReaderMode: false,
   });
 
-  // Trạng thái tài khoản người dùng
-  const [userProfile, setUserProfile] = useState<UserProfile>({
-    isLoggedIn: false,
-    name: '',
-    email: '',
-    avatarUrl: '',
-  });
+
 
   // Kéo xuống thực hiện hành động nhanh của Kite (Thẻ mới | Tải lại | Đóng thẻ)
   const [pullDistance, setPullDistance] = useState<number>(0);
@@ -456,67 +492,56 @@ function BrowserMain() {
       }
     });
 
-    AsyncStorage.getItem('@kite_user_profile').then((res) => {
-      if (res) {
+    // Khôi phục cài đặt đồng bộ tài khoản, tài khoản người dùng và danh sách thẻ
+    Promise.all([
+      AsyncStorage.getItem(STORAGE_SYNC_ACCOUNTS_KEY),
+      AsyncStorage.getItem('@kite_user_profile'),
+    ]).then(async ([syncRes, profileRes]) => {
+      let isSync = false;
+      if (syncRes !== null) {
         try {
-          const parsed = JSON.parse(res);
+          isSync = JSON.parse(syncRes);
+        } catch (e) {}
+      }
+      setSyncAllAccounts(isSync);
+      syncAllAccountsRef.current = isSync;
+
+      let currentEmail: string | undefined;
+      if (profileRes) {
+        try {
+          const parsed = JSON.parse(profileRes);
           if (parsed && parsed.email) {
             setUserProfile(parsed);
+            userProfileRef.current = parsed;
+            currentEmail = parsed.email;
           }
         } catch (e) {}
       }
-    });
 
-    const { data: authSub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const u = session.user;
-        const meta = u.user_metadata || {};
-        const profile: UserProfile = {
-          isLoggedIn: true,
-          name: meta.full_name || meta.name || u.email?.split('@')[0] || 'Người dùng',
-          email: u.email || '',
-          avatarUrl: meta.avatar_url || meta.picture || '',
-        };
-        setUserProfile(profile);
-        await AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
-        await upsertCloudProfile(u.id, profile);
-        // Cộng dồn vào @kite_saved_accounts
-        if (profile.email) {
-          const res = await AsyncStorage.getItem('@kite_saved_accounts');
-          let list: UserProfile[] = [];
-          if (res) { try { list = JSON.parse(res); } catch (e) {} }
-          if (!Array.isArray(list)) list = [];
-          const idx = list.findIndex((a) => a.email?.toLowerCase() === profile.email?.toLowerCase());
-          if (idx !== -1) { list[idx] = profile; } else { list.push(profile); }
-          await AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
-        }
+      // Khôi phục danh sách thẻ, URL và mở chính xác thẻ người dùng đang xem trước khi reload
+      const tabsKey =
+        !isSync && currentEmail
+          ? `@kite_persisted_tabs_state_${currentEmail.toLowerCase()}`
+          : STORAGE_PERSISTED_TABS_KEY;
+      const activeIdKey =
+        !isSync && currentEmail
+          ? `@kite_active_tab_id_${currentEmail.toLowerCase()}`
+          : STORAGE_ACTIVE_TAB_ID_KEY;
+
+      let [tabsData, savedActiveId] = await Promise.all([
+        AsyncStorage.getItem(tabsKey),
+        AsyncStorage.getItem(activeIdKey),
+      ]);
+
+      if (!tabsData && tabsKey !== STORAGE_PERSISTED_TABS_KEY) {
+        tabsData = await AsyncStorage.getItem(STORAGE_PERSISTED_TABS_KEY);
+        savedActiveId = await AsyncStorage.getItem(STORAGE_ACTIVE_TAB_ID_KEY);
       }
-    });
 
-    // Đảm bảo thư mục "Kite" được iOS kích hoạt và hiển thị trong ứng dụng Tệp (Files) dưới mục "Trên iPhone"
-    try {
-      const welcomeFile = new File(Paths.document, 'Kite_Downloads.txt');
-      if (!welcomeFile.exists) {
-        welcomeFile.create();
-        welcomeFile.write('Trình duyệt Kite - Thư mục lưu trữ tải xuống.\nTất cả tài liệu và hình ảnh bạn tải về từ Kite sẽ được lưu trữ tự động tại đây.');
-      }
-    } catch (e) {
-      console.log('Init Kite Documents directory error:', e);
-    }
-
-    // Khôi phục danh sách thẻ, URL và mở chính xác thẻ người dùng đang xem trước khi reload
-    Promise.all([
-      AsyncStorage.getItem(STORAGE_PERSISTED_TABS_KEY),
-      AsyncStorage.getItem(STORAGE_ACTIVE_TAB_ID_KEY),
-    ]).then(([tabsData, savedActiveId]) => {
       if (tabsData) {
         try {
           const savedTabs: BrowserTab[] = JSON.parse(tabsData);
           if (Array.isArray(savedTabs) && savedTabs.length > 0) {
-            // Xác định chính xác thẻ đang mở:
-            // 1. Thẻ có id trùng với savedActiveId
-            // 2. Hoặc thẻ có lastActiveAt mới nhất
-            // 3. Hoặc thẻ cuối cùng trong danh sách
             let targetTab = savedActiveId ? savedTabs.find((t) => t.id === savedActiveId) : null;
             if (!targetTab) {
               const sortedByRecent = [...savedTabs].sort(
@@ -527,7 +552,6 @@ function BrowserMain() {
 
             const targetId = targetTab.id;
 
-            // Giữ đúng thẻ đang mở hoạt động (isSleeping: false), đóng băng các thẻ còn lại để bảo vệ RAM
             const initializedTabs = savedTabs.map((t) => ({
               ...t,
               isSleeping: t.id !== targetId,
@@ -548,6 +572,56 @@ function BrowserMain() {
       }
       isRestoredRef.current = true;
     });
+
+    const { data: authSub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const u = session.user;
+        const meta = u.user_metadata || {};
+        const profile: UserProfile = {
+          isLoggedIn: true,
+          name: meta.full_name || meta.name || u.email?.split('@')[0] || 'Người dùng',
+          email: u.email || '',
+          avatarUrl: meta.avatar_url || meta.picture || '',
+        };
+        setUserProfile(profile);
+        userProfileRef.current = profile;
+        await AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
+        await upsertCloudProfile(u.id, profile);
+        // Cộng dồn vào @kite_saved_accounts
+        if (profile.email) {
+          const res = await AsyncStorage.getItem('@kite_saved_accounts');
+          let list: UserProfile[] = [];
+          if (res) {
+            try {
+              list = JSON.parse(res);
+            } catch (e) {}
+          }
+          if (!Array.isArray(list)) list = [];
+          const idx = list.findIndex(
+            (a) => a.email?.toLowerCase() === profile.email?.toLowerCase()
+          );
+          if (idx !== -1) {
+            list[idx] = profile;
+          } else {
+            list.push(profile);
+          }
+          await AsyncStorage.setItem('@kite_saved_accounts', JSON.stringify(list));
+        }
+      }
+    });
+
+    // Đảm bảo thư mục "Kite" được iOS kích hoạt và hiển thị trong ứng dụng Tệp (Files) dưới mục "Trên iPhone"
+    try {
+      const welcomeFile = new File(Paths.document, 'Kite_Downloads.txt');
+      if (!welcomeFile.exists) {
+        welcomeFile.create();
+        welcomeFile.write(
+          'Trình duyệt Kite - Thư mục lưu trữ tải xuống.\nTất cả tài liệu và hình ảnh bạn tải về từ Kite sẽ được lưu trữ tự động tại đây.'
+        );
+      }
+    } catch (e) {
+      console.log('Init Kite Documents directory error:', e);
+    }
 
     // Khôi phục cài đặt Chế độ tiết kiệm dữ liệu
     AsyncStorage.getItem(STORAGE_DATA_SAVER_KEY).then((savedMode) => {
@@ -735,6 +809,15 @@ function BrowserMain() {
     }, 2500);
   };
 
+  const getBookmarkStorageKey = () => {
+    const isSync = syncAllAccountsRef.current;
+    const activeEmail =
+      userProfileRef.current.isLoggedIn ? userProfileRef.current.email : undefined;
+    return !isSync && activeEmail
+      ? `@kite_user_bookmarks_${activeEmail.toLowerCase()}`
+      : STORAGE_BOOKMARKS_KEY;
+  };
+
   // Kiểm tra trạng thái dấu trang của URL hiện tại
   const checkBookmarkStatus = async (url?: string | null) => {
     if (!url) {
@@ -742,7 +825,8 @@ function BrowserMain() {
       return;
     }
     try {
-      const data = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
+      const bmKey = getBookmarkStorageKey();
+      const data = await AsyncStorage.getItem(bmKey);
       const list: BookmarkItem[] = data ? JSON.parse(data) : DEFAULT_BOOKMARKS;
       const found = list.some(
         (b) => b.url.trim().toLowerCase() === url.trim().toLowerCase()
@@ -757,7 +841,7 @@ function BrowserMain() {
     checkBookmarkStatus(activeUrl);
     setFindInPageVisible(false);
     setFindInPageStats({ total: 0, current: 0 });
-  }, [activeUrl, activeTabId]);
+  }, [activeUrl, activeTabId, userProfile.email, syncAllAccounts]);
 
   // Thêm hoặc gỡ Dấu trang cho trang hiện tại
   const handleToggleBookmarkCurrentPage = async (
@@ -771,7 +855,8 @@ function BrowserMain() {
     }
     const targetTitle = customTitle || currentTab?.title || targetUrl;
     try {
-      const data = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
+      const bmKey = getBookmarkStorageKey();
+      const data = await AsyncStorage.getItem(bmKey);
       let list: BookmarkItem[] = data ? JSON.parse(data) : DEFAULT_BOOKMARKS;
       const index = list.findIndex(
         (b) => b.url.trim().toLowerCase() === targetUrl.trim().toLowerCase()
@@ -792,7 +877,7 @@ function BrowserMain() {
         triggerHaptic('selection');
         showToast('Đã lưu vào dấu trang');
       }
-      await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(list));
+      await AsyncStorage.setItem(bmKey, JSON.stringify(list));
     } catch (e) {
       showToast('Lỗi khi lưu dấu trang');
     }
@@ -846,6 +931,121 @@ function BrowserMain() {
       setPinModalMode('setup');
     }
     setPinModalVisible(true);
+  };
+
+  // Bật/tắt đồng bộ toàn bộ tài khoản
+  const handleToggleSyncAccounts = async (val: boolean) => {
+    setSyncAllAccounts(val);
+    syncAllAccountsRef.current = val;
+    await AsyncStorage.setItem(STORAGE_SYNC_ACCOUNTS_KEY, JSON.stringify(val));
+    showToast(
+      val
+        ? 'Đã bật đồng bộ toàn bộ tài khoản'
+        : 'Đã tắt đồng bộ (Dữ liệu tài khoản riêng biệt)'
+    );
+  };
+
+  // Chuyển đổi tài khoản người dùng và quản lý bộ nhớ thẻ/lịch sử riêng biệt
+  const handleSwitchAccount = async (newProfile: UserProfile, previousProfile: UserProfile) => {
+    if (syncAllAccountsRef.current) {
+      setUserProfile(newProfile);
+      userProfileRef.current = newProfile;
+      await AsyncStorage.setItem('@kite_user_profile', JSON.stringify(newProfile));
+      return;
+    }
+
+    const prevEmail = previousProfile?.email?.toLowerCase();
+    const newEmail = newProfile?.email?.toLowerCase();
+
+    if (prevEmail === newEmail) {
+      setUserProfile(newProfile);
+      userProfileRef.current = newProfile;
+      await AsyncStorage.setItem('@kite_user_profile', JSON.stringify(newProfile));
+      return;
+    }
+
+    // 1. Lưu lại trạng thái tabs (gồm cả incognito tabs trong RAM) của tài khoản cũ
+    if (prevEmail) {
+      profileTabsRef.current[prevEmail] = {
+        tabs: [...tabs],
+        activeTabId,
+        isIncognito,
+      };
+      await persistTabsState(tabs, activeTabId, previousProfile.email);
+    }
+
+    // 2. Cập nhật user profile mới
+    setUserProfile(newProfile);
+    userProfileRef.current = newProfile;
+    if (newProfile.isLoggedIn && newProfile.email) {
+      await AsyncStorage.setItem('@kite_user_profile', JSON.stringify(newProfile));
+    } else {
+      await AsyncStorage.removeItem('@kite_user_profile');
+    }
+
+    // 3. Khôi phục tabs của tài khoản mới
+    if (newEmail && profileTabsRef.current[newEmail]) {
+      const cached = profileTabsRef.current[newEmail];
+      setTabs(cached.tabs);
+      setActiveTabId(cached.activeTabId);
+      setIsIncognito(cached.isIncognito);
+      const curTab = cached.tabs.find((t) => t.id === cached.activeTabId);
+      setInputUrl(curTab?.url || '');
+    } else if (newEmail) {
+      const newTabsKey = `@kite_persisted_tabs_state_${newEmail}`;
+      const newActiveIdKey = `@kite_active_tab_id_${newEmail}`;
+      try {
+        const [savedData, savedId] = await Promise.all([
+          AsyncStorage.getItem(newTabsKey),
+          AsyncStorage.getItem(newActiveIdKey),
+        ]);
+        if (savedData) {
+          const parsedTabs: BrowserTab[] = JSON.parse(savedData);
+          if (Array.isArray(parsedTabs) && parsedTabs.length > 0) {
+            const targetId =
+              savedId && parsedTabs.some((t) => t.id === savedId)
+                ? savedId
+                : parsedTabs[parsedTabs.length - 1].id;
+            const initialized = parsedTabs.map((t) => ({
+              ...t,
+              isSleeping: t.id !== targetId,
+            }));
+            setTabs(initialized);
+            setActiveTabId(targetId);
+            const curTab = initialized.find((t) => t.id === targetId);
+            setInputUrl(curTab?.url || '');
+            setIsIncognito(false);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // Nếu tài khoản mới chưa có tab nào: khởi tạo 1 tab mới mặc định
+      const defaultTab: BrowserTab = {
+        id: `tab-${Date.now()}`,
+        url: '',
+        title: 'Trang mới',
+        lastActiveAt: Date.now(),
+        isSleeping: false,
+      };
+      setTabs([defaultTab]);
+      setActiveTabId(defaultTab.id);
+      setInputUrl('');
+      setIsIncognito(false);
+    } else {
+      // Đăng xuất: đưa về 1 tab mới mặc định
+      const defaultTab: BrowserTab = {
+        id: `tab-${Date.now()}`,
+        url: '',
+        title: 'Trang mới',
+        lastActiveAt: Date.now(),
+        isSleeping: false,
+      };
+      setTabs([defaultTab]);
+      setActiveTabId(defaultTab.id);
+      setInputUrl('');
+      setIsIncognito(false);
+    }
   };
 
   // Bật/tắt chế độ Ẩn danh
@@ -1517,7 +1717,15 @@ function BrowserMain() {
     const targetTab = tabs.find((t) => t.id === (tabId || activeTabId)) || currentTab;
     if (!url || url.startsWith('about:') || isIncognito || targetTab?.isIncognito) return;
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_HISTORY_KEY);
+      const isSync = syncAllAccountsRef.current;
+      const activeEmail =
+        userProfileRef.current.isLoggedIn ? userProfileRef.current.email : undefined;
+      const historyKey =
+        !isSync && activeEmail
+          ? `@kite_browsing_history_${activeEmail.toLowerCase()}`
+          : STORAGE_HISTORY_KEY;
+
+      const stored = await AsyncStorage.getItem(historyKey);
       let list: HistoryItem[] = stored ? JSON.parse(stored) : [];
       if (list.length > 0 && list[0].url === url) return;
       const newItem: HistoryItem = {
@@ -1527,7 +1735,7 @@ function BrowserMain() {
         timestamp: Date.now(),
       };
       const updated = [newItem, ...list.filter((i) => i.url !== url).slice(0, 199)];
-      await AsyncStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(updated));
+      await AsyncStorage.setItem(historyKey, JSON.stringify(updated));
     } catch (e) {}
   };
 
@@ -2457,6 +2665,13 @@ function BrowserMain() {
             onToggleBookmark={() =>
               handleToggleBookmarkCurrentPage(inputUrl, currentTab?.title)
             }
+            userEmail={
+              syncAllAccounts
+                ? undefined
+                : userProfile.isLoggedIn
+                ? userProfile.email
+                : undefined
+            }
           />
         ) : (
           <>
@@ -2487,14 +2702,16 @@ function BrowserMain() {
                 userProfile={userProfile}
                 onUpdateProfile={(p) => {
                   setUserProfile(p);
+                  userProfileRef.current = p;
                   if (p.isLoggedIn && p.email) {
                     AsyncStorage.setItem('@kite_user_profile', JSON.stringify(p));
                   } else {
                     AsyncStorage.removeItem('@kite_user_profile');
-                    // Không xóa @kite_saved_accounts ở đây — handleLogout trong HomeDashboard
-                    // đã cộng dồn danh sách còn lại trước khi gọi onUpdateProfile
                   }
                 }}
+                syncAllAccounts={syncAllAccounts}
+                onToggleSyncAccounts={handleToggleSyncAccounts}
+                onSwitchAccount={handleSwitchAccount}
                 onShowToast={showToast}
                 onPullMove={handlePullMove}
                 onPullEnd={handlePullEnd}
@@ -2927,6 +3144,13 @@ function BrowserMain() {
         visible={historySheetVisible}
         onClose={() => setHistorySheetVisible(false)}
         onSelectUrl={handleNavigate}
+        userEmail={
+          syncAllAccounts
+            ? undefined
+            : userProfile.isLoggedIn
+            ? userProfile.email
+            : undefined
+        }
       />
 
       {/* Danh sách Dấu trang (Bookmark Sheet) */}
@@ -2936,6 +3160,13 @@ function BrowserMain() {
         onSelectUrl={handleNavigate}
         currentUrl={activeUrl}
         currentTitle={currentTab?.title}
+        userEmail={
+          syncAllAccounts
+            ? undefined
+            : userProfile.isLoggedIn
+            ? userProfile.email
+            : undefined
+        }
       />
 
       {/* Quản lý Dung lượng & Bộ nhớ đệm (Storage Manager Sheet) */}

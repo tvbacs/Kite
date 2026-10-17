@@ -14,6 +14,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   Dimensions,
+  Switch,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -68,6 +69,9 @@ interface HomeDashboardProps {
   onOpenStorageManager?: () => void;
   userProfile?: UserProfile;
   onUpdateProfile?: (profile: UserProfile) => void;
+  onSwitchAccount?: (newProfile: UserProfile, previousProfile: UserProfile) => void;
+  syncAllAccounts?: boolean;
+  onToggleSyncAccounts?: (val: boolean) => void;
   onShowToast?: (msg: string) => void;
   incognitoPin?: string | null;
   onOpenPinSettings?: () => void;
@@ -163,6 +167,7 @@ const STORAGE_BG_KEY = '@kite_bg_image';
 const STORAGE_USER_KEY = '@kite_user_profile';
 const STORAGE_SAVED_ACCOUNTS_KEY = '@kite_saved_accounts';
 const STORAGE_THEME_KEY = '@kite_theme_palette';
+export const STORAGE_SYNC_ACCOUNTS_KEY = '@kite_sync_all_accounts';
 
 export interface ThemePalette {
   id: string;
@@ -398,6 +403,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onOpenStorageManager,
   userProfile: propUserProfile,
   onUpdateProfile,
+  onSwitchAccount,
+  syncAllAccounts: propSyncAllAccounts,
+  onToggleSyncAccounts,
   onShowToast,
   incognitoPin,
   onOpenPinSettings,
@@ -425,6 +433,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     }
   );
   const [savedAccounts, setSavedAccounts] = useState<UserProfile[]>([]);
+
+  const [syncAllAccounts, setSyncAllAccounts] = useState<boolean>(propSyncAllAccounts ?? false);
+  const [accountMenuVisible, setAccountMenuVisible] = useState<boolean>(false);
+  const [isDeleteMode, setIsDeleteMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (propSyncAllAccounts !== undefined) {
+      setSyncAllAccounts(propSyncAllAccounts);
+    }
+  }, [propSyncAllAccounts]);
 
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [addModalVisible, setAddModalVisible] = useState<boolean>(false);
@@ -643,7 +661,172 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     return 'G';
   };
 
+  const getShortcutsKey = (email?: string) => {
+    return syncAllAccounts || !email
+      ? STORAGE_SHORTCUTS_KEY
+      : `${STORAGE_SHORTCUTS_KEY}_${email.toLowerCase()}`;
+  };
+  const getBgKey = (email?: string) => {
+    return syncAllAccounts || !email
+      ? STORAGE_BG_KEY
+      : `${STORAGE_BG_KEY}_${email.toLowerCase()}`;
+  };
+  const getThemeKey = (email?: string) => {
+    return syncAllAccounts || !email
+      ? STORAGE_THEME_KEY
+      : `${STORAGE_THEME_KEY}_${email.toLowerCase()}`;
+  };
+
+  const handleOpenGoogleAccount = () => {
+    setUserModalVisible(false);
+    setAccountMenuVisible(false);
+    onSelectUrl('https://myaccount.google.com');
+  };
+
+  const confirmDeleteAccount = (targetAccount: UserProfile) => {
+    Alert.alert(
+      'Xóa tài khoản khỏi thiết bị?',
+      `Bạn có chắc chắn muốn xóa tài khoản "${targetAccount.email}" khỏi thiết bị này không?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa tài khoản',
+          style: 'destructive',
+          onPress: () => executeDeleteAccount(targetAccount),
+        },
+      ]
+    );
+  };
+
+  const executeDeleteAccount = async (targetAccount: UserProfile) => {
+    try {
+      const emailToDelete = targetAccount.email?.toLowerCase();
+      const isDeletingActive = emailToDelete === userProfile.email?.toLowerCase();
+
+      // Cập nhật danh sách tài khoản lưu trên thiết bị
+      const updatedAccounts = savedAccounts.filter(
+        (a) => a.email?.toLowerCase() !== emailToDelete
+      );
+      setSavedAccounts(updatedAccounts);
+      await AsyncStorage.setItem(STORAGE_SAVED_ACCOUNTS_KEY, JSON.stringify(updatedAccounts));
+
+      // Dọn dẹp dữ liệu riêng của tài khoản bị xóa
+      if (emailToDelete) {
+        await Promise.all([
+          AsyncStorage.removeItem(`${STORAGE_SHORTCUTS_KEY}_${emailToDelete}`),
+          AsyncStorage.removeItem(`${STORAGE_BG_KEY}_${emailToDelete}`),
+          AsyncStorage.removeItem(`${STORAGE_THEME_KEY}_${emailToDelete}`),
+          AsyncStorage.removeItem(`@kite_persisted_tabs_state_${emailToDelete}`),
+          AsyncStorage.removeItem(`@kite_active_tab_id_${emailToDelete}`),
+          AsyncStorage.removeItem(`@kite_browsing_history_${emailToDelete}`),
+          AsyncStorage.removeItem(`@kite_user_bookmarks_${emailToDelete}`),
+        ]);
+      }
+
+      if (isDeletingActive) {
+        if (updatedAccounts.length > 0) {
+          const nextAcc = updatedAccounts[0];
+          const nextUser: UserProfile = {
+            isLoggedIn: true,
+            name: nextAcc.name,
+            email: nextAcc.email,
+            avatarUrl: nextAcc.avatarUrl || '',
+          };
+          setUserProfile(nextUser);
+          await AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(nextUser));
+          if (onSwitchAccount) {
+            onSwitchAccount(nextUser, userProfile);
+          } else if (onUpdateProfile) {
+            onUpdateProfile(nextUser);
+          }
+          if (onShowToast) onShowToast(`Đã chuyển sang: ${nextAcc.name || nextAcc.email}`);
+        } else {
+          const loggedOutUser: UserProfile = {
+            isLoggedIn: false,
+            name: '',
+            email: '',
+            avatarUrl: '',
+          };
+          setUserProfile(loggedOutUser);
+          await AsyncStorage.removeItem(STORAGE_USER_KEY);
+          if (onSwitchAccount) {
+            onSwitchAccount(loggedOutUser, userProfile);
+          } else if (onUpdateProfile) {
+            onUpdateProfile(loggedOutUser);
+          }
+          setUserModalVisible(false);
+          setIsDeleteMode(false);
+          if (onShowToast) onShowToast('Đã xóa tài khoản và đăng xuất');
+        }
+      } else {
+        if (onShowToast) onShowToast(`Đã xóa tài khoản: ${targetAccount.name || targetAccount.email}`);
+      }
+    } catch (e) {
+      if (onShowToast) onShowToast('Lỗi khi xóa tài khoản');
+    }
+  };
+
+  const handleToggleSync = async (val: boolean) => {
+    setSyncAllAccounts(val);
+    await AsyncStorage.setItem(STORAGE_SYNC_ACCOUNTS_KEY, JSON.stringify(val));
+    if (onToggleSyncAccounts) {
+      onToggleSyncAccounts(val);
+    }
+    if (onShowToast) {
+      onShowToast(
+        val
+          ? 'Đã bật: Các tài khoản sẽ dùng chung dữ liệu tab & lối tắt'
+          : 'Đã tắt: Mỗi tài khoản sẽ có dữ liệu tab & lối tắt riêng biệt'
+      );
+    }
+  };
+
   const handleSelectAccount = async (acc: UserProfile) => {
+    if (acc.email?.toLowerCase() === userProfile.email?.toLowerCase()) {
+      setUserModalVisible(false);
+      setIsDeleteMode(false);
+      return;
+    }
+
+    // Nếu không bật đồng bộ toàn bộ tài khoản: Lưu lại lối tắt & hình nền của tài khoản cũ
+    if (!syncAllAccounts && userProfile.email) {
+      const prevEmail = userProfile.email.toLowerCase();
+      await Promise.all([
+        AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${prevEmail}`, JSON.stringify(shortcuts)),
+        bgImage
+          ? AsyncStorage.setItem(`${STORAGE_BG_KEY}_${prevEmail}`, bgImage)
+          : AsyncStorage.removeItem(`${STORAGE_BG_KEY}_${prevEmail}`),
+        currentThemeId
+          ? AsyncStorage.setItem(`${STORAGE_THEME_KEY}_${prevEmail}`, currentThemeId)
+          : AsyncStorage.removeItem(`${STORAGE_THEME_KEY}_${prevEmail}`),
+      ]);
+    }
+
+    // Tải lối tắt & hình nền của tài khoản mới
+    if (!syncAllAccounts && acc.email) {
+      const newEmail = acc.email.toLowerCase();
+      const [accShortcuts, accBg, accTheme] = await Promise.all([
+        AsyncStorage.getItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`),
+        AsyncStorage.getItem(`${STORAGE_BG_KEY}_${newEmail}`),
+        AsyncStorage.getItem(`${STORAGE_THEME_KEY}_${newEmail}`),
+      ]);
+
+      if (accShortcuts) {
+        try {
+          setShortcuts(JSON.parse(accShortcuts));
+        } catch {}
+      } else {
+        setShortcuts(DEFAULT_BOOKMARKS);
+        AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(DEFAULT_BOOKMARKS));
+      }
+      setBgImage(accBg || null);
+      if (accTheme && THEME_PALETTES[accTheme]) {
+        setCurrentThemeId(accTheme);
+      } else {
+        setCurrentThemeId('sand');
+      }
+    }
+
     const updated: UserProfile = {
       isLoggedIn: true,
       name: acc.name,
@@ -651,10 +834,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       avatarUrl: acc.avatarUrl || '',
     };
     setUserProfile(updated);
-    if (onUpdateProfile) onUpdateProfile(updated);
     await AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(updated));
 
+    if (onSwitchAccount) {
+      onSwitchAccount(updated, userProfile);
+    } else if (onUpdateProfile) {
+      onUpdateProfile(updated);
+    }
+
     setUserModalVisible(false);
+    setIsDeleteMode(false);
     if (onShowToast) {
       onShowToast(`Đã chuyển sang: ${acc.name || acc.email}`);
     }
@@ -662,11 +851,22 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   const loadSavedData = async () => {
     try {
+      const [savedSyncStr] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_SYNC_ACCOUNTS_KEY),
+      ]);
+      const isSyncOn = savedSyncStr !== null ? JSON.parse(savedSyncStr) : false;
+      setSyncAllAccounts(isSyncOn);
+
+      const activeEmail = (propUserProfile?.email || userProfile.email)?.toLowerCase();
+      const shortcutsKey = isSyncOn || !activeEmail ? STORAGE_SHORTCUTS_KEY : `${STORAGE_SHORTCUTS_KEY}_${activeEmail}`;
+      const bgKey = isSyncOn || !activeEmail ? STORAGE_BG_KEY : `${STORAGE_BG_KEY}_${activeEmail}`;
+      const themeKey = isSyncOn || !activeEmail ? STORAGE_THEME_KEY : `${STORAGE_THEME_KEY}_${activeEmail}`;
+
       const [savedShortcuts, savedBg, savedTheme, savedAccountsStr, savedUser] =
         await Promise.all([
-          AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY),
-          AsyncStorage.getItem(STORAGE_BG_KEY),
-          AsyncStorage.getItem(STORAGE_THEME_KEY),
+          AsyncStorage.getItem(shortcutsKey),
+          AsyncStorage.getItem(bgKey),
+          AsyncStorage.getItem(themeKey),
           AsyncStorage.getItem(STORAGE_SAVED_ACCOUNTS_KEY),
           AsyncStorage.getItem(STORAGE_USER_KEY),
         ]);
@@ -755,7 +955,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const saveShortcuts = async (newList: Bookmark[]) => {
     setShortcuts(newList);
     try {
-      await AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(newList));
+      const email = userProfile.email?.toLowerCase();
+      const key = syncAllAccounts || !email ? STORAGE_SHORTCUTS_KEY : `${STORAGE_SHORTCUTS_KEY}_${email}`;
+      await AsyncStorage.setItem(key, JSON.stringify(newList));
     } catch (e) {
       console.log('Error saving shortcuts:', e);
     }
@@ -781,7 +983,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           ? `data:image/jpeg;base64,${asset.base64}`
           : asset.uri;
         setBgImage(persistentUri);
-        await AsyncStorage.setItem(STORAGE_BG_KEY, persistentUri);
+        const email = userProfile.email?.toLowerCase();
+        const key = syncAllAccounts || !email ? STORAGE_BG_KEY : `${STORAGE_BG_KEY}_${email}`;
+        await AsyncStorage.setItem(key, persistentUri);
       }
     } catch (e) {
       Alert.alert('Lỗi', 'Không thể chọn ảnh làm hình nền.');
@@ -790,7 +994,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   const handleResetBg = async () => {
     setBgImage(null);
-    await AsyncStorage.removeItem(STORAGE_BG_KEY);
+    const email = userProfile.email?.toLowerCase();
+    const key = syncAllAccounts || !email ? STORAGE_BG_KEY : `${STORAGE_BG_KEY}_${email}`;
+    await AsyncStorage.removeItem(key);
   };
 
   const touchStartY = useRef(0);
@@ -937,7 +1143,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   const handleSelectTheme = async (themeId: string) => {
     setCurrentThemeId(themeId);
-    await AsyncStorage.setItem(STORAGE_THEME_KEY, themeId);
+    const email = userProfile.email?.toLowerCase();
+    const key = syncAllAccounts || !email ? STORAGE_THEME_KEY : `${STORAGE_THEME_KEY}_${email}`;
+    await AsyncStorage.setItem(key, themeId);
     if (onShowToast) {
       onShowToast(`Đã áp dụng chủ đề: ${THEME_PALETTES[themeId]?.name || themeId}`);
     }
@@ -1908,28 +2116,44 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           >
             {/* Top Bar: Button ... bên trái và Button X bên phải chuẩn phong cách Chrome */}
             <View style={styles.accountSheetTopBar}>
-              <TouchableOpacity
-                style={styles.sheetCircleBtn}
-                activeOpacity={0.7}
-                onPress={() => {
-                  Alert.alert(
-                    'Tài khoản Google',
-                    userProfile.isLoggedIn
-                      ? `Đang đăng nhập: ${userProfile.name || userProfile.email}\nEmail: ${userProfile.email}`
-                      : 'Chưa đăng nhập tài khoản Google'
-                  );
-                }}
-              >
-                <Feather name="more-horizontal" size={18} color="#000000" />
-              </TouchableOpacity>
+              {isDeleteMode ? (
+                <>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Feather name="trash-2" size={16} color="#ef4444" style={{ marginRight: 6 }} />
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#ef4444' }}>
+                      Chế độ xóa tài khoản
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.doneDeleteBtn}
+                    onPress={() => setIsDeleteMode(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.doneDeleteText}>Xong</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={styles.sheetCircleBtn}
+                    activeOpacity={0.7}
+                    onPress={() => setAccountMenuVisible(true)}
+                  >
+                    <Feather name="more-horizontal" size={18} color="#000000" />
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.sheetCircleBtn}
-                onPress={() => setUserModalVisible(false)}
-                activeOpacity={0.7}
-              >
-                <Feather name="x" size={18} color="#000000" />
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.sheetCircleBtn}
+                    onPress={() => {
+                      setUserModalVisible(false);
+                      setIsDeleteMode(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="x" size={18} color="#000000" />
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
 
             {/* Tài khoản đang kích hoạt ở trên cùng */}
@@ -1974,6 +2198,18 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   ? userProfile.email
                   : 'Đăng nhập để đồng bộ lịch sử duyệt web và lối tắt'}
               </Text>
+
+              {/* Nút xóa tài khoản chính khi đang ở chế độ xóa */}
+              {isDeleteMode && userProfile.isLoggedIn && (
+                <TouchableOpacity
+                  style={styles.deleteMainAccountRow}
+                  onPress={() => confirmDeleteAccount(userProfile)}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="trash-2" size={14} color="#ef4444" style={{ marginRight: 6 }} />
+                  <Text style={styles.deleteMainAccountText}>Xóa tài khoản chính này khỏi máy</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Khung màu trắng bo tròn chứa danh sách tài khoản khác & nút thêm tài khoản */}
@@ -1993,7 +2229,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       <View key={acc.email || `acc-${index}`}>
                         <TouchableOpacity
                           style={styles.accountRowItem}
-                          onPress={() => handleSelectAccount(acc)}
+                          onPress={() => {
+                            if (isDeleteMode) {
+                              confirmDeleteAccount(acc);
+                            } else {
+                              handleSelectAccount(acc);
+                            }
+                          }}
                           activeOpacity={0.65}
                         >
                           <View style={styles.accountRowAvatarBox}>
@@ -2026,13 +2268,26 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                             </Text>
                           </View>
 
-                          {isEdu && (
-                            <Feather
-                              name="briefcase"
-                              size={16}
-                              color="#8e8e93"
-                              style={{ marginLeft: 8 }}
-                            />
+                          {isDeleteMode ? (
+                            <TouchableOpacity
+                              style={styles.deleteRowBtn}
+                              onPress={() => confirmDeleteAccount(acc)}
+                              activeOpacity={0.6}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <View style={styles.deleteIconCircle}>
+                                <Feather name="trash-2" size={15} color="#ef4444" />
+                              </View>
+                            </TouchableOpacity>
+                          ) : (
+                            isEdu && (
+                              <Feather
+                                name="briefcase"
+                                size={16}
+                                color="#8e8e93"
+                                style={{ marginLeft: 8 }}
+                              />
+                            )
                           )}
                         </TouchableOpacity>
 
@@ -2052,6 +2307,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 style={styles.addAccountRow}
                 onPress={async () => {
                   setUserModalVisible(false);
+                  setIsDeleteMode(false);
                   try {
                     const oauthUrl = await getGoogleOAuthUrl();
                     if (oauthUrl) {
@@ -2074,6 +2330,39 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               </TouchableOpacity>
             </View>
 
+            {/* THẺ TÙY CHỌN ĐỒNG BỘ DỮ LIỆU TÀI KHOẢN */}
+            <View style={styles.syncOptionCard}>
+              <View style={styles.syncOptionLeft}>
+                <View
+                  style={[
+                    styles.syncIconBox,
+                    syncAllAccounts && { backgroundColor: '#e8f0fe' },
+                  ]}
+                >
+                  <Feather
+                    name={syncAllAccounts ? 'refresh-cw' : 'hard-drive'}
+                    size={17}
+                    color={syncAllAccounts ? '#007aff' : '#71717a'}
+                  />
+                </View>
+                <View style={styles.syncTextCol}>
+                  <Text style={styles.syncOptionTitle}>Đồng bộ toàn bộ tài khoản</Text>
+                  <Text style={styles.syncOptionSub}>
+                    {syncAllAccounts
+                      ? 'Bật: Dùng chung thẻ duyệt web, lối tắt & lịch sử giữa các tài khoản'
+                      : 'Tắt: Mỗi tài khoản có bộ thẻ duyệt web, lối tắt & dữ liệu riêng biệt'}
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={syncAllAccounts}
+                onValueChange={handleToggleSync}
+                trackColor={{ false: '#e4e4e7', true: '#007aff' }}
+                ios_backgroundColor="#e4e4e7"
+                thumbColor="#ffffff"
+              />
+            </View>
+
             {/* Nút Đăng xuất ở thẻ riêng bên dưới nếu đã đăng nhập */}
             {userProfile.isLoggedIn && (
               <TouchableOpacity
@@ -2086,6 +2375,87 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 </Text>
               </TouchableOpacity>
             )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL 3 CHẤM: TÙY CHỌN QUẢN LÝ & XÓA TÀI KHOẢN */}
+      <Modal
+        visible={accountMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAccountMenuVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.actionMenuBackdrop}
+          activeOpacity={1}
+          onPress={() => setAccountMenuVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.actionMenuCard}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.actionMenuHeader}>
+              <Text style={styles.actionMenuTitle}>Tùy chọn tài khoản</Text>
+              <Text style={styles.actionMenuSubTitle} numberOfLines={1}>
+                {userProfile.email || 'Quản lý tài khoản Google'}
+              </Text>
+            </View>
+
+            {/* Option 1: Quản lý Tài khoản Google */}
+            <TouchableOpacity
+              style={styles.actionMenuItem}
+              onPress={handleOpenGoogleAccount}
+              activeOpacity={0.65}
+            >
+              <View style={[styles.actionMenuIconWrap, { backgroundColor: '#e8f0fe' }]}>
+                <Feather name="external-link" size={17} color="#007aff" />
+              </View>
+              <View style={styles.actionMenuTextCol}>
+                <Text style={styles.actionMenuItemTitle}>Quản lý Tài khoản Google của bạn</Text>
+                <Text style={styles.actionMenuItemSub}>
+                  Mở myaccount.google.com để chỉnh sửa thông tin bảo mật
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={17} color="#c7c7cc" />
+            </TouchableOpacity>
+
+            <View style={styles.actionMenuDivider} />
+
+            {/* Option 2: Xóa tài khoản khỏi thiết bị */}
+            <TouchableOpacity
+              style={styles.actionMenuItem}
+              onPress={() => {
+                setAccountMenuVisible(false);
+                setIsDeleteMode(true);
+              }}
+              activeOpacity={0.65}
+            >
+              <View style={[styles.actionMenuIconWrap, { backgroundColor: '#fee2e2' }]}>
+                <Feather name="trash-2" size={17} color="#ef4444" />
+              </View>
+              <View style={styles.actionMenuTextCol}>
+                <Text style={[styles.actionMenuItemTitle, { color: '#ef4444' }]}>
+                  Xóa tài khoản khỏi thiết bị này
+                </Text>
+                <Text style={styles.actionMenuItemSub}>
+                  Chọn bất kỳ tài khoản nào để gỡ bỏ khỏi Kite
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={17} color="#c7c7cc" />
+            </TouchableOpacity>
+
+            <View style={styles.actionMenuDivider} />
+
+            {/* Nút Đóng */}
+            <TouchableOpacity
+              style={styles.actionMenuCancelBtn}
+              onPress={() => setAccountMenuVisible(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.actionMenuCancelText}>Đóng</Text>
+            </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -2865,6 +3235,158 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#007aff',
+  },
+  doneDeleteBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: '#fee2e2',
+  },
+  doneDeleteText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ef4444',
+  },
+  deleteMainAccountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#fee2e2',
+  },
+  deleteMainAccountText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#ef4444',
+  },
+  deleteRowBtn: {
+    padding: 4,
+  },
+  deleteIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#fee2e2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  syncOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  syncOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  syncIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f4f4f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  syncTextCol: {
+    flex: 1,
+  },
+  syncOptionTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#09090b',
+    marginBottom: 2,
+  },
+  syncOptionSub: {
+    fontSize: 11.5,
+    color: '#71717a',
+    lineHeight: 15,
+  },
+  actionMenuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  actionMenuCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  actionMenuHeader: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+  actionMenuTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#18181b',
+    marginBottom: 2,
+  },
+  actionMenuSubTitle: {
+    fontSize: 12.5,
+    color: '#71717a',
+  },
+  actionMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  actionMenuIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  actionMenuTextCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  actionMenuItemTitle: {
+    fontSize: 14.5,
+    fontWeight: '600',
+    color: '#18181b',
+    marginBottom: 2,
+  },
+  actionMenuItemSub: {
+    fontSize: 11.5,
+    color: '#71717a',
+    lineHeight: 15,
+  },
+  actionMenuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#f4f4f5',
+    marginVertical: 4,
+  },
+  actionMenuCancelBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionMenuCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#71717a',
   },
 
   // LOGIN SHEET STYLES
