@@ -147,25 +147,6 @@ export const BottomBar: React.FC<BottomBarProps> = ({
             : placeholder || 'Tìm hoặc nhập tên trang web...'}
         </Text>
 
-        {/* Nút Chế độ đọc báo (Reader Mode) khi đang xem web */}
-        {isBrowsing && onToggleReaderMode && (
-          <TouchableOpacity
-            style={styles.pillActionBtn}
-            onPress={(e) => {
-              e.stopPropagation();
-              onToggleReaderMode();
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-            activeOpacity={0.7}
-          >
-            <Feather
-              name="book-open"
-              size={16}
-              color={isReaderMode ? '#007aff' : subIconColor}
-            />
-          </TouchableOpacity>
-        )}
-
         {/* Nút lưu Dấu trang (Bookmark) khi đang xem web */}
         {isBrowsing && onToggleBookmark && (
           <TouchableOpacity
@@ -180,7 +161,7 @@ export const BottomBar: React.FC<BottomBarProps> = ({
             <Feather
               name="bookmark"
               size={17}
-              color={isBookmarked ? '#007aff' : subIconColor}
+              color={isBookmarked ? '#18181b' : subIconColor}
             />
           </TouchableOpacity>
         )}

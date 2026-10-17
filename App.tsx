@@ -2397,8 +2397,6 @@ function BrowserMain() {
             handleToggleBookmarkCurrentPage(activeUrl, currentTab?.title)
           }
           isIncognito={isCurrentIncognito}
-          isReaderMode={!!currentTab?.isReaderMode}
-          onToggleReaderMode={handleToggleReaderMode}
         />
       )}
 
