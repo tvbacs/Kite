@@ -32,6 +32,13 @@ import { DownloadSheet, STORAGE_DOWNLOADS_KEY, DownloadedItem } from './src/comp
 import { PasswordManagerSheet } from './src/components/PasswordManagerSheet';
 import { BrowserMenuSheet } from './src/components/BrowserMenuSheet';
 import {
+  ExtensionSheet,
+  STORAGE_EXTENSIONS_KEY,
+  ExtensionItem,
+  DEFAULT_EXTENSIONS,
+  isUrlMatchingPattern,
+} from './src/components/ExtensionSheet';
+import {
   BLOCKED_DOMAINS,
   BLOCKED_GAMBLING_KEYWORDS,
   COMMERCE_REDIRECT_DOMAINS,
@@ -191,8 +198,33 @@ function BrowserMain() {
   const [bookmarkSheetVisible, setBookmarkSheetVisible] = useState<boolean>(false);
   const [downloadSheetVisible, setDownloadSheetVisible] = useState<boolean>(false);
   const [passwordManagerVisible, setPasswordManagerVisible] = useState<boolean>(false);
+  const [extensionSheetVisible, setExtensionSheetVisible] = useState<boolean>(false);
+  const [extensions, setExtensions] = useState<ExtensionItem[]>(DEFAULT_EXTENSIONS);
   const [browserMenuVisible, setBrowserMenuVisible] = useState<boolean>(false);
   const [isCurrentBookmarked, setIsCurrentBookmarked] = useState<boolean>(false);
+
+  // Sinh mã script tiện ích mở rộng phù hợp với URL của tab
+  const getExtensionsScriptForTab = (
+    tabUrl?: string | null,
+    timing: 'document_start' | 'document_end' = 'document_end'
+  ) => {
+    if (!tabUrl || !extensions || extensions.length === 0) return '';
+    const matching = extensions.filter(
+      (e) => e.enabled && e.runAt === timing && isUrlMatchingPattern(tabUrl, e.matchUrl)
+    );
+    if (matching.length === 0) return '';
+    return (
+      '\n/* Kite User Extensions (' +
+      timing +
+      ') */\n' +
+      matching
+        .map(
+          (e) =>
+            `try { /* Extension: ${e.name} */\n${e.code}\n } catch(err) { console.warn("Extension [${e.name}] error:", err); }`
+        )
+        .join('\n')
+    );
+  };
 
   // Cập nhật trạng thái giữ sáng màn hình (Wake Lock)
   const updateWakeLock = (isKeepAwakeActive?: boolean, isVideoPlaying?: boolean) => {
@@ -354,6 +386,17 @@ function BrowserMain() {
     AsyncStorage.getItem(STORAGE_PIN_KEY).then((pin) => {
       if (pin) {
         setIncognitoPin(pin);
+      }
+    });
+
+    AsyncStorage.getItem(STORAGE_EXTENSIONS_KEY).then((res) => {
+      if (res) {
+        try {
+          const parsed = JSON.parse(res);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setExtensions(parsed);
+          }
+        } catch (e) {}
       }
     });
 
@@ -1943,6 +1986,7 @@ function BrowserMain() {
                 onOpenHistory={() => setHistorySheetVisible(true)}
                 onOpenDownloads={() => setDownloadSheetVisible(true)}
                 onOpenPasswordManager={() => setPasswordManagerVisible(true)}
+                onOpenExtensions={() => setExtensionSheetVisible(true)}
                 onOpenTabs={handleOpenTabSheet}
                 incognitoPin={incognitoPin}
                 onOpenPinSettings={handleOpenPinSettings}
@@ -1997,10 +2041,14 @@ function BrowserMain() {
                     incognito={tab.isIncognito || isIncognito}
                     mediaCapturePermissionGrantType="grant"
                     injectedJavaScriptBeforeContentLoaded={
-                      stats.isShieldActive ? INJECTED_BEFORE_CONTENT : undefined
+                      ((stats.isShieldActive ? INJECTED_BEFORE_CONTENT : '') +
+                        getExtensionsScriptForTab(tab.url, 'document_start')) ||
+                      undefined
                     }
                     injectedJavaScript={
-                      stats.isShieldActive ? INJECTED_AFTER_CONTENT : undefined
+                      ((stats.isShieldActive ? INJECTED_AFTER_CONTENT : '') +
+                        getExtensionsScriptForTab(tab.url, 'document_end')) ||
+                      undefined
                     }
                     onMessage={handleMessage}
                     onShouldStartLoadWithRequest={handleShouldStartLoad}
@@ -2028,6 +2076,11 @@ function BrowserMain() {
                         if (stats.isDataSaverActive) {
                           const mode = stats.dataSaverMode || 'block_images';
                           webViewRefs.current[tab.id]?.injectJavaScript(getDataSaverScript(mode));
+                        }
+                        // Chạy các tiện ích mở rộng người dùng đã bật (User Extensions)
+                        const extScript = getExtensionsScriptForTab(tab.url, 'document_end');
+                        if (extScript) {
+                          webViewRefs.current[tab.id]?.injectJavaScript(extScript);
                         }
                         // Khôi phục chính xác vị trí cuộn & dữ liệu biểu mẫu khi tab được đánh thức
                         if (tab.frozenState) {
@@ -2249,11 +2302,20 @@ function BrowserMain() {
         onOpenSearchScreenLens={handleSearchScreenWithLens}
         onOpenDownloads={() => setDownloadSheetVisible(true)}
         onOpenPasswordManager={() => setPasswordManagerVisible(true)}
+        onOpenExtensions={() => setExtensionSheetVisible(true)}
         onOpenBookmarks={() => setBookmarkSheetVisible(true)}
         onOpenHistory={() => setHistorySheetVisible(true)}
         onNewTab={() => handleNewTab(isIncognito)}
         onNewIncognitoTab={() => handleNewTab(true)}
         onOpenShield={() => setShieldSheetVisible(true)}
+      />
+
+      {/* Quản lý Tiện ích mở rộng (Extension Sheet) */}
+      <ExtensionSheet
+        visible={extensionSheetVisible}
+        onClose={() => setExtensionSheetVisible(false)}
+        onShowToast={showToast}
+        onExtensionsUpdated={(updated) => setExtensions(updated)}
       />
 
       {/* Khóa mã PIN bảo mật cho Thẻ ẩn danh */}

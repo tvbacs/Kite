@@ -25,6 +25,7 @@ interface BrowserMenuSheetProps {
   onOpenSearchScreenLens: () => void;
   onOpenDownloads: () => void;
   onOpenPasswordManager: () => void;
+  onOpenExtensions: () => void;
   onOpenBookmarks: () => void;
   onOpenHistory: () => void;
   onNewTab: () => void;
@@ -45,6 +46,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onOpenSearchScreenLens,
   onOpenDownloads,
   onOpenPasswordManager,
+  onOpenExtensions,
   onOpenBookmarks,
   onOpenHistory,
   onNewTab,
@@ -251,9 +253,28 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               <Feather name="chevron-right" size={18} color="#a1a1aa" />
             </TouchableOpacity>
 
+            {/* 4. TIỆN ÍCH MỞ RỘNG (EXTENSIONS) */}
+            <TouchableOpacity
+              style={styles.menuRow}
+              onPress={() => {
+                onClose();
+                onOpenExtensions();
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.menuIconCircle, { backgroundColor: '#f5f3ff' }]}>
+                <Feather name="box" size={18} color="#7c3aed" />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <Text style={styles.menuTitle}>Tiện ích mở rộng (Extensions)</Text>
+                <Text style={styles.menuSubtitle}>Nhập script .js, chặn quảng cáo & tùy biến web</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color="#a1a1aa" />
+            </TouchableOpacity>
+
             <View style={styles.divider} />
 
-            {/* 4. DẤU TRANG */}
+            {/* 5. DẤU TRANG */}
             <TouchableOpacity
               style={styles.menuRow}
               onPress={() => {

@@ -62,6 +62,7 @@ interface HomeDashboardProps {
   onOpenHistory?: () => void;
   onOpenDownloads?: () => void;
   onOpenPasswordManager?: () => void;
+  onOpenExtensions?: () => void;
   onOpenTabs?: () => void;
   userProfile?: UserProfile;
   onUpdateProfile?: (profile: UserProfile) => void;
@@ -390,6 +391,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onOpenHistory,
   onOpenDownloads,
   onOpenPasswordManager,
+  onOpenExtensions,
   onOpenTabs,
   userProfile: propUserProfile,
   onUpdateProfile,
@@ -1775,6 +1777,29 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       </View>
                       <View style={styles.rightCircleBtn}>
                         <Feather name="key" size={18} color="#000000" />
+                      </View>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {/* 5. Tiện ích mở rộng (Extensions) */}
+                {onOpenExtensions && (
+                  <>
+                    <View style={styles.horizontalDivider} />
+                    <TouchableOpacity
+                      style={styles.groupedOptionRow}
+                      onPress={() => {
+                        setEngineModalVisible(false);
+                        onOpenExtensions();
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bgOptionTitle}>Tiện ích mở rộng (Extensions)</Text>
+                        <Text style={styles.bgOptionSub}>Nhập script .js, tùy biến & can thiệp web</Text>
+                      </View>
+                      <View style={styles.rightCircleBtn}>
+                        <Feather name="box" size={18} color="#000000" />
                       </View>
                     </TouchableOpacity>
                   </>
