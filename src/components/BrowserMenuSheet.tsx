@@ -49,6 +49,9 @@ interface BrowserMenuSheetProps {
   isIncognito?: boolean;
   detectedMediaCount?: number;
   onOpenVideoDownload?: () => void;
+  onOpenRegionSheet?: () => void;
+  currentRegionText?: string;
+  isRegionActive?: boolean;
 }
 
 export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
@@ -84,6 +87,9 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onToggleDataSaver,
   detectedMediaCount,
   onOpenVideoDownload,
+  onOpenRegionSheet,
+  currentRegionText,
+  isRegionActive,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
@@ -425,11 +431,50 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.menuTitle}>Khiên Kite Shield & Chặn quảng cáo</Text>
+                <Text style={styles.menuTitle}>Kite Shield & Chặn quảng cáo</Text>
                 <Feather name="shield" size={20} color="#27272a" />
               </TouchableOpacity>
 
               <View style={styles.horizontalDivider} />
+
+              {/* 11. CHUYỂN VÙNG (PROXY / VPN) */}
+              {onOpenRegionSheet && (
+                <>
+                  <TouchableOpacity
+                    style={styles.menuRow}
+                    onPress={() => {
+                      onClose();
+                      onOpenRegionSheet();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 12 }}>
+                      <Text style={[styles.menuTitle, { flex: 0 }]}>Chuyển vùng & Proxy</Text>
+                      {isRegionActive && (
+                        <View
+                          style={{
+                            backgroundColor: '#eff6ff',
+                            paddingHorizontal: 7,
+                            paddingVertical: 2,
+                            borderRadius: 8,
+                          }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#007aff' }}>
+                            {currentRegionText || 'BẬT'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Feather
+                      name="globe"
+                      size={20}
+                      color={isRegionActive ? '#007aff' : '#27272a'}
+                    />
+                  </TouchableOpacity>
+
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
 
               {/* 11. BỘ NHỚ & BỘ NHỚ ĐỆM */}
               {onOpenStorageManager && (
@@ -461,9 +506,15 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 <Text style={styles.menuTitle}>Công cụ tìm kiếm</Text>
                 <View style={styles.engineRightGroup}>
                   <View style={styles.engineBadge}>
-                    <Text style={styles.engineBadgeText}>
-                      {SEARCH_ENGINES[currentEngineId]?.name || 'Google'}
-                    </Text>
+                    <Image
+                      source={{
+                        uri:
+                          SEARCH_ENGINES[currentEngineId]?.logoUrl ||
+                          SEARCH_ENGINES.google.logoUrl,
+                      }}
+                      style={styles.engineBadgeLogo}
+                      resizeMode="contain"
+                    />
                   </View>
                   <Feather name="compass" size={20} color="#27272a" />
                 </View>
@@ -685,17 +736,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   engineBadge: {
-    backgroundColor: '#f4f4f5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: '#e4e4e7',
+    minWidth: 46,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  engineBadgeText: {
-    color: '#18181b',
-    fontSize: 11,
-    fontWeight: '600',
+  engineBadgeLogo: {
+    width: 44,
+    height: 16,
   },
   engineBackdrop: {
     flex: 1,

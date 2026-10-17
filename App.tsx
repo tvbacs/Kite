@@ -40,6 +40,16 @@ import { PasswordManagerSheet, saveCredentialSecurely } from './src/components/P
 import { PasswordSavePromptModal } from './src/components/PasswordSavePromptModal';
 import { BrowserMenuSheet } from './src/components/BrowserMenuSheet';
 import { StorageManagerSheet } from './src/components/StorageManagerSheet';
+import { RegionSheet } from './src/components/RegionSheet';
+import {
+  RegionSettings,
+  DEFAULT_REGION_SETTINGS,
+  loadRegionSettings,
+  saveRegionSettings,
+  getRegionInjectedScript,
+  wrapUrlWithProxyGateway,
+  getActiveRegionNode,
+} from './src/services/regionService';
 import { FindInPageBar } from './src/components/FindInPageBar';
 import {
   getFindInPageSearchScript,
@@ -360,6 +370,8 @@ function BrowserMain() {
   const [storageManagerVisible, setStorageManagerVisible] = useState<boolean>(false);
   const [extensionSheetVisible, setExtensionSheetVisible] = useState<boolean>(false);
   const [extensions, setExtensions] = useState<ExtensionItem[]>(DEFAULT_EXTENSIONS);
+  const [regionSettings, setRegionSettings] = useState<RegionSettings>(DEFAULT_REGION_SETTINGS);
+  const [regionSheetVisible, setRegionSheetVisible] = useState<boolean>(false);
   const [browserMenuVisible, setBrowserMenuVisible] = useState<boolean>(false);
   const [isCurrentBookmarked, setIsCurrentBookmarked] = useState<boolean>(false);
   const [downloadPrompt, setDownloadPrompt] = useState<{
@@ -573,6 +585,12 @@ function BrowserMain() {
             setExtensions(parsed);
           }
         } catch (e) {}
+      }
+    });
+
+    loadRegionSettings().then((saved) => {
+      if (saved) {
+        setRegionSettings(saved);
       }
     });
 
@@ -1234,6 +1252,10 @@ function BrowserMain() {
       } else {
         finalUrl = `${engine.searchUrl}${encodeURIComponent(finalUrl)}`;
       }
+    }
+
+    if (regionSettings.enabled && regionSettings.useProxyGateway) {
+      finalUrl = wrapUrlWithProxyGateway(finalUrl, regionSettings);
     }
 
     setIsLoading(true);
@@ -3116,6 +3138,7 @@ function BrowserMain() {
                     injectedJavaScriptForMainFrameOnly={false}
                     injectedJavaScriptBeforeContentLoaded={
                       ((stats.isShieldActive ? INJECTED_BEFORE_CONTENT : '') +
+                        getRegionInjectedScript(regionSettings) +
                         getExtensionsScriptForTab(tab.url, 'document_start')) ||
                       undefined
                     }
@@ -3501,36 +3524,35 @@ function BrowserMain() {
         }}
         onShare={() => {
           setBrowserMenuVisible(false);
-          const urlToShare = activeUrl;
-          if (!urlToShare) {
+          const rawUrl = activeUrl || currentTab?.url || inputUrl;
+          if (!rawUrl || rawUrl.startsWith('about:') || rawUrl.startsWith('kite://')) {
             showToast('Không có liên kết để chia sẻ');
             return;
           }
-          let shareUrl = urlToShare.trim();
+          let shareUrl = rawUrl.trim();
           if (!shareUrl.startsWith('http://') && !shareUrl.startsWith('https://')) {
             shareUrl = 'https://' + shareUrl;
           }
-          const titleToShare = currentTab?.title || '';
+          const titleToShare = currentTab?.title || 'Kite Browser';
 
           setTimeout(async () => {
             try {
               if (Platform.OS === 'ios') {
                 await Share.share({
                   url: shareUrl,
-                  message: titleToShare || undefined,
                 });
               } else {
                 await Share.share({
-                  title: titleToShare || 'Chia sẻ liên kết',
-                  message: titleToShare ? `${titleToShare}\n${shareUrl}` : shareUrl,
+                  title: titleToShare,
+                  message: `${titleToShare}\n${shareUrl}`,
                 });
               }
             } catch (err: any) {
-              if (err?.message !== 'User did not share') {
+              if (err?.message && !err.message.includes('dismissed') && !err.message.includes('cancel')) {
                 showToast('Không thể mở chia sẻ');
               }
             }
-          }, Platform.OS === 'ios' ? 350 : 100);
+          }, Platform.OS === 'ios' ? 500 : 150);
         }}
         onFindInPage={() => {
           if (!activeUrl) {
@@ -3556,6 +3578,13 @@ function BrowserMain() {
         onToggleDataSaver={handleToggleDataSaver}
         detectedMediaCount={activeDetectedMedia.length}
         onOpenVideoDownload={() => setVideoDownloadSheetVisible(true)}
+        onOpenRegionSheet={() => setRegionSheetVisible(true)}
+        isRegionActive={regionSettings.enabled}
+        currentRegionText={
+          regionSettings.enabled
+            ? `${getActiveRegionNode(regionSettings.activeRegionId).flag} ${getActiveRegionNode(regionSettings.activeRegionId).name}`
+            : undefined
+        }
       />
 
       {/* Quản lý Tiện ích mở rộng (Extension Sheet) */}
@@ -3564,6 +3593,17 @@ function BrowserMain() {
         onClose={() => setExtensionSheetVisible(false)}
         onShowToast={showToast}
         onExtensionsUpdated={(updated) => setExtensions(updated)}
+        onOpenRegionSheet={() => setRegionSheetVisible(true)}
+      />
+
+      {/* Quản lý Chuyển vùng & Proxy (Region Sheet) */}
+      <RegionSheet
+        visible={regionSheetVisible}
+        onClose={() => setRegionSheetVisible(false)}
+        settings={regionSettings}
+        onUpdateSettings={(newSettings) => setRegionSettings(newSettings)}
+        onShowToast={showToast}
+        onTestIp={(testUrl) => handleNavigate(testUrl)}
       />
 
       {/* Khóa mã PIN bảo mật cho Thẻ ẩn danh */}

@@ -6,15 +6,12 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
-  TextInput,
   Switch,
   Platform,
-  Alert,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { File } from 'expo-file-system';
 import { theme } from '../constants/theme';
 
 export const STORAGE_EXTENSIONS_KEY = '@kite_user_extensions';
@@ -100,6 +97,32 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
     isBuiltIn: true,
     updatedAt: Date.now(),
   },
+  {
+    id: 'ext-region-shield',
+    name: 'Chống lộ IP & Giả lập Vị trí',
+    description: 'Bảo vệ địa chỉ IP thực không bị quét trộm qua WebRTC STUN và đồng bộ định vị quốc tế.',
+    matchUrl: '*',
+    code: `(function() {
+  if (window.__kite_webrtc_shield) return;
+  window.__kite_webrtc_shield = true;
+  try {
+    if (window.RTCPeerConnection) {
+      window.RTCPeerConnection.prototype.createOffer = function() {
+        return Promise.reject(new Error('WebRTC IP leak blocked'));
+      };
+      if (window.RTCPeerConnection.prototype.setLocalDescription) {
+        window.RTCPeerConnection.prototype.setLocalDescription = function() {
+          return Promise.reject(new Error('WebRTC IP leak blocked'));
+        };
+      }
+    }
+  } catch(e) {}
+})();`,
+    runAt: 'document_start',
+    enabled: true,
+    isBuiltIn: true,
+    updatedAt: Date.now(),
+  },
 ];
 
 export const isUrlMatchingPattern = (url: string, pattern: string): boolean => {
@@ -124,6 +147,7 @@ interface ExtensionSheetProps {
   onClose: () => void;
   onShowToast?: (message: string) => void;
   onExtensionsUpdated?: (extensions: ExtensionItem[]) => void;
+  onOpenRegionSheet?: () => void;
 }
 
 export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
@@ -131,26 +155,16 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
   onClose,
   onShowToast,
   onExtensionsUpdated,
+  onOpenRegionSheet,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
 
   const [extensions, setExtensions] = useState<ExtensionItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-
-  // Modal tạo / chỉnh sửa tiện ích
-  const [editModalVisible, setEditModalVisible] = useState<boolean>(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [inputName, setInputName] = useState<string>('');
-  const [inputDesc, setInputDesc] = useState<string>('');
-  const [inputMatchUrl, setInputMatchUrl] = useState<string>('*');
-  const [inputCode, setInputCode] = useState<string>('');
-  const [inputRunAt, setInputRunAt] = useState<'document_start' | 'document_end'>('document_end');
 
   useEffect(() => {
     if (visible) {
       loadExtensions();
-      setSearchQuery('');
     }
   }, [visible]);
 
@@ -186,159 +200,6 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
     }
   };
 
-  const handleDeleteExtension = (id: string, name: string) => {
-    Alert.alert(
-      'Xóa tiện ích mở rộng?',
-      `Bạn có chắc chắn muốn xóa extension "${name}"?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: async () => {
-            const updated = extensions.filter((e) => e.id !== id);
-            await saveExtensionsToStorage(updated);
-            if (onShowToast) onShowToast('Đã xóa tiện ích');
-          },
-        },
-      ]
-    );
-  };
-
-  const handleOpenAddModal = () => {
-    setEditingId(null);
-    setInputName('');
-    setInputDesc('');
-    setInputMatchUrl('*');
-    setInputRunAt('document_end');
-    setInputCode(`// Nhập mã JavaScript của bạn tại đây
-(function() {
-  console.log('Kite Extension running on:', window.location.href);
-})();`);
-    setEditModalVisible(true);
-  };
-
-  const handleOpenEditModal = (ext: ExtensionItem) => {
-    setEditingId(ext.id);
-    setInputName(ext.name);
-    setInputDesc(ext.description);
-    setInputMatchUrl(ext.matchUrl);
-    setInputRunAt(ext.runAt);
-    setInputCode(ext.code);
-    setEditModalVisible(true);
-  };
-
-  // Nhập tệp .js hoặc .user.js từ bộ nhớ máy
-  const handlePickFile = async () => {
-    try {
-      const pickRes = await File.pickFileAsync({
-        mimeTypes: ['text/javascript', 'application/javascript', 'text/plain', '*/*'],
-      });
-
-      if (!pickRes.canceled && pickRes.result) {
-        const file = pickRes.result;
-        let content = '';
-        try {
-          content = await file.text();
-        } catch {
-          const buf = await file.arrayBuffer();
-          content = new TextDecoder('utf-8').decode(buf);
-        }
-
-        if (!content || !content.trim()) {
-          if (onShowToast) onShowToast('Tệp rỗng hoặc không đọc được');
-          return;
-        }
-
-        let name = (file.name || 'Custom Extension').replace(/\.user\.js$/i, '').replace(/\.js$/i, '');
-        let matchUrl = '*';
-        let desc = 'Tiện ích nhập từ tệp ' + (file.name || '');
-        let runAt: 'document_start' | 'document_end' = 'document_end';
-
-        const nameMatch = content.match(/@name\s+(.+)$/m);
-        if (nameMatch) name = nameMatch[1].trim();
-
-        const descMatch = content.match(/@description\s+(.+)$/m);
-        if (descMatch) desc = descMatch[1].trim();
-
-        const matchMatch = content.match(/@(match|include)\s+(.+)$/m);
-        if (matchMatch) matchUrl = matchMatch[2].trim();
-
-        const runAtMatch = content.match(/@run-at\s+(document-start|document_start|document-end|document_end)/im);
-        if (runAtMatch && runAtMatch[1].toLowerCase().includes('start')) {
-          runAt = 'document_start';
-        }
-
-        setEditingId(null);
-        setInputName(name);
-        setInputDesc(desc);
-        setInputMatchUrl(matchUrl);
-        setInputRunAt(runAt);
-        setInputCode(content);
-        setEditModalVisible(true);
-        if (onShowToast) onShowToast('Đã đọc tệp extension thành công!');
-      }
-    } catch (e) {
-      handleOpenAddModal();
-    }
-  };
-
-  const handleSaveModal = async () => {
-    if (!inputName.trim()) {
-      if (onShowToast) onShowToast('Vui lòng nhập tên tiện ích');
-      return;
-    }
-    if (!inputCode.trim()) {
-      if (onShowToast) onShowToast('Mã JavaScript không được để trống');
-      return;
-    }
-
-    try {
-      let updated: ExtensionItem[];
-      if (editingId) {
-        updated = extensions.map((e) =>
-          e.id === editingId
-            ? {
-                ...e,
-                name: inputName.trim(),
-                description: inputDesc.trim() || 'Tiện ích người dùng',
-                matchUrl: inputMatchUrl.trim() || '*',
-                runAt: inputRunAt,
-                code: inputCode.trim(),
-                updatedAt: Date.now(),
-              }
-            : e
-        );
-      } else {
-        const newItem: ExtensionItem = {
-          id: `ext-${Date.now()}`,
-          name: inputName.trim(),
-          description: inputDesc.trim() || 'Tiện ích người dùng',
-          matchUrl: inputMatchUrl.trim() || '*',
-          runAt: inputRunAt,
-          code: inputCode.trim(),
-          enabled: true,
-          updatedAt: Date.now(),
-        };
-        updated = [newItem, ...extensions];
-      }
-
-      await saveExtensionsToStorage(updated);
-      setEditModalVisible(false);
-      if (onShowToast) {
-        onShowToast(editingId ? 'Đã cập nhật tiện ích' : 'Đã cài đặt tiện ích mới thành công');
-      }
-    } catch (e) {
-      if (onShowToast) onShowToast('Lỗi khi lưu tiện ích');
-    }
-  };
-
-  const filteredExtensions = extensions.filter(
-    (e) =>
-      e.name.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
-      e.description.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
-      e.matchUrl.toLowerCase().includes(searchQuery.toLowerCase().trim())
-  );
 
   return (
     <Modal
@@ -364,11 +225,6 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
           <View style={styles.headerRow}>
             <View style={styles.titleGroup}>
               <Text style={styles.sheetTitle}>Tiện ích mở rộng</Text>
-              {extensions.length > 0 && (
-                <View style={styles.countBadge}>
-                  <Text style={styles.countBadgeText}>{extensions.length}</Text>
-                </View>
-              )}
             </View>
 
             {/* Nút Đóng cố định góc phải */}
@@ -382,68 +238,18 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Hàng nút chức năng Nhập tệp & Thêm mới rộng rãi cân đối */}
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={styles.importBtn}
-              onPress={handlePickFile}
-              activeOpacity={0.7}
-            >
-              <Feather name="upload" size={14} color="#18181b" />
-              <Text style={styles.importBtnText}>Nhập tệp .js</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.addBtn}
-              onPress={handleOpenAddModal}
-              activeOpacity={0.7}
-            >
-              <Feather name="plus" size={15} color="#ffffff" />
-              <Text style={styles.addBtnText}>Thêm mới</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Ô tìm kiếm */}
-          {extensions.length > 0 && (
-            <View style={styles.searchBarBox}>
-              <Feather name="search" size={15} color="#71717a" style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Tìm tiện ích theo tên..."
-                placeholderTextColor="#a1a1aa"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Feather name="x-circle" size={15} color="#71717a" />
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
           {/* Danh sách tiện ích tối giản */}
           <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
-            {filteredExtensions.length === 0 ? (
+            {extensions.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Feather name="box" size={36} color="#a1a1aa" />
                 <Text style={styles.emptyTitle}>Chưa có tiện ích nào</Text>
                 <Text style={styles.emptySub}>
-                  Bạn có thể nhập script .js hoặc tạo tiện ích mới để tùy biến trang web.
+                  Hiện tại chưa có tiện ích mở rộng nào được cài đặt.
                 </Text>
-                <TouchableOpacity
-                  style={styles.emptyAddBtn}
-                  onPress={handleOpenAddModal}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="plus" size={15} color="#ffffff" style={{ marginRight: 6 }} />
-                  <Text style={styles.emptyAddBtnText}>Thêm tiện ích mới</Text>
-                </TouchableOpacity>
               </View>
             ) : (
-              filteredExtensions.map((item) => {
+              extensions.map((item) => {
                 return (
                   <View key={item.id} style={styles.extCard}>
                     {/* Hàng trên: Tên + Mô tả và Công tắc */}
@@ -469,160 +275,11 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
                       />
                     </View>
 
-                    {/* Hàng thao tác dưới tối giản */}
-                    <View style={styles.extCardBottomRow}>
-                      <TouchableOpacity
-                        style={styles.extActionBtn}
-                        onPress={() => handleOpenEditModal(item)}
-                        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                        activeOpacity={0.7}
-                      >
-                        <Feather name="code" size={13} color="#71717a" />
-                        <Text style={styles.extActionText}>Sửa mã</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.extActionBtn}
-                        onPress={() => handleDeleteExtension(item.id, item.name)}
-                        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                        activeOpacity={0.7}
-                      >
-                        <Feather name="trash-2" size={13} color="#71717a" />
-                        <Text style={styles.extActionText}>Xóa</Text>
-                      </TouchableOpacity>
-                    </View>
                   </View>
                 );
               })
             )}
           </ScrollView>
-
-          {/* MODAL TẠO & SỬA EXTENSION / MÃ JAVASCRIPT */}
-          <Modal
-            visible={editModalVisible}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setEditModalVisible(false)}
-          >
-            <TouchableOpacity
-              style={styles.innerBackdrop}
-              activeOpacity={1}
-              onPress={() => setEditModalVisible(false)}
-            >
-              <TouchableOpacity
-                style={styles.innerModalBox}
-                activeOpacity={1}
-                onPress={(e) => e.stopPropagation()}
-              >
-                <View style={styles.innerHeader}>
-                  <Text style={styles.innerTitle}>
-                    {editingId ? 'Chỉnh sửa tiện ích' : 'Tạo tiện ích mới'}
-                  </Text>
-                  <TouchableOpacity onPress={() => setEditModalVisible(false)} style={styles.innerCloseBtn}>
-                    <Feather name="x" size={18} color="#71717a" />
-                  </TouchableOpacity>
-                </View>
-
-                <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 520 }}>
-                  <Text style={styles.label}>Tên tiện ích mở rộng</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={inputName}
-                    onChangeText={setInputName}
-                    placeholder="Ví dụ: Tự động tải video, Đổi giao diện..."
-                    placeholderTextColor="#a1a1aa"
-                  />
-
-                  <Text style={styles.label}>Mô tả tóm tắt</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={inputDesc}
-                    onChangeText={setInputDesc}
-                    placeholder="Mô tả tác vụ script này thực hiện..."
-                    placeholderTextColor="#a1a1aa"
-                  />
-
-                  <Text style={styles.label}>Trang web áp dụng</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={inputMatchUrl}
-                    onChangeText={setInputMatchUrl}
-                    placeholder="Nhập '*' cho mọi trang, hoặc domain cụ thể"
-                    placeholderTextColor="#a1a1aa"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-
-                  <Text style={styles.label}>Thời điểm kích hoạt</Text>
-                  <View style={styles.timingSelectRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.timingOption,
-                        inputRunAt === 'document_end' && styles.timingOptionActive,
-                      ]}
-                      onPress={() => setInputRunAt('document_end')}
-                    >
-                      <Text
-                        style={[
-                          styles.timingOptionText,
-                          inputRunAt === 'document_end' && styles.timingOptionTextActive,
-                        ]}
-                      >
-                        Sau khi nạp trang (Khuyên dùng)
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.timingOption,
-                        inputRunAt === 'document_start' && styles.timingOptionActive,
-                      ]}
-                      onPress={() => setInputRunAt('document_start')}
-                    >
-                      <Text
-                        style={[
-                          styles.timingOptionText,
-                          inputRunAt === 'document_start' && styles.timingOptionTextActive,
-                        ]}
-                      >
-                        Trước khi tải trang
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <Text style={styles.label}>Mã JavaScript</Text>
-                  <TextInput
-                    style={styles.codeInput}
-                    value={inputCode}
-                    onChangeText={setInputCode}
-                    placeholder="// Viết mã JavaScript tại đây"
-                    placeholderTextColor="#71717a"
-                    multiline
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    spellCheck={false}
-                  />
-
-                  <View style={styles.modalActionButtons}>
-                    <TouchableOpacity
-                      style={styles.cancelBtn}
-                      onPress={() => setEditModalVisible(false)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.cancelBtnText}>Hủy</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.saveBtn}
-                      onPress={handleSaveModal}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.saveBtnText}>Lưu tiện ích</Text>
-                    </TouchableOpacity>
-                  </View>
-                </ScrollView>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </Modal>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -937,5 +594,46 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  regionBannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+  },
+  regionBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  regionBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1e40af',
+  },
+  regionBannerBadge: {
+    backgroundColor: '#3b82f6',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  regionBannerBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#ffffff',
+    textTransform: 'uppercase',
+  },
+  regionBannerSub: {
+    fontSize: 11.5,
+    color: '#3b82f6',
+    marginTop: 2,
   },
 });
