@@ -2189,22 +2189,8 @@ function BrowserMain() {
               activeOpacity={0.7}
             >
               {stats.isShieldActive && (
-                <View
-                  style={[
-                    styles.shieldTagBadge,
-                    {
-                      backgroundColor: isIncognito ? '#1e293b' : '#eff6ff',
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.shieldTagText,
-                      { color: isIncognito ? '#60a5fa' : '#007aff' },
-                    ]}
-                  >
-                    BẬT
-                  </Text>
+                <View style={styles.shieldTagBadge}>
+                  <Text style={styles.shieldTagText}>On</Text>
                 </View>
               )}
               <Feather
@@ -2874,13 +2860,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 13,
-    paddingHorizontal: 3,
+    backgroundColor: '#007aff',
+    paddingHorizontal: 3.5,
     paddingVertical: 1,
     borderRadius: 3.5,
     borderWidth: 0,
     zIndex: 2,
   },
   shieldTagText: {
+    color: '#ffffff',
     fontSize: 7.5,
     fontWeight: '800',
     letterSpacing: -0.2,

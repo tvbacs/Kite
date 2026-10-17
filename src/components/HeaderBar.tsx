@@ -45,7 +45,7 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
         >
           {shieldActive && (
             <View style={styles.shieldTagBadge}>
-              <Text style={styles.shieldTagText}>BẬT</Text>
+              <Text style={styles.shieldTagText}>On</Text>
             </View>
           )}
           <Feather
@@ -130,15 +130,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -2,
     left: 10,
-    paddingHorizontal: 3,
+    paddingHorizontal: 3.5,
     paddingVertical: 1,
     borderRadius: 3.5,
     borderWidth: 0,
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#007aff',
     zIndex: 2,
   },
   shieldTagText: {
-    color: '#007aff',
+    color: '#ffffff',
     fontSize: 7,
     fontWeight: '800',
     letterSpacing: -0.2,
