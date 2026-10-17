@@ -3664,7 +3664,7 @@ function BrowserMain() {
           ]}
           pointerEvents={isAppReady ? 'none' : 'auto'}
         >
-          <StatusBar barStyle="light-content" backgroundColor="#0c0d13" />
+          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
           <View style={styles.splashContent}>
             <Animated.View style={{ opacity: splashGlowAnim, alignItems: 'center' }}>
               <Image
@@ -3674,7 +3674,6 @@ function BrowserMain() {
               />
             </Animated.View>
             <Text style={styles.splashTitle}>Kite</Text>
-            <Text style={styles.splashSubtitle}>Trình duyệt an toàn & siêu tốc</Text>
           </View>
           <View style={styles.splashFooter}>
             <ActivityIndicator size="small" color="#007aff" />
@@ -3700,7 +3699,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#0c0d13',
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 999999,
@@ -3713,24 +3712,17 @@ const styles = StyleSheet.create({
     width: 104,
     height: 104,
     borderRadius: 24,
-    shadowColor: '#007aff',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
   },
   splashTitle: {
-    color: '#ffffff',
+    color: '#09090b',
     fontSize: 28,
     fontWeight: '700',
     letterSpacing: 0.8,
     marginTop: 18,
-  },
-  splashSubtitle: {
-    color: '#9ca3af',
-    fontSize: 13,
-    fontWeight: '500',
-    letterSpacing: 0.4,
-    marginTop: 6,
   },
   splashFooter: {
     position: 'absolute',

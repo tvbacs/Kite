@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/logokite.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0c0d13"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
