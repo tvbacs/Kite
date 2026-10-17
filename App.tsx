@@ -193,8 +193,22 @@ function BrowserMain() {
   const [pinModalMode, setPinModalMode] = useState<'unlock' | 'setup' | 'manage'>('unlock');
   const pendingIncognitoActionRef = useRef<(() => void) | null>(null);
 
+  // Xóa ảnh chụp snapshot của tab trên đĩa để giải phóng bộ nhớ và tránh lộ ảnh tab cũ
+  const clearTabSnapshot = (tabId: string) => {
+    const target = tabs.find((t) => t.id === tabId);
+    if (target?.snapshotUri) {
+      try {
+        const f = new File(target.snapshotUri);
+        if (f.exists) f.delete();
+      } catch {}
+    }
+  };
+
   // Lấy thông tin tab đang hoạt động
-  const currentTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const currentTab =
+    tabs.find((t) => t.id === activeTabId) ||
+    tabs.find((t) => Boolean(t.isIncognito) === Boolean(isIncognito)) ||
+    tabs[0];
   const activeUrl = currentTab?.url || null;
 
   // Đồng bộ trạng thái isIncognito theo đúng tab đang active hiện tại
@@ -587,9 +601,14 @@ function BrowserMain() {
           if (raw.includes('error=')) {
             setIsLoading(false);
             showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
-            setTabs((prev) =>
-              prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
-            );
+            clearTabSnapshot(activeTabId);
+            setTabs((prev) => {
+              const updated = prev.map((t) =>
+                t.id === activeTabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+              );
+              persistTabsState(updated);
+              return updated;
+            });
             setInputUrl('');
             return;
           }
@@ -612,9 +631,14 @@ function BrowserMain() {
               }
               showToast(`Đăng nhập Google thành công! (${profile.name})`);
             }
-            setTabs((prev) =>
-              prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
-            );
+            clearTabSnapshot(activeTabId);
+            setTabs((prev) => {
+              const updated = prev.map((t) =>
+                t.id === activeTabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+              );
+              persistTabsState(updated);
+              return updated;
+            });
             setInputUrl('');
           });
           return;
@@ -1109,6 +1133,7 @@ function BrowserMain() {
     const newTab: BrowserTab = {
       ...restored,
       id: newId,
+      snapshotUri: undefined,
       lastActiveAt: Date.now(),
       isSleeping: false,
     };
@@ -1268,9 +1293,14 @@ function BrowserMain() {
       activeWV.goBack();
     } else if (activeUrl) {
       lastBackedUrlRef.current[activeTabId] = activeUrl;
-      setTabs((prev) =>
-        prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
-      );
+      clearTabSnapshot(activeTabId);
+      setTabs((prev) => {
+        const updated = prev.map((t) =>
+          t.id === activeTabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+        );
+        persistTabsState(updated);
+        return updated;
+      });
       setInputUrl('');
     }
   };
@@ -1770,9 +1800,14 @@ function BrowserMain() {
       if (reqUrl.includes('error=')) {
         setIsLoading(false);
         showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
-        setTabs((prev) =>
-          prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
-        );
+        clearTabSnapshot(activeTabId);
+        setTabs((prev) => {
+          const updated = prev.map((t) =>
+            t.id === activeTabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+          );
+          persistTabsState(updated);
+          return updated;
+        });
         setInputUrl('');
         return false;
       }
@@ -1798,9 +1833,14 @@ function BrowserMain() {
         } else {
           showToast('Đăng nhập Google chưa hoàn tất, vui lòng thử lại.');
         }
-        setTabs((prev) =>
-          prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
-        );
+        clearTabSnapshot(activeTabId);
+        setTabs((prev) => {
+          const updated = prev.map((t) =>
+            t.id === activeTabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+          );
+          persistTabsState(updated);
+          return updated;
+        });
         setInputUrl('');
       });
       return false;
@@ -1911,9 +1951,14 @@ function BrowserMain() {
       if (navState.url.toLowerCase().includes('error=')) {
         setIsLoading(false);
         showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
-        setTabs((prev) =>
-          prev.map((t) => (t.id === tabId ? { ...t, url: '', title: 'Trang mới' } : t))
-        );
+        clearTabSnapshot(tabId);
+        setTabs((prev) => {
+          const updated = prev.map((t) =>
+            t.id === tabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+          );
+          persistTabsState(updated);
+          return updated;
+        });
         setInputUrl('');
         return;
       }
@@ -1939,9 +1984,14 @@ function BrowserMain() {
         } else {
           showToast('Đăng nhập Google chưa hoàn tất, vui lòng thử lại.');
         }
-        setTabs((prev) =>
-          prev.map((t) => (t.id === tabId ? { ...t, url: '', title: 'Trang mới' } : t))
-        );
+        clearTabSnapshot(tabId);
+        setTabs((prev) => {
+          const updated = prev.map((t) =>
+            t.id === tabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+          );
+          persistTabsState(updated);
+          return updated;
+        });
         setInputUrl('');
       });
       return;
@@ -2585,9 +2635,14 @@ function BrowserMain() {
                             }
                           });
                         }
-                        setTabs((prev) =>
-                          prev.map((t) => (t.id === tab.id ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t))
-                        );
+                        clearTabSnapshot(tab.id);
+                        setTabs((prev) => {
+                          const updated = prev.map((t) =>
+                            t.id === tab.id ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+                          );
+                          persistTabsState(updated);
+                          return updated;
+                        });
                         setInputUrl('');
                       }
                     }}

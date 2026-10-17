@@ -68,15 +68,17 @@ export const TabSheet: React.FC<TabSheetProps> = ({
   );
   const [isPinUnlocking, setIsPinUnlocking] = useState<boolean>(false);
   const pendingUnlockActionRef = useRef<(() => void) | null>(null);
+  const prevVisibleRef = useRef<boolean>(visible);
 
   useEffect(() => {
-    if (visible) {
+    if (visible && !prevVisibleRef.current) {
       setActiveMode(isIncognito ? 'incognito' : 'normal');
-    } else {
+    } else if (!visible) {
       setIsPinUnlocking(false);
       pendingUnlockActionRef.current = null;
     }
-  }, [visible, isIncognito]);
+    prevVisibleRef.current = visible;
+  }, [visible]);
 
   const normalTabs = tabs.filter((t) => !t.isIncognito);
   const incognitoTabs = tabs.filter((t) => !!t.isIncognito);

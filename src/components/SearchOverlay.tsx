@@ -518,18 +518,22 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
           onPress={() => setEnginePickerVisible(false)}
         >
           <TouchableOpacity
-            style={styles.modalCard}
+            style={[styles.modalCard, isIncognito && { backgroundColor: '#2d2f31' }]}
             activeOpacity={1}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.modalTitle}>Chọn công cụ tìm kiếm</Text>
+            <Text style={[styles.modalTitle, isIncognito && { color: '#e8eaed' }]}>Chọn công cụ tìm kiếm</Text>
             <View style={styles.engineGrid}>
               {Object.values(SEARCH_ENGINES).map((eng) => {
                 const isSelected = eng.id === currentEngineId;
                 return (
                   <TouchableOpacity
                     key={eng.id}
-                    style={[styles.engineCardItem, isSelected && styles.engineCardSelected]}
+                    style={[
+                      styles.engineCardItem,
+                      isIncognito && { backgroundColor: '#202124', borderColor: '#3c4043' },
+                      isSelected && (isIncognito ? { borderColor: '#60a5fa', backgroundColor: '#303134' } : styles.engineCardSelected),
+                    ]}
                     onPress={() => {
                       if (onChangeEngine) {
                         onChangeEngine(eng.id as any);
@@ -543,10 +547,22 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                       style={styles.enginePickerLogo}
                       resizeMode="contain"
                     />
-                    <Text style={[styles.engineCardName, isSelected && styles.engineCardNameActive]}>
+                    <Text
+                      style={[
+                        styles.engineCardName,
+                        isIncognito && { color: '#e8eaed' },
+                        isSelected && (isIncognito ? { color: '#60a5fa', fontWeight: '700' } : styles.engineCardNameActive),
+                      ]}
+                    >
                       {eng.name}
                     </Text>
-                    {isSelected && <Feather name="check" size={16} color="#18181b" />}
+                    {isSelected && (
+                      <Feather
+                        name="check"
+                        size={16}
+                        color={isIncognito ? '#60a5fa' : '#18181b'}
+                      />
+                    )}
                   </TouchableOpacity>
                 );
               })}
