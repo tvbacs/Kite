@@ -33,6 +33,89 @@ export async function getCurrentUser() {
   }
 }
 
+/**
+ * Lấy URL Google OAuth chính thức từ Supabase
+ */
+export async function getGoogleOAuthUrl(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: 'kite://auth-callback',
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error || !data?.url) {
+      console.warn('Lỗi tạo Google OAuth URL từ Supabase:', error);
+      return null;
+    }
+    return data.url;
+  } catch (e) {
+    console.warn('Lỗi gọi getGoogleOAuthUrl:', e);
+    return null;
+  }
+}
+
+/**
+ * Xử lý URL callback sau khi đăng nhập Google OAuth thành công
+ */
+export async function handleAuthCallbackUrl(url: string): Promise<UserProfile | null> {
+  try {
+    if (!url) return null;
+
+    // 1. Trường hợp trả về mã PKCE (?code=...)
+    if (url.includes('code=')) {
+      const match = url.match(/[?&]code=([^&#]+)/);
+      if (match && match[1]) {
+        const code = decodeURIComponent(match[1]);
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!error && data.session && data.user) {
+          const user = data.user;
+          const meta = user.user_metadata || {};
+          return {
+            isLoggedIn: true,
+            name: meta.full_name || meta.name || user.email?.split('@')[0] || 'Người dùng',
+            email: user.email || '',
+            avatarUrl: meta.avatar_url || meta.picture || '',
+          };
+        }
+      }
+    }
+
+    // 2. Trường hợp trả về Token trên URL Fragment (#access_token=...)
+    if (url.includes('access_token=')) {
+      const tokenMatch = url.match(/[#&?]access_token=([^&]+)/);
+      const refreshMatch = url.match(/[#&?]refresh_token=([^&]+)/);
+
+      if (tokenMatch && tokenMatch[1]) {
+        const accessToken = decodeURIComponent(tokenMatch[1]);
+        const refreshToken = refreshMatch && refreshMatch[1] ? decodeURIComponent(refreshMatch[1]) : '';
+
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+        if (!error && data.user) {
+          const user = data.user;
+          const meta = user.user_metadata || {};
+          return {
+            isLoggedIn: true,
+            name: meta.full_name || meta.name || user.email?.split('@')[0] || 'Người dùng',
+            email: user.email || '',
+            avatarUrl: meta.avatar_url || meta.picture || '',
+          };
+        }
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.warn('Lỗi xử lý Auth Callback URL:', e);
+    return null;
+  }
+}
+
 export async function signOutSupabase() {
   try {
     await supabase.auth.signOut();

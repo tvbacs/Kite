@@ -51,6 +51,7 @@ import { captureRef } from 'react-native-view-shot';
 import { PullDownBar, PullActionType } from './src/components/PullDownBar';
 import { ShieldStats, BrowserTab, UserProfile, TabFrozenState, DataSaverMode } from './src/types/browser';
 import { PinModal } from './src/components/PinModal';
+import { handleAuthCallbackUrl, upsertCloudProfile } from './src/services/supabase';
 
 const STORAGE_ENGINE_KEY = '@kite_search_engine';
 const STORAGE_PIN_KEY = '@kite_incognito_pin';
@@ -1355,6 +1356,27 @@ function BrowserMain() {
   const handleShouldStartLoad = (request: { url: string; isTopFrame?: boolean }) => {
     const reqUrl = request.url.toLowerCase();
 
+    // 0. Bắt Callback URL của Supabase Google OAuth
+    if (
+      reqUrl.startsWith('kite://auth-callback') ||
+      (reqUrl.includes('supabase.co/auth/v1/callback') &&
+        (reqUrl.includes('code=') || reqUrl.includes('access_token=')))
+    ) {
+      handleAuthCallbackUrl(request.url).then((profile) => {
+        if (profile) {
+          setUserProfile(profile);
+          AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
+          upsertCloudProfile(profile.email || 'user', profile);
+          showToast(`Đăng nhập Google thành công! (${profile.name})`);
+          setTabs((prev) =>
+            prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
+          );
+          setInputUrl('');
+        }
+      });
+      return false;
+    }
+
     // 1. Cho phép các trang nội bộ about/data
     if (reqUrl.startsWith('about:blank') || reqUrl.startsWith('data:')) {
       return true;
@@ -1484,6 +1506,28 @@ function BrowserMain() {
 
   // Cập nhật trạng thái điều hướng cho từng tab riêng biệt
   const handleNavigationStateChangeForTab = (tabId: string, navState: WebViewNavigation) => {
+    // 0. Bắt callback Google OAuth từ Supabase
+    if (
+      navState.url &&
+      (navState.url.startsWith('kite://auth-callback') ||
+        (navState.url.includes('supabase.co/auth/v1/callback') &&
+          (navState.url.includes('code=') || navState.url.includes('access_token='))))
+    ) {
+      handleAuthCallbackUrl(navState.url).then((profile) => {
+        if (profile) {
+          setUserProfile(profile);
+          AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
+          upsertCloudProfile(profile.email || 'user', profile);
+          showToast(`Đăng nhập Google thành công! (${profile.name})`);
+          setTabs((prev) =>
+            prev.map((t) => (t.id === tabId ? { ...t, url: '', title: 'Trang mới' } : t))
+          );
+          setInputUrl('');
+        }
+      });
+      return;
+    }
+
     const isLoginDone =
       navState.url &&
       (navState.url.toLowerCase().includes('utm_source=sign_in_no_continue') ||

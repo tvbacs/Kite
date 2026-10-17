@@ -25,6 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bookmark, UserProfile } from '../types/browser';
 import { SEARCH_ENGINES } from '../constants/searchEngines';
 import { VoiceSearchModal } from './VoiceSearchModal';
+import { getGoogleOAuthUrl } from '../services/supabase';
 
 const GoogleGIcon = ({ size = 20 }: { size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -1909,8 +1910,15 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               {/* Nút Đăng nhập hoặc Thêm tài khoản */}
               <TouchableOpacity
                 style={styles.addAccountRow}
-                onPress={() => {
+                onPress={async () => {
                   setUserModalVisible(false);
+                  try {
+                    const oauthUrl = await getGoogleOAuthUrl();
+                    if (oauthUrl) {
+                      onSelectUrl(oauthUrl);
+                      return;
+                    }
+                  } catch (e) {}
                   onSelectUrl(
                     userProfile.isLoggedIn
                       ? 'https://accounts.google.com/AddSession?continue=https://myaccount.google.com/'
