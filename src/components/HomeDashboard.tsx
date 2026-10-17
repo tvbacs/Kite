@@ -1011,7 +1011,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         <View style={styles.simpleWeatherRowContainer}>
           <TouchableOpacity
             style={styles.simpleWeatherBlock}
-            onPress={() => onSelectUrl('https://www.google.com/search?q=thời+tiết+ngũ+hành+sơn+đà+nẵng')}
+            onPress={() => onSelectUrl(`${currentEngine.searchUrl}${encodeURIComponent('thời tiết ' + weather.location)}`)}
             activeOpacity={0.75}
           >
             <View style={styles.simpleWeatherRow}>
@@ -1638,6 +1638,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       style={[styles.engineGridItem, isSelected && styles.engineGridItemSelected]}
                       onPress={() => {
                         onChangeEngine(eng.id as any);
+                        setEngineModalVisible(false);
                       }}
                       activeOpacity={0.7}
                     >

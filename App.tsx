@@ -2047,6 +2047,8 @@ function BrowserMain() {
               setQrModalVisible(true);
             }}
             currentEngineName={SEARCH_ENGINES[currentEngineId]?.name || 'Google'}
+            currentEngineId={currentEngineId}
+            onChangeEngine={handleChangeEngine}
             isIncognito={isIncognito}
             isBookmarked={isCurrentBookmarked}
             onToggleBookmark={() =>
@@ -2396,6 +2398,8 @@ function BrowserMain() {
         onClose={() => setBrowserMenuVisible(false)}
         currentUrl={activeUrl}
         currentTitle={currentTab?.title}
+        currentEngineId={currentEngineId}
+        onChangeEngine={handleChangeEngine}
         isDesktop={currentTab?.isDesktop}
         isBookmarked={isCurrentBookmarked}
         onToggleBookmark={() =>

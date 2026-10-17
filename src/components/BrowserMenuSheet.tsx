@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,15 +8,19 @@ import {
   ScrollView,
   Platform,
   Share,
+  Image,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SEARCH_ENGINES } from '../constants/searchEngines';
 
 interface BrowserMenuSheetProps {
   visible: boolean;
   onClose: () => void;
   currentUrl?: string | null;
   currentTitle?: string | null;
+  currentEngineId?: string;
+  onChangeEngine?: (engineId: 'google' | 'bing' | 'duckduckgo' | 'yahoo') => void;
   isDesktop?: boolean;
   isBookmarked?: boolean;
   onToggleBookmark?: () => void;
@@ -38,6 +42,8 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onClose,
   currentUrl,
   currentTitle,
+  currentEngineId = 'google',
+  onChangeEngine,
   isDesktop,
   isBookmarked,
   onToggleBookmark,
@@ -55,6 +61,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
+  const [engineModalVisible, setEngineModalVisible] = useState(false);
 
   const handleShare = async () => {
     if (!currentUrl) return;
@@ -368,9 +375,84 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               </View>
               <Feather name="chevron-right" size={18} color="#a1a1aa" />
             </TouchableOpacity>
+
+            {/* 8. CÔNG CỤ TÌM KIẾM MẶC ĐỊNH */}
+            <TouchableOpacity
+              style={styles.menuRow}
+              onPress={() => {
+                setEngineModalVisible(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.menuIconCircle, { backgroundColor: '#fef3c7' }]}>
+                <Feather name="search" size={18} color="#d97706" />
+              </View>
+              <View style={styles.menuTextContainer}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.menuTitle}>Công cụ tìm kiếm</Text>
+                  <View style={styles.engineBadge}>
+                    <Text style={styles.engineBadgeText}>
+                      {SEARCH_ENGINES[currentEngineId]?.name || 'Google'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.menuSubtitle}>Google, Yahoo, Bing, DuckDuckGo</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color="#a1a1aa" />
+            </TouchableOpacity>
           </ScrollView>
         </TouchableOpacity>
       </TouchableOpacity>
+
+      {/* Modal chọn công cụ tìm kiếm */}
+      <Modal
+        visible={engineModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEngineModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.engineBackdrop}
+          activeOpacity={1}
+          onPress={() => setEngineModalVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.engineCard}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.engineModalTitle}>Chọn công cụ tìm kiếm mặc định</Text>
+            <View style={{ gap: 10 }}>
+              {Object.values(SEARCH_ENGINES).map((eng) => {
+                const isSelected = eng.id === currentEngineId;
+                return (
+                  <TouchableOpacity
+                    key={eng.id}
+                    style={[styles.engineChoiceRow, isSelected && styles.engineChoiceSelected]}
+                    onPress={() => {
+                      if (onChangeEngine) {
+                        onChangeEngine(eng.id as any);
+                      }
+                      setEngineModalVisible(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Image
+                      source={{ uri: eng.logoUrl }}
+                      style={styles.enginePickerLogo}
+                      resizeMode="contain"
+                    />
+                    <Text style={[styles.engineChoiceName, isSelected && styles.engineChoiceNameActive]}>
+                      {eng.name}
+                    </Text>
+                    {isSelected && <Feather name="check" size={18} color="#007aff" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </Modal>
   );
 };
@@ -508,5 +590,72 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#71717a',
     marginTop: 2,
+  },
+  engineBadge: {
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  engineBadgeText: {
+    color: '#007aff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  engineBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  engineCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 340,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  engineModalTitle: {
+    fontSize: 16.5,
+    fontWeight: '700',
+    color: '#1f1f1f',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  engineChoiceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#f8fafd',
+    borderWidth: 1,
+    borderColor: '#e8eaed',
+  },
+  engineChoiceSelected: {
+    borderColor: '#007aff',
+    backgroundColor: '#eff6ff',
+  },
+  enginePickerLogo: {
+    width: 28,
+    height: 28,
+    marginRight: 12,
+  },
+  engineChoiceName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#1f1f1f',
+  },
+  engineChoiceNameActive: {
+    color: '#007aff',
+    fontWeight: '600',
   },
 });
