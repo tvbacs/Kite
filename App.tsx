@@ -1356,11 +1356,22 @@ function BrowserMain() {
   const handleShouldStartLoad = (request: { url: string; isTopFrame?: boolean }) => {
     const reqUrl = request.url.toLowerCase();
 
-    // 0. Bắt Callback URL của Supabase Google OAuth
+    // 0. Cho phép các trang OAuth và server Supabase xử lý mã xác thực Google
+    if (
+      reqUrl.includes('accounts.google.com') ||
+      reqUrl.includes('myaccount.google.com') ||
+      reqUrl.includes('oauth2.googleapis.com') ||
+      reqUrl.includes('supabase.co/auth/v1/callback') ||
+      reqUrl.includes('supabase.co/auth/v1/authorize')
+    ) {
+      return true;
+    }
+
+    // 1. Bắt Callback hoàn tất trả về App (kite://auth-callback hoặc URL chứa session token)
     if (
       reqUrl.startsWith('kite://auth-callback') ||
-      (reqUrl.includes('supabase.co/auth/v1/callback') &&
-        (reqUrl.includes('code=') || reqUrl.includes('access_token=')))
+      (reqUrl.includes('auth-callback') && (reqUrl.includes('access_token=') || reqUrl.includes('code='))) ||
+      (!reqUrl.includes('supabase.co/auth/v1/callback') && reqUrl.includes('access_token='))
     ) {
       handleAuthCallbackUrl(request.url).then((profile) => {
         if (profile) {
@@ -1510,8 +1521,9 @@ function BrowserMain() {
     if (
       navState.url &&
       (navState.url.startsWith('kite://auth-callback') ||
-        (navState.url.includes('supabase.co/auth/v1/callback') &&
-          (navState.url.includes('code=') || navState.url.includes('access_token='))))
+        (navState.url.includes('auth-callback') &&
+          (navState.url.includes('access_token=') || navState.url.includes('code='))) ||
+        (!navState.url.includes('supabase.co/auth/v1/callback') && navState.url.includes('access_token=')))
     ) {
       handleAuthCallbackUrl(navState.url).then((profile) => {
         if (profile) {
