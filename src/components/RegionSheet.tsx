@@ -175,6 +175,14 @@ export const RegionSheet: React.FC<RegionSheetProps> = ({
               />
             </View>
 
+            {/* GỢI Ý KHI GẶP SỰ CỐ KẾT NỐI */}
+            <View style={styles.tipNoticeBox}>
+              <Feather name="help-circle" size={14} color="#0284c7" style={{ marginRight: 7, marginTop: 1 }} />
+              <Text style={styles.tipNoticeText}>
+                Nếu trang web tải chậm hoặc không vào được, hãy thử tắt chuyển vùng hoặc chọn quốc gia khác.
+              </Text>
+            </View>
+
             {/* TIÊU ĐỀ DANH SÁCH MÁY CHỦ */}
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Chọn quốc gia máy chủ</Text>
@@ -333,7 +341,7 @@ export const RegionSheet: React.FC<RegionSheetProps> = ({
               activeOpacity={0.8}
             >
               <Feather name="shield" size={15} color="#ffffff" style={{ marginRight: 6 }} />
-              <Text style={styles.testIpBtnText}>Kiểm tra địa chỉ IP & Độ ẩn danh (Whoer.net)</Text>
+              <Text style={styles.testIpBtnText}>Kiểm tra địa chỉ IP</Text>
               <Feather name="external-link" size={13} color="#ffffff" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
           </ScrollView>
@@ -606,5 +614,23 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '600',
+  },
+  tipNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#f0f9ff',
+    borderWidth: 1,
+    borderColor: '#e0f2fe',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: 12,
+  },
+  tipNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#0369a1',
+    fontWeight: '500',
   },
 });
