@@ -66,6 +66,34 @@ const GOOGLE_AUTH_USER_AGENT =
     : 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36';
 const MAX_ACTIVE_WEBVIEWS = 2; // Giữ tối đa 1 đến 2 WebView trong RAM để tránh Jetsam kill trên iOS
 
+/**
+ * Kiểm tra xem một URL có phải là OAuth Callback trả về từ Supabase không
+ * Tuyệt đối không bắt nhầm trang khởi tạo đăng nhập (/auth/v1/authorize) hay màn hình chọn tài khoản Google
+ */
+const isOAuthCallback = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  // 1. Cho phép các trang khởi tạo đăng nhập và xác thực của Google & Supabase hoạt động bình thường
+  if (
+    lower.includes('/auth/v1/authorize') ||
+    lower.includes('accounts.google.com') ||
+    lower.includes('myaccount.google.com') ||
+    lower.includes('oauth2.googleapis.com') ||
+    lower.includes('supabase.co/auth/v1/callback')
+  ) {
+    return false;
+  }
+
+  // 2. Chỉ bắt các URL chuyển hướng trả về App (custom scheme hoặc localhost hoặc kèm access_token)
+  return (
+    lower.startsWith('kite://') ||
+    lower.includes('localhost:3000') ||
+    lower.includes('access_token=') ||
+    lower.includes('error_code=') ||
+    (lower.includes('code=') && !lower.includes('google.com'))
+  );
+};
+
 function BrowserMain() {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 47 : 24);
@@ -399,11 +427,7 @@ function BrowserMain() {
       try {
         const raw = url.trim();
         // Kiểm tra xem có phải là callback OAuth từ Supabase / Google không
-        if (
-          raw.includes('auth-callback') ||
-          raw.includes('access_token=') ||
-          raw.includes('error_code=')
-        ) {
+        if (isOAuthCallback(raw)) {
           if (raw.includes('error=')) {
             setIsLoading(false);
             showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
@@ -1416,13 +1440,7 @@ function BrowserMain() {
     }
 
     // 1. Bắt Callback hoàn tất trả về App (kite://auth-callback hoặc localhost:3000 hoặc URL chứa session token/error)
-    if (
-      reqUrl.startsWith('kite://auth-callback') ||
-      reqUrl.startsWith('kite://') ||
-      reqUrl.includes('auth-callback') ||
-      reqUrl.includes('localhost:3000') ||
-      (!reqUrl.includes('supabase.co/auth/v1/callback') && reqUrl.includes('access_token='))
-    ) {
+    if (isOAuthCallback(request.url)) {
       if (reqUrl.includes('error=')) {
         setIsLoading(false);
         showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
@@ -1545,14 +1563,7 @@ function BrowserMain() {
   // Cập nhật trạng thái điều hướng cho từng tab riêng biệt
   const handleNavigationStateChangeForTab = (tabId: string, navState: WebViewNavigation) => {
     // 0. Bắt callback Google OAuth từ Supabase
-    if (
-      navState.url &&
-      (navState.url.startsWith('kite://auth-callback') ||
-        navState.url.startsWith('kite://') ||
-        navState.url.includes('auth-callback') ||
-        navState.url.includes('localhost:3000') ||
-        (!navState.url.includes('supabase.co/auth/v1/callback') && navState.url.includes('access_token=')))
-    ) {
+    if (navState.url && isOAuthCallback(navState.url)) {
       if (navState.url.toLowerCase().includes('error=')) {
         setIsLoading(false);
         showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
