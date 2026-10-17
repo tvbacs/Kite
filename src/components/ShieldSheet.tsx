@@ -8,19 +8,34 @@ interface ShieldSheetProps {
   visible: boolean;
   onClose: () => void;
   stats: ShieldStats;
+  currentUrl?: string;
   onToggleShield: () => void;
   onToggleAggressive: () => void;
   onManualZap: () => void;
 }
 
+const getDomain = (url?: string): string => {
+  if (!url) return 'Trang web hiện tại';
+  try {
+    const formatted = url.startsWith('http://') || url.startsWith('https://') ? url : `https://${url}`;
+    const parsed = new URL(formatted);
+    return parsed.hostname.replace(/^www\./, '');
+  } catch {
+    return url.replace(/^https?:\/\//, '').split('/')[0] || 'Trang web hiện tại';
+  }
+};
+
 export const ShieldSheet: React.FC<ShieldSheetProps> = ({
   visible,
   onClose,
   stats,
+  currentUrl,
   onToggleShield,
   onToggleAggressive,
   onManualZap,
 }) => {
+  const domain = getDomain(currentUrl);
+
   return (
     <Modal
       visible={visible}
@@ -41,21 +56,63 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
           {/* Tay cầm trượt iOS */}
           <View style={styles.sheetDragHandle} />
 
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Kite Shield</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Feather name="x" size={18} color={theme.colors.textSecondary} />
+          {/* Nút đóng phía trên góc phải */}
+          <View style={styles.headerRow}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeBtn}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Feather name="x" size={16} color="#71717a" />
             </TouchableOpacity>
           </View>
 
-          {/* Các tùy chọn chuyên sâu về Chặn quảng cáo */}
-          <View style={styles.optionsList}>
-            {/* 1. Bảo vệ chủ động */}
-            <View style={styles.optionRow}>
-              <View style={styles.optionInfo}>
-                <Text style={styles.optionTitle}>Bảo vệ chủ động</Text>
-                <Text style={styles.optionDesc}>Chặn mạng quảng cáo & khóa cướp tab</Text>
+          {/* Biểu tượng Khiên trung tâm và Tiêu đề trạng thái giống Cốc Cốc */}
+          <View style={styles.centerSection}>
+            <View
+              style={[
+                styles.shieldEmblem,
+                stats.isShieldActive ? styles.shieldEmblemActive : styles.shieldEmblemInactive,
+              ]}
+            >
+              <Feather
+                name="shield"
+                size={30}
+                color={stats.isShieldActive ? '#007aff' : '#71717a'}
+              />
+            </View>
+
+            <Text style={styles.title}>
+              {stats.isShieldActive ? 'Chặn quảng cáo đang bật' : 'Chặn quảng cáo đang tắt'}
+            </Text>
+
+            <Text style={styles.subtitle}>
+              {stats.isShieldActive
+                ? 'Đang chặn quảng cáo và trình theo dõi trên trang này'
+                : 'Đã tạm dừng chặn quảng cáo trên trang này'}
+            </Text>
+          </View>
+
+          {/* Card trắng chính: Trang web & 2 công tắc tùy chọn */}
+          <View style={styles.card}>
+            {/* Dòng hiển thị Trang web */}
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardHeaderLabel}>Trang web</Text>
+              <Text style={styles.cardHeaderDomain} numberOfLines={1}>
+                {domain}
+              </Text>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* 1. Chặn quảng cáo trên trang này */}
+            <View style={styles.row}>
+              <View style={styles.rowLeft}>
+                <View style={styles.iconCircle}>
+                  <Feather name="slash" size={17} color="#09090b" />
+                </View>
+                <Text style={styles.rowText}>Chặn quảng cáo trên trang này</Text>
               </View>
               <Switch
                 value={stats.isShieldActive}
@@ -66,11 +123,15 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
               />
             </View>
 
-            {/* 2. Chế độ triệt để */}
-            <View style={[styles.optionRow, { borderBottomWidth: 0 }]}>
-              <View style={styles.optionInfo}>
-                <Text style={styles.optionTitle}>Chế độ triệt để</Text>
-                <Text style={styles.optionDesc}>Xóa mọi element che mờ khung xem video</Text>
+            <View style={styles.divider} />
+
+            {/* 2. Chặn cửa sổ bật lên từ trang này */}
+            <View style={styles.row}>
+              <View style={styles.rowLeft}>
+                <View style={styles.iconCircle}>
+                  <Feather name="external-link" size={17} color="#09090b" />
+                </View>
+                <Text style={styles.rowText}>Chặn cửa sổ bật lên từ trang này</Text>
               </View>
               <Switch
                 value={stats.aggressiveMode}
@@ -82,18 +143,25 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
             </View>
           </View>
 
-          {/* Nút Phá khóa khẩn cấp */}
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => {
-              onManualZap();
-              onClose();
-            }}
-            activeOpacity={0.8}
-          >
-            <Feather name="layers" size={16} color="#ffffff" />
-            <Text style={styles.actionBtnText}>Ép mở khóa màn hình ngay</Text>
-          </TouchableOpacity>
+          {/* Ghi chú hướng dẫn */}
+          <Text style={styles.footnote}>
+            Hãy thử tạm dừng chặn nếu trang web bạn đang xem không hoạt động
+          </Text>
+
+          {/* Card trợ giúp gỡ lỗi / mở khóa trang web */}
+          <View style={styles.helpCard}>
+            <Text style={styles.helpQuestion}>Bạn gặp vấn đề với trang web?</Text>
+            <TouchableOpacity
+              onPress={() => {
+                onManualZap();
+                onClose();
+              }}
+              activeOpacity={0.7}
+              style={styles.helpBtn}
+            >
+              <Text style={styles.helpBtnText}>Trợ giúp</Text>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -108,9 +176,9 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: theme.colors.sheetBackground,
-    borderTopLeftRadius: theme.radius.sheet,
-    borderTopRightRadius: theme.radius.sheet,
-    paddingHorizontal: 20,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 36,
   },
@@ -120,63 +188,141 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.dragHandle,
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: 6,
   },
-  header: {
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.textPrimary,
+    marginBottom: 2,
   },
   closeBtn: {
-    padding: 4,
-  },
-  optionsList: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#ffffff',
-    borderRadius: theme.radius.xl,
-    paddingVertical: 4,
-    marginBottom: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  optionRow: {
+  centerSection: {
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    marginBottom: 16,
+  },
+  shieldEmblem: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  shieldEmblemActive: {
+    backgroundColor: '#eff6ff',
+  },
+  shieldEmblemInactive: {
+    backgroundColor: '#f4f4f5',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#09090b',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 13,
+    color: '#71717a',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 16,
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    overflow: 'hidden',
+    paddingVertical: 4,
+  },
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 13,
     paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e4e4e7',
+    paddingVertical: 14,
   },
-  optionInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  optionTitle: {
+  cardHeaderLabel: {
     fontSize: 15,
     fontWeight: '600',
     color: '#09090b',
   },
-  optionDesc: {
-    fontSize: 12,
+  cardHeaderDomain: {
+    fontSize: 15,
     color: '#71717a',
-    marginTop: 2,
+    maxWidth: '65%',
+    textAlign: 'right',
   },
-  actionButton: {
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#f4f4f5',
+    marginHorizontal: 16,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  rowLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#007aff',
-    paddingVertical: 14,
-    borderRadius: 16,
-    gap: 8,
+    flex: 1,
+    marginRight: 12,
   },
-  actionBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
+  iconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f4f4f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  rowText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#09090b',
+    flex: 1,
+  },
+  footnote: {
+    fontSize: 12,
+    color: '#71717a',
+    marginTop: 10,
+    marginBottom: 14,
+    paddingHorizontal: 8,
+    lineHeight: 17,
+  },
+  helpCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  helpQuestion: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#09090b',
+  },
+  helpBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  helpBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#007aff',
   },
 });

@@ -2181,21 +2181,38 @@ function BrowserMain() {
           onTouchEnd={handleHeaderTouchEnd}
         >
           <View style={styles.webTopGreetingRow}>
-            {/* Nút Khiên chặn quảng cáo bên trái */}
+            {/* Nút Khiên chặn quảng cáo bên trái (phong cách Cốc Cốc: icon đen, tag BẬT màu blue) */}
             <TouchableOpacity
-              style={styles.webTopIconBtn}
+              style={styles.webTopShieldBtn}
               onPress={() => setShieldSheetVisible(true)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               activeOpacity={0.7}
             >
+              {stats.isShieldActive && (
+                <View
+                  style={[
+                    styles.shieldTagBadge,
+                    {
+                      backgroundColor: isIncognito ? '#1e293b' : '#eff6ff',
+                      borderColor: isIncognito ? '#3b82f6' : '#93c5fd',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.shieldTagText,
+                      { color: isIncognito ? '#60a5fa' : '#007aff' },
+                    ]}
+                  >
+                    BẬT
+                  </Text>
+                </View>
+              )}
               <Feather
                 name="shield"
-                size={16}
-                color={stats.isShieldActive ? (isIncognito ? '#93c5fd' : '#007aff') : '#a1a1aa'}
+                size={17}
+                color={stats.isShieldActive ? (isIncognito ? '#e4e4e7' : '#09090b') : '#a1a1aa'}
               />
-              {stats.blockedAds + stats.blockedPopups > 0 && (
-                <View style={styles.headerBadgeDot} />
-              )}
             </TouchableOpacity>
 
             <Text
@@ -2533,6 +2550,7 @@ function BrowserMain() {
         visible={shieldSheetVisible}
         onClose={() => setShieldSheetVisible(false)}
         stats={stats}
+        currentUrl={currentTab?.url}
         onToggleShield={handleToggleShield}
         onToggleAggressive={handleToggleAggressive}
         onManualZap={handleForceZap}
@@ -2845,6 +2863,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     letterSpacing: -0.1,
+  },
+  webTopShieldBtn: {
+    width: 34,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  shieldTagBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 1,
+    paddingHorizontal: 2.5,
+    paddingVertical: 0.5,
+    borderRadius: 3,
+    borderWidth: 0.6,
+    zIndex: 2,
+  },
+  shieldTagText: {
+    fontSize: 7.5,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+    lineHeight: 9,
   },
   headerBadgeDot: {
     position: 'absolute',

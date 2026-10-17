@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 
 interface HeaderBarProps {
@@ -43,19 +43,16 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
           onPress={onOpenShield}
           activeOpacity={0.7}
         >
+          {shieldActive && (
+            <View style={styles.shieldTagBadge}>
+              <Text style={styles.shieldTagText}>BẬT</Text>
+            </View>
+          )}
           <Feather
             name="shield"
             size={16}
             color={shieldActive ? '#09090b' : '#a1a1aa'}
           />
-          {shieldActive && (
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: blockedCount > 0 ? '#22c55e' : '#a1a1aa' },
-              ]}
-            />
-          )}
         </TouchableOpacity>
 
         {/* Khóa bảo mật HTTPS */}
@@ -129,13 +126,24 @@ const styles = StyleSheet.create({
     paddingRight: 8,
     position: 'relative',
   },
-  statusDot: {
+  shieldTagBadge: {
     position: 'absolute',
     top: -2,
-    right: 4,
-    width: 6,
-    height: 6,
+    left: -2,
+    paddingHorizontal: 2.5,
+    paddingVertical: 0.5,
     borderRadius: 3,
+    borderWidth: 0.6,
+    borderColor: '#93c5fd',
+    backgroundColor: '#eff6ff',
+    zIndex: 2,
+  },
+  shieldTagText: {
+    color: '#007aff',
+    fontSize: 7,
+    fontWeight: '800',
+    letterSpacing: -0.2,
+    lineHeight: 8.5,
   },
   lockIcon: {
     marginRight: 6,
