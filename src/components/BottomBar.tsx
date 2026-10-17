@@ -161,7 +161,7 @@ export const BottomBar: React.FC<BottomBarProps> = ({
             <Feather
               name="bookmark"
               size={17}
-              color={isBookmarked ? '#18181b' : subIconColor}
+              color={isBookmarked ? '#007aff' : subIconColor}
             />
           </TouchableOpacity>
         )}

@@ -60,7 +60,7 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
               <Switch
                 value={stats.isShieldActive}
                 onValueChange={onToggleShield}
-                trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                trackColor={{ false: '#e4e4e7', true: '#007aff' }}
                 ios_backgroundColor="#e4e4e7"
                 thumbColor="#ffffff"
               />
@@ -75,7 +75,7 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
               <Switch
                 value={stats.aggressiveMode}
                 onValueChange={onToggleAggressive}
-                trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                trackColor={{ false: '#e4e4e7', true: '#007aff' }}
                 ios_backgroundColor="#e4e4e7"
                 thumbColor="#ffffff"
               />
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.sheetBackground,
     borderTopLeftRadius: theme.radius.sheet,
     borderTopRightRadius: theme.radius.sheet,
     paddingHorizontal: 20,
@@ -137,10 +137,12 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   optionsList: {
-    backgroundColor: theme.colors.cardSecondary,
+    backgroundColor: '#ffffff',
     borderRadius: theme.radius.xl,
     paddingVertical: 4,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   optionRow: {
     flexDirection: 'row',
@@ -169,7 +171,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#18181b',
+    backgroundColor: '#007aff',
     paddingVertical: 14,
     borderRadius: 16,
     gap: 8,

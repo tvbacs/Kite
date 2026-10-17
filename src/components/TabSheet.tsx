@@ -15,6 +15,7 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrowserTab } from '../types/browser';
 import { PinModal } from './PinModal';
+import { theme } from '../constants/theme';
 
 interface TabSheetProps {
   visible: boolean;
@@ -795,7 +796,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   menuSheet: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.sheetBackground,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -829,13 +830,17 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   actionFrame: {
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
     overflow: 'hidden',
     marginBottom: 14,
   },

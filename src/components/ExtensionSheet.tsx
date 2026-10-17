@@ -15,6 +15,7 @@ import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File } from 'expo-file-system';
+import { theme } from '../constants/theme';
 
 export const STORAGE_EXTENSIONS_KEY = '@kite_user_extensions';
 
@@ -457,13 +458,13 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
                         ) : null}
                       </View>
 
-                      {/* Công tắc Bật/Tắt - Đen / Xám */}
+                      {/* Công tắc Bật/Tắt - Blue khi Bật */}
                       <Switch
                         value={item.enabled}
                         onValueChange={() => handleToggleExtension(item.id)}
-                        trackColor={{ false: '#d1d5db', true: '#18181b' }}
-                        ios_backgroundColor="#d1d5db"
-                        thumbColor="#ffffff"
+                        trackColor={{ false: theme.colors.switchTrackFalse, true: theme.colors.switchTrackTrue }}
+                        ios_backgroundColor={theme.colors.switchTrackFalse}
+                        thumbColor={theme.colors.switchThumb}
                       />
                     </View>
 
@@ -634,7 +635,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.sheetBackground,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     maxHeight: '86%',
@@ -674,7 +675,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 10,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   countBadgeText: {
     fontSize: 11.5,
@@ -687,7 +690,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   actionRow: {
     flexDirection: 'row',
@@ -703,7 +708,9 @@ const styles = StyleSheet.create({
     gap: 6,
     height: 38,
     borderRadius: 10,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   importBtnText: {
     fontSize: 13,
@@ -718,7 +725,7 @@ const styles = StyleSheet.create({
     gap: 5,
     height: 38,
     borderRadius: 10,
-    backgroundColor: '#18181b',
+    backgroundColor: theme.colors.accentBlue,
   },
   addBtnText: {
     fontSize: 13,
@@ -728,11 +735,13 @@ const styles = StyleSheet.create({
   searchBarBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
     borderRadius: 10,
     paddingHorizontal: 12,
     height: 38,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   searchInput: {
     flex: 1,
@@ -766,7 +775,7 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#18181b',
+    backgroundColor: theme.colors.accentBlue,
     paddingVertical: 9,
     paddingHorizontal: 16,
     borderRadius: 10,
@@ -777,10 +786,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   extCard: {
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
     borderRadius: 14,
     padding: 14,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   extCardTopRow: {
     flexDirection: 'row',
@@ -884,8 +895,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   timingOptionActive: {
-    backgroundColor: '#18181b',
-    borderColor: '#18181b',
+    backgroundColor: theme.colors.accentBlue,
+    borderColor: theme.colors.accentBlue,
   },
   timingOptionText: {
     fontSize: 12,
@@ -929,7 +940,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 18,
     borderRadius: 10,
-    backgroundColor: '#18181b',
+    backgroundColor: theme.colors.accentBlue,
   },
   saveBtnText: {
     fontSize: 13.5,

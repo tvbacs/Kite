@@ -16,6 +16,10 @@ export const theme = {
     card: '#ffffff',
     cardSecondary: '#f4f4f5',
 
+    // Bottom Sheet Surface & Cards ("xanh xanh xám xám tí" - cool slate blue-gray)
+    sheetBackground: '#f0f4f8',
+    sheetCard: '#ffffff',
+
     // Text
     textPrimary: '#09090b',
     textSecondary: '#71717a',
@@ -37,9 +41,12 @@ export const theme = {
     graySubtle: '#e4e4e7',
     grayBackground: '#f4f4f5',
 
+    // Primary Accents & Active States (Blue)
+    accentBlue: '#007aff',
+
     // Switch Tracks
     switchTrackFalse: '#e4e4e7',
-    switchTrackTrue: '#18181b',
+    switchTrackTrue: '#007aff',
     switchThumb: '#ffffff',
   },
   typography: {

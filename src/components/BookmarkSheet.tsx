@@ -14,6 +14,7 @@ import {
 import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { theme } from '../constants/theme';
 
 export interface BookmarkItem {
   id: string;
@@ -294,7 +295,7 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     flex: 1,
-    backgroundColor: '#f2f2f7',
+    backgroundColor: theme.colors.sheetBackground,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     paddingHorizontal: 16,
@@ -316,18 +317,22 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#e5e5ea',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#e3e3e8',
+    backgroundColor: '#ffffff',
     borderRadius: 14,
     paddingHorizontal: 12,
     height: 40,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   searchIcon: {
     marginRight: 8,
@@ -347,6 +352,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   bookmarkRow: {
     flexDirection: 'row',
@@ -417,11 +424,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   addBookmarkText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#18181b',
+    color: theme.colors.accentBlue,
   },
   addFormCard: {
     backgroundColor: '#ffffff',
@@ -432,6 +441,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   addFormTitle: {
     fontSize: 15,
@@ -447,6 +458,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#09090b',
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   formBtnRow: {
     flexDirection: 'row',
@@ -469,7 +482,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 10,
-    backgroundColor: '#18181b',
+    backgroundColor: theme.colors.accentBlue,
   },
   formSubmitText: {
     fontSize: 13,

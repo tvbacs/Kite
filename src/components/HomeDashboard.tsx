@@ -1656,7 +1656,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       >
                         {eng.name}
                       </Text>
-                      {isSelected && <Feather name="check" size={16} color={theme.colors.black} />}
+                      {isSelected && <Feather name="check" size={16} color="#007aff" />}
                     </TouchableOpacity>
                   );
                 })}
@@ -2469,7 +2469,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   bottomSheetContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.sheetBackground,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     paddingTop: 10,
@@ -2522,10 +2522,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 14,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   engineGridItemSelected: {
-    backgroundColor: theme.colors.border,
+    backgroundColor: '#ffffff',
+    borderColor: '#007aff',
+    borderWidth: 1.5,
   },
   engineGridLogo: {
     width: 24,
@@ -2539,22 +2543,25 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
   },
   engineGridNameSelected: {
-    color: theme.colors.black,
+    color: theme.colors.accentBlue,
     fontWeight: '700',
   },
   sheetSubHeader: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
-    color: theme.colors.textSecondary,
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: '#09090b',
     marginBottom: 8,
-    marginTop: 10,
+    marginTop: 12,
     marginLeft: 4,
+    letterSpacing: 0.2,
   },
   groupedOptionContainer: {
-    backgroundColor: theme.colors.card,
+    backgroundColor: theme.colors.sheetCard,
     borderRadius: theme.radius.xl,
     overflow: 'hidden',
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   groupedOptionRow: {
     flexDirection: 'row',
@@ -2589,8 +2596,8 @@ const styles = StyleSheet.create({
   bgOptionTitle: {
     flex: 1,
     fontSize: theme.typography.fontSize.menuTitle,
-    fontWeight: theme.typography.fontWeight.medium,
-    color: theme.colors.textPrimary,
+    fontWeight: '600',
+    color: '#09090b',
   },
   sheetSectionHeaderRow: {
     flexDirection: 'row',
@@ -2621,12 +2628,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 8,
     borderRadius: 16,
-    backgroundColor: '#f4f4f5',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   themeCardItemSelected: {
     backgroundColor: '#ffffff',
+    borderColor: '#18181b',
+    borderWidth: 1.5,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -2669,7 +2678,7 @@ const styles = StyleSheet.create({
   },
   // CHROME-STYLE GOOGLE ACCOUNT BOTTOM SHEET
   accountSheetContainer: {
-    backgroundColor: '#f2f2f7',
+    backgroundColor: theme.colors.sheetBackground,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 16,

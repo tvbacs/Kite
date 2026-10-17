@@ -828,7 +828,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
                   <Switch
                     value={settings.autoPromptSave}
                     onValueChange={(v) => updateSetting('autoPromptSave', v)}
-                    trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                    trackColor={{ false: '#e4e4e7', true: '#007aff' }}
                     ios_backgroundColor="#e4e4e7"
                     thumbColor="#ffffff"
                   />
@@ -842,7 +842,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
                   <Switch
                     value={settings.requireBiometrics}
                     onValueChange={(v) => updateSetting('requireBiometrics', v)}
-                    trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                    trackColor={{ false: '#e4e4e7', true: '#007aff' }}
                     ios_backgroundColor="#e4e4e7"
                     thumbColor="#ffffff"
                   />
@@ -872,7 +872,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.sheetBackground,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     maxHeight: '92%',
@@ -923,12 +923,14 @@ const styles = StyleSheet.create({
   searchPillBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.backgroundSecondary,
+    backgroundColor: '#ffffff',
     borderRadius: theme.radius.full,
     marginHorizontal: 20,
     paddingHorizontal: 16,
     height: 44,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   searchPillInput: {
     flex: 1,
@@ -954,10 +956,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.backgroundSecondary,
+    backgroundColor: '#ffffff',
     borderRadius: theme.radius.xl,
     padding: 16,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   checkupTitle: {
     fontSize: 15.5,
@@ -983,11 +987,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addPasswordRowBtn: {
-    backgroundColor: theme.colors.backgroundSecondary,
+    backgroundColor: '#ffffff',
     borderRadius: theme.radius.xl,
     paddingVertical: 12,
     paddingHorizontal: 18,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   addPasswordRowBtnText: {
     fontSize: theme.typography.fontSize.base,
@@ -1001,9 +1007,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   groupedListCard: {
-    backgroundColor: theme.colors.backgroundSecondary,
+    backgroundColor: '#ffffff',
     borderRadius: theme.radius.xl,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   credRowItem: {
     flexDirection: 'row',
@@ -1125,17 +1133,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: '#f4f4f5',
-    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderColor: '#e4e4e7',
+    backgroundColor: theme.colors.sheetBackground,
   },
   bottomPillBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   bottomPillBtnText: {
     fontSize: 13.5,
@@ -1213,7 +1223,7 @@ const styles = StyleSheet.create({
   },
   generatePwdText: {
     fontSize: 12,
-    color: '#18181b',
+    color: theme.colors.accentBlue,
     fontWeight: '600',
   },
   passwordInputWrap: {
@@ -1248,7 +1258,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   savePillBtn: {
-    backgroundColor: '#18181b',
+    backgroundColor: '#007aff',
     borderRadius: 18,
     paddingVertical: 9,
     paddingHorizontal: 20,

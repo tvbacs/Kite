@@ -159,14 +159,14 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               }}
               activeOpacity={0.7}
             >
-              <View style={[styles.quickActionIconBox, isBookmarked && { backgroundColor: '#18181b' }]}>
+              <View style={[styles.quickActionIconBox, isBookmarked && { backgroundColor: '#007aff' }]}>
                 <Feather
                   name="bookmark"
                   size={18}
                   color={isBookmarked ? '#ffffff' : '#09090b'}
                 />
               </View>
-              <Text style={[styles.quickActionLabel, isBookmarked && { color: '#18181b' }]}>
+              <Text style={[styles.quickActionLabel, isBookmarked && { color: '#007aff' }]}>
                 {isBookmarked ? 'Đã lưu' : 'Dấu trang'}
               </Text>
             </TouchableOpacity>
@@ -195,14 +195,14 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               }}
               activeOpacity={0.7}
             >
-              <View style={[styles.quickActionIconBox, isDesktop && { backgroundColor: '#18181b' }]}>
+              <View style={[styles.quickActionIconBox, isDesktop && { backgroundColor: '#007aff' }]}>
                 <Feather
                   name="monitor"
                   size={18}
                   color={isDesktop ? '#ffffff' : '#09090b'}
                 />
               </View>
-              <Text style={[styles.quickActionLabel, isDesktop && { color: '#18181b' }]}>
+              <Text style={[styles.quickActionLabel, isDesktop && { color: '#007aff' }]}>
                 {isDesktop ? 'Máy tính' : 'Di động'}
               </Text>
             </TouchableOpacity>
@@ -242,7 +242,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                     <Switch
                       value={!!isReaderMode}
                       onValueChange={onToggleReaderMode}
-                      trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                      trackColor={{ false: '#e4e4e7', true: '#007aff' }}
                       ios_backgroundColor="#e4e4e7"
                       thumbColor="#ffffff"
                     />
@@ -259,7 +259,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                     <Switch
                       value={!!isKeepAwakeActive}
                       onValueChange={onToggleKeepAwake}
-                      trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                      trackColor={{ false: '#e4e4e7', true: '#007aff' }}
                       ios_backgroundColor="#e4e4e7"
                       thumbColor="#ffffff"
                     />
@@ -276,7 +276,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                     <Switch
                       value={!!isDataSaverActive}
                       onValueChange={onToggleDataSaver}
-                      trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                      trackColor={{ false: '#e4e4e7', true: '#007aff' }}
                       ios_backgroundColor="#e4e4e7"
                       thumbColor="#ffffff"
                     />
@@ -488,7 +488,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                     <Text style={[styles.engineChoiceName, isSelected && styles.engineChoiceNameActive]}>
                       {eng.name}
                     </Text>
-                    {isSelected && <Feather name="check" size={18} color="#18181b" />}
+                    {isSelected && <Feather name="check" size={18} color="#007aff" />}
                   </TouchableOpacity>
                 );
               })}
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.sheetBackground,
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     maxHeight: '86%',
@@ -546,11 +546,13 @@ const styles = StyleSheet.create({
   quickActionsBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     paddingVertical: 10,
     paddingHorizontal: 6,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   quickActionItem: {
     flex: 1,
@@ -560,7 +562,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f4f4f5',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
@@ -585,6 +587,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderRadius: 16,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   menuRow: {
     flexDirection: 'row',
@@ -658,7 +662,7 @@ const styles = StyleSheet.create({
     borderColor: '#e4e4e7',
   },
   engineChoiceSelected: {
-    borderColor: '#18181b',
+    borderColor: '#007aff',
     backgroundColor: '#ffffff',
   },
   enginePickerLogo: {
@@ -673,7 +677,7 @@ const styles = StyleSheet.create({
     color: '#18181b',
   },
   engineChoiceNameActive: {
-    color: '#18181b',
+    color: '#007aff',
     fontWeight: '700',
   },
 });

@@ -15,6 +15,7 @@ import {
 import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { theme } from '../constants/theme';
 
 export interface HistoryItem {
   id: string;
@@ -193,7 +194,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: theme.colors.sheetBackground,
   },
   header: {
     height: 52,
@@ -201,6 +202,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
+    backgroundColor: theme.colors.sheetBackground,
     borderBottomWidth: 1,
     borderBottomColor: '#e4e4e7',
   },
@@ -214,7 +216,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   doneBtnText: {
-    color: '#18181b',
+    color: theme.colors.accentBlue,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -233,12 +235,14 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
     marginHorizontal: 16,
     marginVertical: 12,
     borderRadius: 12,
     paddingHorizontal: 10,
     height: 40,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   searchIcon: {
     marginRight: 8,
@@ -256,9 +260,13 @@ const styles = StyleSheet.create({
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e4e4e7',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   favicon: {
     width: 24,
