@@ -43,7 +43,7 @@ export const BottomBar: React.FC<BottomBarProps> = ({
   onToggleReaderMode,
 }) => {
   const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 10);
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 16 : 8);
 
   // Lấy tên miền ngắn gọn hiển thị khi đang duyệt web thực tế
   const getDisplayDomain = (url: string) => {
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: 10,
+    paddingTop: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: -2 },
@@ -210,9 +210,9 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   navBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -221,12 +221,12 @@ const styles = StyleSheet.create({
   },
   searchPill: {
     flex: 1,
-    height: 44,
-    borderRadius: 22,
+    height: 40,
+    borderRadius: 20,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    marginHorizontal: 8,
+    marginHorizontal: 6,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,

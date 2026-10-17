@@ -2194,7 +2194,6 @@ function BrowserMain() {
                     styles.shieldTagBadge,
                     {
                       backgroundColor: isIncognito ? '#1e293b' : '#eff6ff',
-                      borderColor: isIncognito ? '#3b82f6' : '#93c5fd',
                     },
                   ]}
                 >
@@ -2874,11 +2873,11 @@ const styles = StyleSheet.create({
   shieldTagBadge: {
     position: 'absolute',
     top: 0,
-    left: 1,
-    paddingHorizontal: 2.5,
-    paddingVertical: 0.5,
-    borderRadius: 3,
-    borderWidth: 0.6,
+    left: 13,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    borderRadius: 3.5,
+    borderWidth: 0,
     zIndex: 2,
   },
   shieldTagText: {

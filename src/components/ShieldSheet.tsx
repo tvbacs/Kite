@@ -11,7 +11,7 @@ interface ShieldSheetProps {
   currentUrl?: string;
   onToggleShield: () => void;
   onToggleAggressive: () => void;
-  onManualZap: () => void;
+  onManualZap?: () => void;
 }
 
 const getDomain = (url?: string): string => {
@@ -68,21 +68,8 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Biểu tượng Khiên trung tâm và Tiêu đề trạng thái giống Cốc Cốc */}
+          {/* Tiêu đề trạng thái */}
           <View style={styles.centerSection}>
-            <View
-              style={[
-                styles.shieldEmblem,
-                stats.isShieldActive ? styles.shieldEmblemActive : styles.shieldEmblemInactive,
-              ]}
-            >
-              <Feather
-                name="shield"
-                size={30}
-                color={stats.isShieldActive ? '#007aff' : '#71717a'}
-              />
-            </View>
-
             <Text style={styles.title}>
               {stats.isShieldActive ? 'Chặn quảng cáo đang bật' : 'Chặn quảng cáo đang tắt'}
             </Text>
@@ -147,21 +134,6 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
           <Text style={styles.footnote}>
             Hãy thử tạm dừng chặn nếu trang web bạn đang xem không hoạt động
           </Text>
-
-          {/* Card trợ giúp gỡ lỗi / mở khóa trang web */}
-          <View style={styles.helpCard}>
-            <Text style={styles.helpQuestion}>Bạn gặp vấn đề với trang web?</Text>
-            <TouchableOpacity
-              onPress={() => {
-                onManualZap();
-                onClose();
-              }}
-              activeOpacity={0.7}
-              style={styles.helpBtn}
-            >
-              <Text style={styles.helpBtnText}>Trợ giúp</Text>
-            </TouchableOpacity>
-          </View>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -208,20 +180,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 12,
     marginBottom: 16,
-  },
-  shieldEmblem: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  shieldEmblemActive: {
-    backgroundColor: '#eff6ff',
-  },
-  shieldEmblemInactive: {
-    backgroundColor: '#f4f4f5',
+    marginTop: 4,
   },
   title: {
     fontSize: 18,
@@ -298,31 +257,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#71717a',
     marginTop: 10,
-    marginBottom: 14,
+    marginBottom: 6,
     paddingHorizontal: 8,
     lineHeight: 17,
-  },
-  helpCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  helpQuestion: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#09090b',
-  },
-  helpBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-  },
-  helpBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#007aff',
   },
 });

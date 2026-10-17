@@ -1429,27 +1429,25 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
             {incognitoPin ? (
               <TouchableOpacity
-                style={styles.incognitoPinBadge}
+                style={styles.incognitoMenuBtn}
                 onPress={onOpenPinSettings}
                 activeOpacity={0.7}
               >
-                <Feather name="lock" size={13} color="#22c55e" />
-                <Text style={styles.incognitoPinBadgeText}>PIN bật</Text>
+                <Feather name="lock" size={17} color="#22c55e" />
               </TouchableOpacity>
             ) : onOpenPinSettings ? (
               <TouchableOpacity
-                style={styles.incognitoPinBadge}
+                style={styles.incognitoMenuBtn}
                 onPress={onOpenPinSettings}
                 activeOpacity={0.7}
               >
-                <Feather name="shield" size={13} color="#9aa0a6" />
-                <Text style={[styles.incognitoPinBadgeText, { color: '#9aa0a6' }]}>Cài PIN</Text>
+                <Feather name="shield" size={17} color="#9aa0a6" />
               </TouchableOpacity>
             ) : null}
           </View>
         </View>
 
-        {/* Thanh tìm kiếm trên cùng của trang ẩn danh giống hệt ảnh mẫu Chrome */}
+        {/* Thanh tìm kiếm trên cùng của trang ẩn danh */}
         <TouchableOpacity
           style={styles.incognitoSearchPill}
           onPress={onFocusSearch}
@@ -1469,65 +1467,67 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </Text>
         </TouchableOpacity>
 
-        {/* Khung nội dung chính của Chế độ Ẩn danh */}
+        {/* Khung nội dung chính của Chế độ Ẩn danh Kite */}
         <View style={styles.incognitoMainCard}>
-          {/* Biểu tượng mũ fedora và kính tròn ẩn danh kinh điển */}
+          {/* Biểu tượng riêng tư Kite */}
           <View style={styles.incognitoAvatarCircle}>
-            <MaterialCommunityIcons name="incognito" size={46} color="#202124" />
+            <Feather name="eye-off" size={36} color="#93c5fd" />
           </View>
 
           {/* Tiêu đề chính */}
-          <Text style={styles.incognitoTitle}>
-            Bạn đã chuyển sang chế độ{'\n'}ẩn danh
-          </Text>
+          <Text style={styles.incognitoTitle}>Duyệt web riêng tư</Text>
 
-          {/* Đoạn văn giải thích */}
+          {/* Đoạn văn giới thiệu ngắn gọn */}
           <Text style={styles.incognitoParagraph}>
-            Những người khác sử dụng thiết bị này sẽ không thấy hoạt động của bạn. Vì vậy, bạn có thể duyệt web riêng tư hơn. Việc này sẽ không thay đổi cách các trang web mà bạn truy cập và dịch vụ mà họ sử dụng (bao gồm cả {currentEngine.name}) thu thập dữ liệu. Hệ thống sẽ lưu các tệp đã tải xuống, dấu trang và các mục có trong danh sách đọc.
+            Kite bảo vệ quyền riêng tư của bạn bằng cách không lưu lại nhật ký duyệt web, cookie hay dữ liệu biểu mẫu. Mọi dấu vết sẽ tự động xóa khi bạn đóng tab.
           </Text>
 
-          <TouchableOpacity
-            onPress={() => onSelectUrl('https://support.google.com/chrome/answer/95464')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.incognitoLearnMore}>Tìm hiểu thêm</Text>
-          </TouchableOpacity>
+          {/* Khối tính năng bảo mật nổi bật của Kite */}
+          <View style={styles.incognitoFeatureCard}>
+            <View style={styles.incognitoFeatureRow}>
+              <View style={styles.incognitoFeatureIconBox}>
+                <Feather name="trash-2" size={17} color="#93c5fd" />
+              </View>
+              <View style={styles.incognitoFeatureTextBox}>
+                <Text style={styles.incognitoFeatureTitle}>Tự động dọn sạch</Text>
+                <Text style={styles.incognitoFeatureSub}>
+                  Lịch sử và cookie được xóa hoàn toàn khi đóng tab
+                </Text>
+              </View>
+            </View>
 
-          {/* Khối 1: Kite sẽ không lưu */}
-          <View style={styles.incognitoSection}>
-            <Text style={styles.incognitoSectionTitle}>Kite sẽ không lưu:</Text>
-            <View style={styles.incognitoBulletRow}>
-              <Text style={styles.incognitoBulletDot}>•</Text>
-              <Text style={styles.incognitoBulletText}>Nhật ký duyệt web</Text>
+            <View style={styles.incognitoFeatureDivider} />
+
+            <View style={styles.incognitoFeatureRow}>
+              <View style={styles.incognitoFeatureIconBox}>
+                <Feather name="shield" size={17} color="#93c5fd" />
+              </View>
+              <View style={styles.incognitoFeatureTextBox}>
+                <Text style={styles.incognitoFeatureTitle}>Chặn trình theo dõi</Text>
+                <Text style={styles.incognitoFeatureSub}>
+                  Ngăn các mạng quảng cáo theo dõi liên trang
+                </Text>
+              </View>
             </View>
-            <View style={styles.incognitoBulletRow}>
-              <Text style={styles.incognitoBulletDot}>•</Text>
-              <Text style={styles.incognitoBulletText}>Cookie và dữ liệu trang web</Text>
-            </View>
-            <View style={styles.incognitoBulletRow}>
-              <Text style={styles.incognitoBulletDot}>•</Text>
-              <Text style={styles.incognitoBulletText}>Thông tin đã nhập vào biểu mẫu</Text>
+
+            <View style={styles.incognitoFeatureDivider} />
+
+            <View style={styles.incognitoFeatureRow}>
+              <View style={styles.incognitoFeatureIconBox}>
+                <Feather name="lock" size={17} color="#93c5fd" />
+              </View>
+              <View style={styles.incognitoFeatureTextBox}>
+                <Text style={styles.incognitoFeatureTitle}>Bảo vệ bằng mã PIN</Text>
+                <Text style={styles.incognitoFeatureSub}>
+                  Khóa an toàn các tab riêng tư trước người lạ
+                </Text>
+              </View>
             </View>
           </View>
 
-          {/* Khối 2: Hoạt động của bạn có thể vẫn hiển thị */}
-          <View style={[styles.incognitoSection, { marginTop: 20 }]}>
-            <Text style={styles.incognitoSectionTitle}>
-              Hoạt động của bạn <Text style={{ fontWeight: '700', color: '#e8eaed' }}>có thể vẫn hiển thị</Text> với:
-            </Text>
-            <View style={styles.incognitoBulletRow}>
-              <Text style={styles.incognitoBulletDot}>•</Text>
-              <Text style={styles.incognitoBulletText}>Trang web bạn truy cập</Text>
-            </View>
-            <View style={styles.incognitoBulletRow}>
-              <Text style={styles.incognitoBulletDot}>•</Text>
-              <Text style={styles.incognitoBulletText}>Chủ lao động hoặc trường học của bạn</Text>
-            </View>
-            <View style={styles.incognitoBulletRow}>
-              <Text style={styles.incognitoBulletDot}>•</Text>
-              <Text style={styles.incognitoBulletText}>Nhà cung cấp dịch vụ Internet của bạn</Text>
-            </View>
-          </View>
+          <Text style={styles.incognitoFootnote}>
+            Lưu ý: Trang web bạn truy cập hoặc nhà mạng vẫn có thể nhận diện kết nối của thiết bị.
+          </Text>
         </View>
       </Animated.View>
     </ScrollView>
@@ -2956,69 +2956,82 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   incognitoAvatarCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#e8eaed',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#282a2d',
+    borderWidth: 1,
+    borderColor: '#3c4043',
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
     marginTop: 6,
-    marginBottom: 22,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 4,
+    marginBottom: 16,
   },
   incognitoTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#ffffff',
     textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 32,
+    marginBottom: 10,
     letterSpacing: -0.3,
   },
   incognitoParagraph: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: '#9aa0a6',
-    lineHeight: 22,
-    textAlign: 'left',
-    marginBottom: 10,
+    lineHeight: 21,
+    textAlign: 'center',
+    marginBottom: 20,
+    paddingHorizontal: 10,
   },
-  incognitoLearnMore: {
+  incognitoFeatureCard: {
+    backgroundColor: '#282a2d',
+    borderRadius: 18,
+    paddingVertical: 4,
+    marginBottom: 16,
+  },
+  incognitoFeatureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  incognitoFeatureIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(147, 197, 253, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  incognitoFeatureTextBox: {
+    flex: 1,
+  },
+  incognitoFeatureTitle: {
     fontSize: 14,
-    color: '#8ab4f8',
-    marginBottom: 24,
-    fontWeight: '500',
-  },
-  incognitoSection: {
-    marginTop: 4,
-  },
-  incognitoSectionTitle: {
-    fontSize: 15,
     fontWeight: '600',
     color: '#e8eaed',
-    marginBottom: 12,
+    marginBottom: 2,
   },
-  incognitoBulletRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-    paddingLeft: 4,
-  },
-  incognitoBulletDot: {
-    fontSize: 14,
+  incognitoFeatureSub: {
+    fontSize: 12,
     color: '#9aa0a6',
-    marginRight: 10,
-    lineHeight: 20,
+    lineHeight: 16,
   },
-  incognitoBulletText: {
-    fontSize: 14,
-    color: '#9aa0a6',
-    lineHeight: 20,
-    flex: 1,
+  incognitoFeatureDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#3c4043',
+    marginLeft: 66,
+    marginRight: 16,
+  },
+  incognitoFootnote: {
+    fontSize: 12,
+    color: '#5f6368',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    lineHeight: 17,
+    marginTop: 4,
   },
   simpleHeaderWidget: {
     width: '100%',
