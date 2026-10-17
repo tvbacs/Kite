@@ -9,7 +9,13 @@ import {
   Linking,
   Share,
   TouchableOpacity,
+  Image,
+  Animated,
+  ActivityIndicator,
 } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 import Feather from '@expo/vector-icons/Feather';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -134,6 +140,60 @@ function BrowserMain() {
   const closedTabsRef = useRef<BrowserTab[]>([]);
   const isVideoPlayingRef = useRef<boolean>(false);
   const isRestoredRef = useRef<boolean>(false);
+
+  // Trạng thái màn hình khởi động (Splash Screen)
+  const [isAppReady, setIsAppReady] = useState<boolean>(false);
+  const [showSplashOverlay, setShowSplashOverlay] = useState<boolean>(true);
+  const splashFadeAnim = useRef(new Animated.Value(1)).current;
+  const splashScaleAnim = useRef(new Animated.Value(0.92)).current;
+  const splashGlowAnim = useRef(new Animated.Value(0.75)).current;
+
+  useEffect(() => {
+    Animated.spring(splashScaleAnim, {
+      toValue: 1,
+      friction: 6,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(splashGlowAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(splashGlowAnim, {
+          toValue: 0.75,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulse.start();
+
+    return () => pulse.stop();
+  }, []);
+
+  useEffect(() => {
+    if (isAppReady) {
+      SplashScreen.hideAsync().catch(() => {});
+      Animated.parallel([
+        Animated.timing(splashFadeAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(splashScaleAnim, {
+          toValue: 1.06,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setShowSplashOverlay(false);
+      });
+    }
+  }, [isAppReady]);
 
   // Trạng thái tài khoản người dùng
   const [userProfile, setUserProfile] = useState<UserProfile>({
@@ -488,6 +548,11 @@ function BrowserMain() {
   const handleNavigateRef = useRef<(url: string) => void>(() => {});
 
   useEffect(() => {
+    const splashStartTime = Date.now();
+    const splashFallback = setTimeout(() => {
+      setIsAppReady(true);
+    }, 2500);
+
     AsyncStorage.getItem(STORAGE_ENGINE_KEY).then((eng) => {
       if (eng && SEARCH_ENGINES[eng]) {
         setCurrentEngineId(eng as any);
@@ -590,6 +655,12 @@ function BrowserMain() {
         } catch (e) {}
       }
       isRestoredRef.current = true;
+      const elapsed = Date.now() - splashStartTime;
+      const minDisplay = 800;
+      const remaining = Math.max(0, minDisplay - elapsed);
+      setTimeout(() => {
+        setIsAppReady(true);
+      }, remaining);
     });
 
     const { data: authSub } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -756,6 +827,7 @@ function BrowserMain() {
     });
 
     return () => {
+      clearTimeout(splashFallback);
       linkingSub.remove();
     };
   }, []);
@@ -3579,6 +3651,36 @@ function BrowserMain() {
         topInset={topInset}
         isIncognito={isIncognito}
       />
+
+      {/* MÀN HÌNH SPLASH SCREEN KHỞI ĐỘNG CỦA KITE */}
+      {showSplashOverlay && (
+        <Animated.View
+          style={[
+            styles.splashOverlay,
+            {
+              opacity: splashFadeAnim,
+              transform: [{ scale: splashScaleAnim }],
+            },
+          ]}
+          pointerEvents={isAppReady ? 'none' : 'auto'}
+        >
+          <StatusBar barStyle="light-content" backgroundColor="#0c0d13" />
+          <View style={styles.splashContent}>
+            <Animated.View style={{ opacity: splashGlowAnim, alignItems: 'center' }}>
+              <Image
+                source={require('./assets/logokite.png')}
+                style={styles.splashLogo}
+                resizeMode="contain"
+              />
+            </Animated.View>
+            <Text style={styles.splashTitle}>Kite</Text>
+            <Text style={styles.splashSubtitle}>Trình duyệt an toàn & siêu tốc</Text>
+          </View>
+          <View style={styles.splashFooter}>
+            <ActivityIndicator size="small" color="#007aff" />
+          </View>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -3592,6 +3694,49 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  splashOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#0c0d13',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999999,
+  },
+  splashContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splashLogo: {
+    width: 104,
+    height: 104,
+    borderRadius: 24,
+    shadowColor: '#007aff',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+  },
+  splashTitle: {
+    color: '#ffffff',
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginTop: 18,
+  },
+  splashSubtitle: {
+    color: '#9ca3af',
+    fontSize: 13,
+    fontWeight: '500',
+    letterSpacing: 0.4,
+    marginTop: 6,
+  },
+  splashFooter: {
+    position: 'absolute',
+    bottom: 50,
+    alignItems: 'center',
+  },
   mainContainer: {
     flex: 1,
   },

@@ -46,7 +46,8 @@
           "speechRecognitionPermission": "Cho phép Kite nhận diện giọng nói tiếng Việt."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-splash-screen"
     ]
   }
 }
