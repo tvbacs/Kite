@@ -1469,9 +1469,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
         {/* Khung nội dung chính của Chế độ Ẩn danh Kite */}
         <View style={styles.incognitoMainCard}>
-          {/* Biểu tượng riêng tư Kite */}
+          {/* Biểu tượng riêng tư Kite: bg trắng, icon đen */}
           <View style={styles.incognitoAvatarCircle}>
-            <Feather name="eye-off" size={36} color="#93c5fd" />
+            <Feather name="eye-off" size={38} color="#09090b" />
           </View>
 
           {/* Tiêu đề chính */}
@@ -1486,7 +1486,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           <View style={styles.incognitoFeatureCard}>
             <View style={styles.incognitoFeatureRow}>
               <View style={styles.incognitoFeatureIconBox}>
-                <Feather name="trash-2" size={17} color="#93c5fd" />
+                <Feather name="trash-2" size={19} color="#9aa0a6" />
               </View>
               <View style={styles.incognitoFeatureTextBox}>
                 <Text style={styles.incognitoFeatureTitle}>Tự động dọn sạch</Text>
@@ -1500,7 +1500,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
             <View style={styles.incognitoFeatureRow}>
               <View style={styles.incognitoFeatureIconBox}>
-                <Feather name="shield" size={17} color="#93c5fd" />
+                <Feather name="shield" size={19} color="#9aa0a6" />
               </View>
               <View style={styles.incognitoFeatureTextBox}>
                 <Text style={styles.incognitoFeatureTitle}>Chặn trình theo dõi</Text>
@@ -1514,7 +1514,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
             <View style={styles.incognitoFeatureRow}>
               <View style={styles.incognitoFeatureIconBox}>
-                <Feather name="lock" size={17} color="#93c5fd" />
+                <Feather name="lock" size={19} color="#9aa0a6" />
               </View>
               <View style={styles.incognitoFeatureTextBox}>
                 <Text style={styles.incognitoFeatureTitle}>Bảo vệ bằng mã PIN</Text>
@@ -2956,17 +2956,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   incognitoAvatarCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#282a2d',
-    borderWidth: 1,
-    borderColor: '#3c4043',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
     alignSelf: 'center',
     marginTop: 6,
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
   incognitoTitle: {
     fontSize: 22,
@@ -2997,10 +3000,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   incognitoFeatureIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(147, 197, 253, 0.12)',
+    width: 28,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
@@ -3022,7 +3023,7 @@ const styles = StyleSheet.create({
   incognitoFeatureDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#3c4043',
-    marginLeft: 66,
+    marginLeft: 58,
     marginRight: 16,
   },
   incognitoFootnote: {
