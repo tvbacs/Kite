@@ -399,7 +399,7 @@ export const TabSheet: React.FC<TabSheetProps> = ({
 
                 {/* KHUNG DUY NHẤT VỚI DIVIDER HORIZONTAL */}
                 <View style={styles.actionFrame}>
-                  {canRestoreClosedTab && (
+                  {canRestoreClosedTab && activeMode === 'normal' && (
                     <>
                       <TouchableOpacity
                         style={styles.actionRow}
@@ -476,9 +476,13 @@ export const TabSheet: React.FC<TabSheetProps> = ({
                     activeOpacity={0.7}
                   >
                     <View style={styles.actionTextCol}>
-                      <Text style={styles.actionRowTitle}>Đóng mọi thẻ</Text>
+                      <Text style={styles.actionRowTitle}>
+                        {activeMode === 'incognito' ? 'Đóng mọi thẻ ẩn danh' : 'Đóng mọi thẻ thường'}
+                      </Text>
                       <Text style={styles.actionRowSub}>
-                        Đóng toàn bộ thẻ đang mở và tạo thẻ mới
+                        {activeMode === 'incognito'
+                          ? 'Đóng toàn bộ các thẻ ẩn danh đang mở'
+                          : 'Đóng toàn bộ thẻ thường đang mở và tạo thẻ mới'}
                       </Text>
                     </View>
                     <Feather name="x-circle" size={18} color="#09090b" />
@@ -496,9 +500,13 @@ export const TabSheet: React.FC<TabSheetProps> = ({
                     activeOpacity={0.7}
                   >
                     <View style={styles.actionTextCol}>
-                      <Text style={styles.actionRowTitle}>Đóng các thẻ khác</Text>
+                      <Text style={styles.actionRowTitle}>
+                        {activeMode === 'incognito' ? 'Đóng các thẻ ẩn danh khác' : 'Đóng các thẻ khác'}
+                      </Text>
                       <Text style={styles.actionRowSub}>
-                        Chỉ giữ lại thẻ hiện tại bạn đang xem
+                        {activeMode === 'incognito'
+                          ? 'Chỉ giữ lại thẻ ẩn danh hiện tại bạn đang xem'
+                          : 'Chỉ giữ lại thẻ thường hiện tại bạn đang xem'}
                       </Text>
                     </View>
                     <Feather name="minus-circle" size={18} color="#09090b" />

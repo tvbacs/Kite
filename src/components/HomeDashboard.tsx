@@ -662,19 +662,28 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   const loadSavedData = async () => {
     try {
-      const savedShortcuts = await AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY);
-      if (savedShortcuts) setShortcuts(JSON.parse(savedShortcuts));
+      const [savedShortcuts, savedBg, savedTheme, savedAccountsStr, savedUser] =
+        await Promise.all([
+          AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY),
+          AsyncStorage.getItem(STORAGE_BG_KEY),
+          AsyncStorage.getItem(STORAGE_THEME_KEY),
+          AsyncStorage.getItem(STORAGE_SAVED_ACCOUNTS_KEY),
+          AsyncStorage.getItem(STORAGE_USER_KEY),
+        ]);
 
-      const savedBg = await AsyncStorage.getItem(STORAGE_BG_KEY);
+      if (savedShortcuts) {
+        try {
+          setShortcuts(JSON.parse(savedShortcuts));
+        } catch {}
+      }
+
       if (savedBg) setBgImage(savedBg);
 
-      const savedTheme = await AsyncStorage.getItem(STORAGE_THEME_KEY);
       if (savedTheme && THEME_PALETTES[savedTheme]) {
         setCurrentThemeId(savedTheme);
       }
 
       // Tải danh sách tài khoản đã lưu (chỉ tài khoản người dùng thực sự đăng nhập trên máy)
-      const savedAccountsStr = await AsyncStorage.getItem(STORAGE_SAVED_ACCOUNTS_KEY);
       if (savedAccountsStr) {
         try {
           const parsed = JSON.parse(savedAccountsStr);
@@ -700,8 +709,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       } else {
         setSavedAccounts([]);
       }
-
-      const savedUser = await AsyncStorage.getItem(STORAGE_USER_KEY);
       if (savedUser) {
         try {
           const parsed = JSON.parse(savedUser);
