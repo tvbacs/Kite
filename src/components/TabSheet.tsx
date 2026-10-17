@@ -269,17 +269,6 @@ export const TabSheet: React.FC<TabSheetProps> = ({
                 ? 'Các thẻ ẩn danh sẽ không lưu lại lịch sử duyệt web, cookie hay dữ liệu trang web của bạn.'
                 : 'Bấm nút [+] bên dưới để mở thẻ mới.'}
             </Text>
-
-            {activeMode === 'incognito' && (
-              <TouchableOpacity
-                style={styles.createIncognitoBtn}
-                onPress={handleCreateIncognitoTab}
-                activeOpacity={0.8}
-              >
-                <Feather name="plus" size={16} color="#ffffff" style={{ marginRight: 6 }} />
-                <Text style={styles.createIncognitoBtnText}>Mở thẻ ẩn danh mới</Text>
-              </TouchableOpacity>
-            )}
           </View>
         ) : (
           <ScrollView
@@ -656,20 +645,7 @@ const styles = StyleSheet.create({
     color: '#71717a',
     textAlign: 'center',
     lineHeight: 19,
-    marginBottom: 20,
-  },
-  createIncognitoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#09090b',
-    paddingVertical: 11,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-  },
-  createIncognitoBtnText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '600',
+    marginBottom: 0,
   },
   gridScroll: {
     flex: 1,
