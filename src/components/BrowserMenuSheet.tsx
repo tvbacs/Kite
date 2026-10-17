@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -53,6 +53,39 @@ interface BrowserMenuSheetProps {
   currentRegionText?: string;
   isRegionActive?: boolean;
 }
+ 
+export const triggerNativeShare = async (url: string, title?: string | null) => {
+  try {
+    const cleanUrl =
+      url && !url.startsWith('about:') && !url.startsWith('kite://')
+        ? url.startsWith('http://') || url.startsWith('https://')
+          ? url.trim()
+          : `https://${url.trim()}`
+        : 'https://kitebrowser.com';
+    const cleanTitle = title || 'Kite Browser';
+
+    if (Platform.OS === 'ios') {
+      // Trên iOS: CHỈ truyền `url` duy nhất!
+      // Khi chỉ truyền URL, iOS UIActivityViewController sẽ tự động kích hoạt
+      // Link Presentation Framework hiển thị xem trước liên kết (Link Preview Card kèm thumbnail và domain như Chrome/Safari)
+      // đồng thời kích hoạt đầy đủ các tính năng: Thêm vào Danh sách đọc, Sao chép link, AirDrop...
+      await Share.share({
+        url: cleanUrl,
+        title: cleanTitle,
+      });
+    } else {
+      // Trên Android: Truyền `message` chứa URL và `title`
+      await Share.share({
+        title: cleanTitle,
+        message: cleanUrl,
+      });
+    }
+  } catch (e: any) {
+    if (e?.message && !e.message.includes('dismissed') && !e.message.includes('cancel')) {
+      console.warn('Native share error:', e);
+    }
+  }
+};
 
 export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   visible,
@@ -94,39 +127,43 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
   const [engineModalVisible, setEngineModalVisible] = useState(false);
+  const actionAfterDismissRef = useRef<(() => void) | null>(null);
 
   const handleShare = () => {
-    onClose();
-    if (onShare) {
-      onShare();
-      return;
-    }
-    const rawUrl = currentUrl;
-    const shareUrl = rawUrl && !rawUrl.startsWith('about:') && !rawUrl.startsWith('kite://')
-      ? (rawUrl.startsWith('http://') || rawUrl.startsWith('https://') ? rawUrl.trim() : `https://${rawUrl.trim()}`)
-      : 'https://kitebrowser.com';
-    const titleToShare = currentTitle || (rawUrl ? 'Kite Browser' : 'Kite Browser - Trình duyệt siêu tốc & an toàn');
-
-    setTimeout(async () => {
-      try {
-        if (Platform.OS === 'ios') {
-          await Share.share({
-            title: titleToShare,
-            message: `${titleToShare}\n${shareUrl}`,
-            url: shareUrl,
-          });
-        } else {
-          await Share.share({
-            title: titleToShare,
-            message: `${titleToShare}\n${shareUrl}`,
-          });
-        }
-      } catch (e: any) {
-        if (e?.message && !e.message.includes('dismissed') && !e.message.includes('cancel')) {
-          console.warn('Share error:', e);
-        }
+    const doShare = () => {
+      if (onShare) {
+        onShare();
+      } else {
+        const rawUrl = currentUrl;
+        const shareUrl =
+          rawUrl && !rawUrl.startsWith('about:') && !rawUrl.startsWith('kite://')
+            ? rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+              ? rawUrl.trim()
+              : `https://${rawUrl.trim()}`
+            : 'https://kitebrowser.com';
+        const titleToShare = currentTitle || (rawUrl ? 'Kite Browser' : 'Kite Browser - Trình duyệt siêu tốc & an toàn');
+        triggerNativeShare(shareUrl, titleToShare);
       }
-    }, Platform.OS === 'ios' ? 450 : 100);
+    };
+
+    if (Platform.OS === 'ios') {
+      let executed = false;
+      const safeExecute = () => {
+        if (executed) return;
+        executed = true;
+        actionAfterDismissRef.current = null;
+        doShare();
+      };
+
+      actionAfterDismissRef.current = safeExecute;
+      onClose();
+
+      // Fallback timer: đảm bảo luôn được kích hoạt nếu onDismiss không nổ
+      setTimeout(safeExecute, 600);
+    } else {
+      onClose();
+      setTimeout(doShare, 120);
+    }
   };
 
   const getDisplayDomain = (url?: string | null) => {
@@ -145,6 +182,14 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
       transparent
       animationType="slide"
       onRequestClose={onClose}
+      onDismiss={() => {
+        if (actionAfterDismissRef.current) {
+          const act = actionAfterDismissRef.current;
+          actionAfterDismissRef.current = null;
+          // Đợi 50ms để iOS hoàn tất giải phóng view controller hierarchy
+          setTimeout(act, 50);
+        }
+      }}
     >
       <TouchableOpacity
         style={styles.backdrop}

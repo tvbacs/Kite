@@ -38,7 +38,7 @@ import { DownloadSheet, STORAGE_DOWNLOADS_KEY, DownloadedItem, ActiveDownloadIte
 import { DownloadPromptModal } from './src/components/DownloadPromptModal';
 import { PasswordManagerSheet, saveCredentialSecurely } from './src/components/PasswordManagerSheet';
 import { PasswordSavePromptModal } from './src/components/PasswordSavePromptModal';
-import { BrowserMenuSheet } from './src/components/BrowserMenuSheet';
+import { BrowserMenuSheet, triggerNativeShare } from './src/components/BrowserMenuSheet';
 import { StorageManagerSheet } from './src/components/StorageManagerSheet';
 import { RegionSheet } from './src/components/RegionSheet';
 import {
@@ -3602,7 +3602,6 @@ function BrowserMain() {
           }
         }}
         onShare={() => {
-          setBrowserMenuVisible(false);
           const rawUrl = activeUrl || currentTab?.url || inputUrl;
           const shareUrl =
             rawUrl && !rawUrl.startsWith('about:') && !rawUrl.startsWith('kite://')
@@ -3613,26 +3612,7 @@ function BrowserMain() {
           const titleToShare =
             currentTab?.title || (rawUrl ? 'Kite Browser' : 'Kite Browser - Trình duyệt siêu tốc & an toàn');
 
-          setTimeout(async () => {
-            try {
-              if (Platform.OS === 'ios') {
-                await Share.share({
-                  title: titleToShare,
-                  message: `${titleToShare}\n${shareUrl}`,
-                  url: shareUrl,
-                });
-              } else {
-                await Share.share({
-                  title: titleToShare,
-                  message: `${titleToShare}\n${shareUrl}`,
-                });
-              }
-            } catch (err: any) {
-              if (err?.message && !err.message.includes('dismissed') && !err.message.includes('cancel')) {
-                showToast('Không thể mở chia sẻ');
-              }
-            }
-          }, Platform.OS === 'ios' ? 450 : 100);
+          triggerNativeShare(shareUrl, titleToShare);
         }}
         onFindInPage={() => {
           if (!activeUrl) {
