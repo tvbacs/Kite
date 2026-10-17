@@ -401,9 +401,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 47 : 24);
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 34 : 16);
 
-  const slideAnim = useRef(new Animated.Value(40)).current;
-  const scaleAnim = useRef(new Animated.Value(0.94)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const opacityAnim = useRef(new Animated.Value(1)).current;
 
   const [shortcuts, setShortcuts] = useState<Bookmark[]>(DEFAULT_BOOKMARKS);
   const [bgImage, setBgImage] = useState<string | null>(null);
@@ -511,26 +511,21 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   // Hiệu ứng lò xo nhảy lên mượt mà mỗi khi tạo tab mới
   useEffect(() => {
-    slideAnim.setValue(40);
-    scaleAnim.setValue(0.94);
-    opacityAnim.setValue(0);
+    slideAnim.setValue(16);
+    scaleAnim.setValue(0.97);
+    opacityAnim.setValue(1);
 
     Animated.parallel([
       Animated.spring(slideAnim, {
         toValue: 0,
-        friction: 7,
-        tension: 60,
+        friction: 8,
+        tension: 65,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        friction: 7,
-        tension: 60,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacityAnim, {
-        toValue: 1,
-        duration: 200,
+        friction: 8,
+        tension: 65,
         useNativeDriver: true,
       }),
     ]).start();

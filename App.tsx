@@ -393,11 +393,43 @@ function BrowserMain() {
       }
     });
 
-    // Tiếp nhận liên kết chia sẻ từ ứng dụng khác (Share Sheet / Universal Links)
+    // Tiếp nhận liên kết chia sẻ từ ứng dụng khác (Share Sheet / Universal Links / OAuth Callback)
     const handleIncomingUrl = (url: string | null) => {
       if (!url) return;
       try {
-        let target = url.trim();
+        const raw = url.trim();
+        // Kiểm tra xem có phải là callback OAuth từ Supabase / Google không
+        if (
+          raw.includes('auth-callback') ||
+          raw.includes('access_token=') ||
+          raw.includes('error_code=')
+        ) {
+          if (raw.includes('error=')) {
+            setIsLoading(false);
+            showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
+            setTabs((prev) =>
+              prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
+            );
+            setInputUrl('');
+            return;
+          }
+          handleAuthCallbackUrl(raw).then((profile) => {
+            setIsLoading(false);
+            if (profile) {
+              setUserProfile(profile);
+              AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
+              upsertCloudProfile(profile.email || 'user', profile);
+              showToast(`Đăng nhập Google thành công! (${profile.name})`);
+            }
+            setTabs((prev) =>
+              prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
+            );
+            setInputUrl('');
+          });
+          return;
+        }
+
+        let target = raw;
         if (target.startsWith('kite://open?url=')) {
           target = decodeURIComponent(target.replace('kite://open?url=', ''));
         } else if (target.startsWith('kite://')) {
@@ -1383,19 +1415,33 @@ function BrowserMain() {
       return true;
     }
 
-    // 1. Bắt Callback hoàn tất trả về App (kite://auth-callback hoặc localhost:3000 hoặc URL chứa session token)
+    // 1. Bắt Callback hoàn tất trả về App (kite://auth-callback hoặc localhost:3000 hoặc URL chứa session token/error)
     if (
       reqUrl.startsWith('kite://auth-callback') ||
+      reqUrl.startsWith('kite://') ||
+      reqUrl.includes('auth-callback') ||
       reqUrl.includes('localhost:3000') ||
-      (reqUrl.includes('auth-callback') && (reqUrl.includes('access_token=') || reqUrl.includes('code='))) ||
       (!reqUrl.includes('supabase.co/auth/v1/callback') && reqUrl.includes('access_token='))
     ) {
+      if (reqUrl.includes('error=')) {
+        setIsLoading(false);
+        showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
+        setTabs((prev) =>
+          prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
+        );
+        setInputUrl('');
+        return false;
+      }
+
       handleAuthCallbackUrl(request.url).then((profile) => {
+        setIsLoading(false);
         if (profile) {
           setUserProfile(profile);
           AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
           upsertCloudProfile(profile.email || 'user', profile);
           showToast(`Đăng nhập Google thành công! (${profile.name})`);
+        } else {
+          showToast('Đăng nhập Google chưa hoàn tất, vui lòng thử lại.');
         }
         setTabs((prev) =>
           prev.map((t) => (t.id === activeTabId ? { ...t, url: '', title: 'Trang mới' } : t))
@@ -1538,17 +1584,30 @@ function BrowserMain() {
     if (
       navState.url &&
       (navState.url.startsWith('kite://auth-callback') ||
+        navState.url.startsWith('kite://') ||
+        navState.url.includes('auth-callback') ||
         navState.url.includes('localhost:3000') ||
-        (navState.url.includes('auth-callback') &&
-          (navState.url.includes('access_token=') || navState.url.includes('code='))) ||
         (!navState.url.includes('supabase.co/auth/v1/callback') && navState.url.includes('access_token=')))
     ) {
+      if (navState.url.toLowerCase().includes('error=')) {
+        setIsLoading(false);
+        showToast('Đăng nhập Google bị gián đoạn, vui lòng thử lại.');
+        setTabs((prev) =>
+          prev.map((t) => (t.id === tabId ? { ...t, url: '', title: 'Trang mới' } : t))
+        );
+        setInputUrl('');
+        return;
+      }
+
       handleAuthCallbackUrl(navState.url).then((profile) => {
+        setIsLoading(false);
         if (profile) {
           setUserProfile(profile);
           AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
           upsertCloudProfile(profile.email || 'user', profile);
           showToast(`Đăng nhập Google thành công! (${profile.name})`);
+        } else {
+          showToast('Đăng nhập Google chưa hoàn tất, vui lòng thử lại.');
         }
         setTabs((prev) =>
           prev.map((t) => (t.id === tabId ? { ...t, url: '', title: 'Trang mới' } : t))
@@ -1872,6 +1931,7 @@ function BrowserMain() {
                     ref={(ref) => {
                       webViewRefs.current[tab.id] = ref;
                     }}
+                    originWhitelist={['*']}
                     source={{ uri: tab.url }}
                     style={[styles.webView, { backgroundColor: '#ffffff' }]}
                     incognito={tab.isIncognito || isIncognito}
@@ -1930,8 +1990,26 @@ function BrowserMain() {
                         }, 750);
                       }
                     }}
-                    onError={() => {
+                    onError={(syntheticEvent) => {
                       if (tab.id === activeTabId) setIsLoading(false);
+                      const { nativeEvent } = syntheticEvent;
+                      const failUrl = nativeEvent?.url || '';
+                      if (failUrl.includes('auth-callback') || failUrl.startsWith('kite://')) {
+                        if (failUrl.includes('access_token=')) {
+                          handleAuthCallbackUrl(failUrl).then((profile) => {
+                            if (profile) {
+                              setUserProfile(profile);
+                              AsyncStorage.setItem('@kite_user_profile', JSON.stringify(profile));
+                              upsertCloudProfile(profile.email || 'user', profile);
+                              showToast(`Đăng nhập Google thành công! (${profile.name})`);
+                            }
+                          });
+                        }
+                        setTabs((prev) =>
+                          prev.map((t) => (t.id === tab.id ? { ...t, url: '', title: 'Trang mới' } : t))
+                        );
+                        setInputUrl('');
+                      }
                     }}
                     onHttpError={() => {
                       if (tab.id === activeTabId) setIsLoading(false);

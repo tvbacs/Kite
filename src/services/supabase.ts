@@ -56,12 +56,46 @@ export async function getGoogleOAuthUrl(): Promise<string | null> {
   }
 }
 
+function decodeJwtPayload(jwt: string): any {
+  try {
+    const part = jwt.split('.')[1];
+    if (!part) return null;
+    let b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const decoded = typeof atob === 'function' ? atob(b64) : '';
+    if (!decoded) return null;
+    const bytes = new Uint8Array(decoded.length);
+    for (let i = 0; i < decoded.length; i++) {
+      bytes[i] = decoded.charCodeAt(i);
+    }
+    const jsonStr = new TextDecoder('utf-8').decode(bytes);
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    try {
+      const part = jwt.split('.')[1];
+      if (!part) return null;
+      let b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      const decoded = typeof atob === 'function' ? atob(b64) : '';
+      return JSON.parse(decoded);
+    } catch (e2) {
+      return null;
+    }
+  }
+}
+
 /**
  * Xử lý URL callback sau khi đăng nhập Google OAuth thành công
  */
 export async function handleAuthCallbackUrl(url: string): Promise<UserProfile | null> {
   try {
     if (!url) return null;
+
+    // 0. Nếu URL chứa thông báo lỗi OAuth (hết hạn, người dùng hủy,...)
+    if (url.includes('error=')) {
+      console.warn('OAuth callback returned error:', url);
+      return null;
+    }
 
     // 1. Trường hợp trả về mã PKCE (?code=...)
     if (url.includes('code=')) {
@@ -91,18 +125,20 @@ export async function handleAuthCallbackUrl(url: string): Promise<UserProfile | 
         const accessToken = decodeURIComponent(tokenMatch[1]);
         const refreshToken = refreshMatch && refreshMatch[1] ? decodeURIComponent(refreshMatch[1]) : '';
 
-        const { data, error } = await supabase.auth.setSession({
+        // Lưu phiên đăng nhập ngầm vào Supabase AsyncStorage
+        supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
-        });
+        }).catch(() => {});
 
-        if (!error && data.user) {
-          const user = data.user;
-          const meta = user.user_metadata || {};
+        // Giải mã thông tin người dùng ngay lập tức từ JWT Payload
+        const jwt = decodeJwtPayload(accessToken);
+        if (jwt) {
+          const meta = jwt.user_metadata || {};
           return {
             isLoggedIn: true,
-            name: meta.full_name || meta.name || user.email?.split('@')[0] || 'Người dùng',
-            email: user.email || '',
+            name: meta.full_name || meta.name || jwt.email?.split('@')[0] || 'Người dùng',
+            email: jwt.email || '',
             avatarUrl: meta.avatar_url || meta.picture || '',
           };
         }
