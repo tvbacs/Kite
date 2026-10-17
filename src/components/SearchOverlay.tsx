@@ -546,7 +546,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                     <Text style={[styles.engineCardName, isSelected && styles.engineCardNameActive]}>
                       {eng.name}
                     </Text>
-                    {isSelected && <Feather name="check" size={16} color="#007aff" />}
+                    {isSelected && <Feather name="check" size={16} color="#18181b" />}
                   </TouchableOpacity>
                 );
               })}
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
   cancelBtnText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#007aff',
+    color: '#18181b',
   },
   historyScroll: {
     flex: 1,
@@ -752,13 +752,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#f8fafd',
+    backgroundColor: '#f4f4f5',
     borderWidth: 1,
-    borderColor: '#e8eaed',
+    borderColor: '#e4e4e7',
   },
   engineCardSelected: {
-    borderColor: '#007aff',
-    backgroundColor: '#eff6ff',
+    borderColor: '#18181b',
+    backgroundColor: '#ffffff',
   },
   enginePickerLogo: {
     width: 28,
@@ -769,10 +769,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '500',
-    color: '#1f1f1f',
+    color: '#18181b',
   },
   engineCardNameActive: {
-    color: '#007aff',
-    fontWeight: '600',
+    color: '#18181b',
+    fontWeight: '700',
   },
 });

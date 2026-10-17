@@ -33,8 +33,8 @@ export interface ExtensionItem {
 export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
   {
     id: 'ext-dark-mode',
-    name: 'Giao diện nền tối (Dark Mode Script)',
-    description: 'Tự động đảo ngược màu nền và bảo vệ mắt trên các trang web có nền trắng chói',
+    name: 'Giao diện nền tối (Dark Mode)',
+    description: 'Tự động kích hoạt nền tối bảo vệ mắt trên các trang web.',
     matchUrl: '*',
     code: `(function() {
   if (window.__kite_dark_mode_applied) return;
@@ -59,8 +59,8 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
   },
   {
     id: 'ext-skip-ads',
-    name: 'Tự động bỏ qua quảng cáo Video (Auto Skip Ads)',
-    description: 'Tự động tìm kiếm và nhấn nút "Bỏ qua quảng cáo" trên các trình phát video HTML5',
+    name: 'Tự động bỏ qua quảng cáo Video',
+    description: 'Tự động nhấn nút Bỏ qua quảng cáo trên trình phát video.',
     matchUrl: '*',
     code: `(function() {
   setInterval(function() {
@@ -83,8 +83,8 @@ export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
   },
   {
     id: 'ext-speed-controller',
-    name: 'Tùy chỉnh tốc độ video (Video Speed Helper)',
-    description: 'Tự động kích hoạt thanh điều khiển phím tắt tăng tốc độ phát video lên 1.5x / 2.0x',
+    name: 'Tùy chỉnh tốc độ phát video',
+    description: 'Hỗ trợ điều khiển phím tắt tăng tốc độ phát video lên 1.5x / 2.0x.',
     matchUrl: '*',
     code: `(function() {
   window.setAllVideoSpeed = function(rate) {
@@ -248,7 +248,6 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
           return;
         }
 
-        // Tự động phân tích Userscript Header nếu có
         let name = (file.name || 'Custom Extension').replace(/\.user\.js$/i, '').replace(/\.js$/i, '');
         let matchUrl = '*';
         let desc = 'Tiện ích nhập từ tệp ' + (file.name || '');
@@ -356,15 +355,12 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
           activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
         >
-          {/* Thanh kéo */}
+          {/* Thanh kéo Sheet */}
           <View style={styles.dragHandle} />
 
-          {/* Header */}
+          {/* Header tối giản Trắng - Đen - Xám */}
           <View style={styles.headerRow}>
             <View style={styles.titleGroup}>
-              <View style={styles.titleIconBox}>
-                <Feather name="box" size={18} color="#7c3aed" />
-              </View>
               <Text style={styles.sheetTitle}>Tiện ích mở rộng</Text>
               {extensions.length > 0 && (
                 <View style={styles.countBadge}>
@@ -374,17 +370,17 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
             </View>
 
             <View style={styles.headerRightActions}>
-              {/* Nút nhập file script */}
+              {/* Nút Nhập file .js */}
               <TouchableOpacity
                 style={styles.importBtn}
                 onPress={handlePickFile}
                 activeOpacity={0.7}
               >
-                <Feather name="upload" size={15} color="#7c3aed" />
+                <Feather name="upload" size={14} color="#18181b" />
                 <Text style={styles.importBtnText}>Nhập tệp</Text>
               </TouchableOpacity>
 
-              {/* Nút tạo mới */}
+              {/* Nút Thêm mới */}
               <TouchableOpacity
                 style={styles.addBtn}
                 onPress={handleOpenAddModal}
@@ -394,12 +390,13 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
                 <Text style={styles.addBtnText}>Thêm</Text>
               </TouchableOpacity>
 
+              {/* Nút Đóng */}
               <TouchableOpacity
                 style={styles.closeBtn}
                 onPress={onClose}
                 activeOpacity={0.7}
               >
-                <Feather name="x" size={20} color="#52525b" />
+                <Feather name="x" size={19} color="#71717a" />
               </TouchableOpacity>
             </View>
           </View>
@@ -407,41 +404,39 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
           {/* Ô tìm kiếm */}
           {extensions.length > 0 && (
             <View style={styles.searchBarBox}>
-              <Feather name="search" size={16} color="#71717a" style={{ marginRight: 8 }} />
+              <Feather name="search" size={15} color="#71717a" style={{ marginRight: 8 }} />
               <TextInput
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Tìm tiện ích theo tên hoặc trang web..."
+                placeholder="Tìm tiện ích theo tên..."
                 placeholderTextColor="#a1a1aa"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Feather name="x-circle" size={16} color="#71717a" />
+                  <Feather name="x-circle" size={15} color="#71717a" />
                 </TouchableOpacity>
               )}
             </View>
           )}
 
-          {/* Danh sách tiện ích */}
+          {/* Danh sách tiện ích tối giản */}
           <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
             {filteredExtensions.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconCircle}>
-                  <Feather name="box" size={40} color="#7c3aed" />
-                </View>
+                <Feather name="box" size={36} color="#a1a1aa" />
                 <Text style={styles.emptyTitle}>Chưa có tiện ích nào</Text>
                 <Text style={styles.emptySub}>
-                  Bạn có thể nhập script .js hoặc tạo extension mới để can thiệp tùy biến trang web theo ý thích.
+                  Bạn có thể nhập script .js hoặc tạo tiện ích mới để tùy biến trang web.
                 </Text>
                 <TouchableOpacity
                   style={styles.emptyAddBtn}
                   onPress={handleOpenAddModal}
                   activeOpacity={0.8}
                 >
-                  <Feather name="plus" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                  <Feather name="plus" size={15} color="#ffffff" style={{ marginRight: 6 }} />
                   <Text style={styles.emptyAddBtnText}>Thêm tiện ích mới</Text>
                 </TouchableOpacity>
               </View>
@@ -449,67 +444,50 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
               filteredExtensions.map((item) => {
                 return (
                   <View key={item.id} style={styles.extCard}>
+                    {/* Hàng trên: Tên + Mô tả và Công tắc */}
                     <View style={styles.extCardTopRow}>
-                      <View style={styles.extTitleGroup}>
-                        <View style={[styles.extIconCircle, item.enabled ? styles.extIconActive : styles.extIconInactive]}>
-                          <Feather
-                            name={item.runAt === 'document_start' ? 'zap' : 'code'}
-                            size={16}
-                            color={item.enabled ? '#7c3aed' : '#a1a1aa'}
-                          />
-                        </View>
-                        <View style={{ flex: 1, marginRight: 8 }}>
-                          <Text style={styles.extName} numberOfLines={1}>
-                            {item.name}
+                      <View style={{ flex: 1, marginRight: 12 }}>
+                        <Text style={styles.extName} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        {item.description ? (
+                          <Text style={styles.extDesc} numberOfLines={2}>
+                            {item.description}
                           </Text>
-                          <Text style={styles.extMatchText} numberOfLines={1}>
-                            Áp dụng: {item.matchUrl === '*' ? 'Mọi trang web (*)' : item.matchUrl}
-                          </Text>
-                        </View>
+                        ) : null}
                       </View>
 
-                      {/* Công tắc Bật/Tắt */}
+                      {/* Công tắc Bật/Tắt - Đen / Xám */}
                       <Switch
                         value={item.enabled}
                         onValueChange={() => handleToggleExtension(item.id)}
-                        trackColor={{ false: '#e4e4e7', true: '#7c3aed' }}
+                        trackColor={{ false: '#d1d5db', true: '#18181b' }}
+                        ios_backgroundColor="#d1d5db"
                         thumbColor="#ffffff"
                       />
                     </View>
 
-                    {item.description ? (
-                      <Text style={styles.extDesc} numberOfLines={2}>
-                        {item.description}
-                      </Text>
-                    ) : null}
-
-                    {/* Hàng thao tác dưới của thẻ */}
+                    {/* Hàng thao tác dưới tối giản */}
                     <View style={styles.extCardBottomRow}>
-                      <View style={styles.timingBadge}>
-                        <Text style={styles.timingBadgeText}>
-                          {item.runAt === 'document_start' ? 'Tải trước (start)' : 'Tải sau (end)'}
-                        </Text>
-                      </View>
+                      <TouchableOpacity
+                        style={styles.extActionBtn}
+                        onPress={() => handleOpenEditModal(item)}
+                        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="code" size={13} color="#71717a" />
+                        <Text style={styles.extActionText}>Sửa mã</Text>
+                      </TouchableOpacity>
 
-                      <View style={styles.extActionsGroup}>
-                        <TouchableOpacity
-                          style={styles.extActionBtn}
-                          onPress={() => handleOpenEditModal(item)}
-                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                        >
-                          <Feather name="edit-2" size={14} color="#52525b" />
-                          <Text style={styles.extActionText}>Sửa mã</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={styles.extActionBtn}
-                          onPress={() => handleDeleteExtension(item.id, item.name)}
-                          hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
-                        >
-                          <Feather name="trash-2" size={14} color="#ef4444" />
-                          <Text style={[styles.extActionText, { color: '#ef4444' }]}>Xóa</Text>
-                        </TouchableOpacity>
-                      </View>
+                      <TouchableOpacity
+                        style={styles.extActionBtn}
+                        onPress={() => handleDeleteExtension(item.id, item.name)}
+                        hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="trash-2" size={13} color="#71717a" />
+                        <Text style={styles.extActionText}>Xóa</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 );
@@ -536,10 +514,10 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
               >
                 <View style={styles.innerHeader}>
                   <Text style={styles.innerTitle}>
-                    {editingId ? 'Chỉnh sửa Extension' : 'Tạo Extension mới'}
+                    {editingId ? 'Chỉnh sửa tiện ích' : 'Tạo tiện ích mới'}
                   </Text>
-                  <TouchableOpacity onPress={() => setEditModalVisible(false)}>
-                    <Feather name="x" size={20} color="#71717a" />
+                  <TouchableOpacity onPress={() => setEditModalVisible(false)} style={styles.innerCloseBtn}>
+                    <Feather name="x" size={18} color="#71717a" />
                   </TouchableOpacity>
                 </View>
 
@@ -562,12 +540,12 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
                     placeholderTextColor="#a1a1aa"
                   />
 
-                  <Text style={styles.label}>Trang web áp dụng (Match Pattern)</Text>
+                  <Text style={styles.label}>Trang web áp dụng</Text>
                   <TextInput
                     style={styles.input}
                     value={inputMatchUrl}
                     onChangeText={setInputMatchUrl}
-                    placeholder="Nhập '*' cho mọi trang web, hoặc domain như youtube.com"
+                    placeholder="Nhập '*' cho mọi trang, hoặc domain cụ thể"
                     placeholderTextColor="#a1a1aa"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -588,7 +566,7 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
                           inputRunAt === 'document_end' && styles.timingOptionTextActive,
                         ]}
                       >
-                        Sau khi nạp xong trang (Khuyên dùng)
+                        Sau khi nạp trang (Khuyên dùng)
                       </Text>
                     </TouchableOpacity>
 
@@ -605,20 +583,18 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
                           inputRunAt === 'document_start' && styles.timingOptionTextActive,
                         ]}
                       >
-                        Trước khi tải trang (document_start)
+                        Trước khi tải trang
                       </Text>
                     </TouchableOpacity>
                   </View>
 
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-                    <Text style={styles.label}>Mã JavaScript (Script Code)</Text>
-                  </View>
+                  <Text style={styles.label}>Mã JavaScript</Text>
                   <TextInput
                     style={styles.codeInput}
                     value={inputCode}
                     onChangeText={setInputCode}
-                    placeholder="// Viết mã JavaScript tự chạy tại đây"
-                    placeholderTextColor="#a1a1aa"
+                    placeholder="// Viết mã JavaScript tại đây"
+                    placeholderTextColor="#71717a"
                     multiline
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -629,14 +605,16 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
                     <TouchableOpacity
                       style={styles.cancelBtn}
                       onPress={() => setEditModalVisible(false)}
+                      activeOpacity={0.7}
                     >
                       <Text style={styles.cancelBtnText}>Hủy</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.saveBtn}
                       onPress={handleSaveModal}
+                      activeOpacity={0.7}
                     >
-                      <Text style={styles.saveBtnText}>Lưu & Kích hoạt</Text>
+                      <Text style={styles.saveBtnText}>Lưu tiện ích</Text>
                     </TouchableOpacity>
                   </View>
                 </ScrollView>
@@ -660,18 +638,18 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
     maxHeight: '86%',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 10,
+    shadowRadius: 16,
+    elevation: 20,
   },
   dragHandle: {
     width: 38,
-    height: 5,
-    borderRadius: 2.5,
+    height: 4.5,
+    borderRadius: 3,
     backgroundColor: '#d4d4d8',
     alignSelf: 'center',
     marginBottom: 14,
@@ -680,34 +658,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   titleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
-  titleIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f5f3ff',
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
   },
   sheetTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#09090b',
+    color: '#18181b',
   },
   countBadge: {
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 10,
     backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   countBadgeText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
     color: '#71717a',
   },
@@ -719,38 +691,40 @@ const styles = StyleSheet.create({
   importBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     paddingVertical: 6,
     paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: '#f5f3ff',
+    borderRadius: 10,
+    backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   importBtnText: {
-    color: '#7c3aed',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
+    color: '#18181b',
   },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: '#7c3aed',
+    paddingHorizontal: 11,
+    borderRadius: 10,
+    backgroundColor: '#18181b',
   },
   addBtnText: {
-    color: '#ffffff',
     fontSize: 13,
     fontWeight: '600',
+    color: '#ffffff',
   },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f4f4f5',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#f4f4f5',
   },
   searchBarBox: {
     flexDirection: 'row',
@@ -759,36 +733,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     height: 38,
-    marginBottom: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
-    color: '#09090b',
+    color: '#18181b',
     paddingVertical: 0,
   },
   listScroll: {
-    maxHeight: 490,
+    maxHeight: 460,
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-  },
-  emptyIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#f5f3ff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
+    paddingVertical: 48,
+    paddingHorizontal: 20,
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#09090b',
+    color: '#18181b',
+    marginTop: 12,
     marginBottom: 6,
   },
   emptySub: {
@@ -801,200 +769,175 @@ const styles = StyleSheet.create({
   emptyAddBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#7c3aed',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 16,
+    backgroundColor: '#18181b',
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 10,
   },
   emptyAddBtnText: {
     color: '#ffffff',
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '600',
   },
   extCard: {
-    backgroundColor: '#faf5ff',
-    borderRadius: 16,
+    backgroundColor: '#f4f4f5',
+    borderRadius: 14,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#ede9fe',
+    borderColor: '#e4e4e7',
   },
   extCardTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  extTitleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  extIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  extIconActive: {
-    backgroundColor: '#ede9fe',
-  },
-  extIconInactive: {
-    backgroundColor: '#e4e4e7',
+    alignItems: 'flex-start',
   },
   extName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1e1b4b',
-  },
-  extMatchText: {
-    fontSize: 11,
-    color: '#7c3aed',
-    marginTop: 2,
+    fontSize: 14.5,
+    fontWeight: '600',
+    color: '#18181b',
+    marginBottom: 3,
   },
   extDesc: {
-    fontSize: 12,
-    color: '#4c1d95',
-    lineHeight: 16,
-    marginVertical: 6,
+    fontSize: 12.5,
+    color: '#71717a',
+    lineHeight: 17,
   },
   extCardBottomRow: {
     flexDirection: 'row',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
+    gap: 14,
+    marginTop: 10,
     paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#e9d5ff',
-  },
-  timingBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: '#ede9fe',
-  },
-  timingBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#6d28d9',
-  },
-  extActionsGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    borderTopColor: '#e4e4e7',
   },
   extActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingVertical: 2,
   },
   extActionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#52525b',
+    fontSize: 12.5,
+    fontWeight: '500',
+    color: '#71717a',
   },
   innerBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 18,
   },
   innerModalBox: {
-    width: '100%',
     backgroundColor: '#ffffff',
-    borderRadius: 22,
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 380,
     padding: 20,
-    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 10,
   },
   innerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   innerTitle: {
-    fontSize: 17,
+    fontSize: 16.5,
     fontWeight: '700',
-    color: '#09090b',
+    color: '#18181b',
+  },
+  innerCloseBtn: {
+    padding: 4,
   },
   label: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '600',
     color: '#52525b',
-    marginBottom: 6,
-    marginTop: 10,
+    marginBottom: 5,
+    marginTop: 8,
   },
   input: {
-    backgroundColor: '#f4f4f5',
-    borderRadius: 12,
-    paddingHorizontal: 12,
     height: 40,
-    fontSize: 14,
-    color: '#09090b',
+    backgroundColor: '#f4f4f5',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 13.5,
+    color: '#18181b',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   timingSelectRow: {
-    flexDirection: 'column',
-    gap: 6,
+    flexDirection: 'row',
+    gap: 8,
   },
   timingOption: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    flex: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
     borderRadius: 10,
     backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    alignItems: 'center',
   },
   timingOptionActive: {
-    backgroundColor: '#ede9fe',
-    borderWidth: 1,
-    borderColor: '#7c3aed',
+    backgroundColor: '#18181b',
+    borderColor: '#18181b',
   },
   timingOptionText: {
     fontSize: 12,
-    color: '#52525b',
     fontWeight: '500',
+    color: '#52525b',
+    textAlign: 'center',
   },
   timingOptionTextActive: {
-    color: '#7c3aed',
-    fontWeight: '700',
+    color: '#ffffff',
+    fontWeight: '600',
   },
   codeInput: {
-    backgroundColor: '#1e1e2e',
-    color: '#a6e3a1',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 12,
+    height: 120,
+    backgroundColor: '#18181b',
+    borderRadius: 10,
     padding: 12,
-    borderRadius: 12,
-    height: 180,
+    fontSize: 12.5,
+    color: '#f4f4f5',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     textAlignVertical: 'top',
   },
   modalActionButtons: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 10,
-    marginTop: 20,
-    marginBottom: 10,
+    marginTop: 18,
+    marginBottom: 4,
   },
   cancelBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 10,
     backgroundColor: '#f4f4f5',
   },
   cancelBtnText: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '600',
     color: '#71717a',
   },
   saveBtn: {
+    paddingVertical: 9,
     paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 12,
-    backgroundColor: '#7c3aed',
+    borderRadius: 10,
+    backgroundColor: '#18181b',
   },
   saveBtnText: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontWeight: '600',
     color: '#ffffff',
   },

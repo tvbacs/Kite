@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
   addBookmarkText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#007aff',
+    color: '#18181b',
   },
   addFormCard: {
     backgroundColor: '#ffffff',
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 18,
     borderRadius: 10,
-    backgroundColor: '#007aff',
+    backgroundColor: '#18181b',
   },
   formSubmitText: {
     fontSize: 13,

@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   doneBtnText: {
-    color: '#007aff',
+    color: '#18181b',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   clearBtnText: {
-    color: '#ef4444',
+    color: '#71717a',
     fontSize: 15,
     fontWeight: '600',
   },

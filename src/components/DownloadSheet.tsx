@@ -208,7 +208,7 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
           <View style={styles.headerRow}>
             <View style={styles.titleGroup}>
               <View style={styles.titleIconBox}>
-                <Feather name="download" size={18} color="#007aff" />
+                <Feather name="download" size={18} color="#18181b" />
               </View>
               <Text style={styles.sheetTitle}>Tệp đã tải xuống</Text>
               {downloads.length > 0 && (
@@ -226,7 +226,7 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <Feather name="folder" size={13} color="#007aff" />
+                <Feather name="folder" size={13} color="#18181b" />
                 <Text style={styles.openFilesBtnText}>Mở app Tệp</Text>
               </TouchableOpacity>
 
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#eff6ff',
+    backgroundColor: '#f4f4f5',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -438,6 +438,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
     backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   countBadgeText: {
     fontSize: 12,
@@ -455,24 +457,28 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 5,
     paddingHorizontal: 8,
-    borderRadius: 12,
-    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   openFilesBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#007aff',
+    color: '#18181b',
   },
   clearAllBtn: {
     paddingVertical: 5,
     paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: '#fee2e2',
+    borderRadius: 10,
+    backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   clearAllBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#ef4444',
+    color: '#71717a',
   },
   closeBtn: {
     width: 32,
@@ -490,6 +496,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     height: 38,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   searchInput: {
     flex: 1,
@@ -507,9 +515,12 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 14,
     backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   filterChipActive: {
-    backgroundColor: '#007aff',
+    backgroundColor: '#18181b',
+    borderColor: '#18181b',
   },
   filterChipText: {
     fontSize: 12,

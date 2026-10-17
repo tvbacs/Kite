@@ -394,7 +394,7 @@ export const TabSheet: React.FC<TabSheetProps> = ({
                             Mở lại thẻ bạn vừa đóng gần đây nhất
                           </Text>
                         </View>
-                        <Feather name="rotate-ccw" size={18} color="#007aff" />
+                        <Feather name="rotate-ccw" size={18} color="#09090b" />
                       </TouchableOpacity>
 
                       <View style={styles.actionDivider} />
@@ -418,7 +418,7 @@ export const TabSheet: React.FC<TabSheetProps> = ({
                             Giải phóng RAM ngay lập tức, lưu nguyên vị trí đọc
                           </Text>
                         </View>
-                        <Feather name="cpu" size={18} color="#007aff" />
+                        <Feather name="cpu" size={18} color="#09090b" />
                       </TouchableOpacity>
 
                       <View style={styles.actionDivider} />
@@ -668,18 +668,18 @@ const styles = StyleSheet.create({
   },
   activeTabCard: {
     borderWidth: 1.8,
-    borderColor: '#007aff',
-    shadowColor: '#007aff',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
+    borderColor: '#09090b',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
   },
   activeDot: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#007aff',
+    backgroundColor: '#09090b',
     marginRight: 6,
   },
   sleepingBadge: {
