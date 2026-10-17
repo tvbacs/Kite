@@ -573,6 +573,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     return list;
   }, [savedAccounts, userProfile]);
 
+  // Các tài khoản khác trên máy (ngoại trừ nick chính đang kích hoạt hiển thị ở trên)
+  const otherAccounts: UserProfile[] = React.useMemo(() => {
+    if (!userProfile.isLoggedIn || !userProfile.email) {
+      return allAccounts;
+    }
+    return allAccounts.filter(
+      (acc) => acc.email?.toLowerCase() !== userProfile.email?.toLowerCase()
+    );
+  }, [allAccounts, userProfile]);
+
   const isRealGooglePhoto = (url?: string) => {
     if (!url) return false;
     return (
@@ -1959,18 +1969,15 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               </Text>
             </View>
 
-            {/* Khung màu trắng bo tròn chứa danh sách tài khoản hoặc nút đăng nhập */}
+            {/* Khung màu trắng bo tròn chứa danh sách tài khoản khác & nút thêm tài khoản */}
             <View style={styles.accountListCard}>
-              {allAccounts.length > 0 && (
+              {otherAccounts.length > 0 && (
                 <ScrollView
-                  style={{ maxHeight: 260 }}
+                  style={{ maxHeight: 240 }}
                   showsVerticalScrollIndicator={false}
                   bounces={false}
                 >
-                  {allAccounts.map((acc, index, arr) => {
-                    const isActive =
-                      userProfile.isLoggedIn &&
-                      userProfile.email?.toLowerCase() === acc.email?.toLowerCase();
+                  {otherAccounts.map((acc, index, arr) => {
                     const isEdu =
                       acc.email?.includes('.edu.') ||
                       acc.email?.includes('@vku.udn.vn');
@@ -1978,16 +1985,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                     return (
                       <View key={acc.email || `acc-${index}`}>
                         <TouchableOpacity
-                          style={[
-                            styles.accountRowItem,
-                            isActive && { backgroundColor: 'rgba(0, 122, 255, 0.05)' },
-                          ]}
-                          onPress={() => {
-                            if (!isActive) {
-                              handleSelectAccount(acc);
-                            }
-                          }}
-                          activeOpacity={isActive ? 1 : 0.65}
+                          style={styles.accountRowItem}
+                          onPress={() => handleSelectAccount(acc)}
+                          activeOpacity={0.65}
                         >
                           <View style={styles.accountRowAvatarBox}>
                             {acc.avatarUrl && isRealGooglePhoto(acc.avatarUrl) ? (
@@ -2011,46 +2011,26 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                           </View>
 
                           <View style={styles.accountRowInfo}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <Text
-                                style={[
-                                  styles.accountRowName,
-                                  isActive && { color: '#007aff', fontWeight: '700' },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {acc.name || acc.email?.split('@')[0]}
-                              </Text>
-                              {isActive && (
-                                <View style={styles.activeTagBadge}>
-                                  <Text style={styles.activeTagBadgeText}>Đang dùng</Text>
-                                </View>
-                              )}
-                            </View>
+                            <Text style={styles.accountRowName} numberOfLines={1}>
+                              {acc.name || acc.email?.split('@')[0]}
+                            </Text>
                             <Text style={styles.accountRowEmail} numberOfLines={1}>
                               {acc.email}
                             </Text>
                           </View>
 
-                          {isActive ? (
-                            <Feather
-                              name="check"
-                              size={18}
-                              color="#007aff"
-                              style={{ marginLeft: 8 }}
-                            />
-                          ) : isEdu ? (
+                          {isEdu && (
                             <Feather
                               name="briefcase"
                               size={16}
                               color="#8e8e93"
                               style={{ marginLeft: 8 }}
                             />
-                          ) : null}
+                          )}
                         </TouchableOpacity>
 
                         {index < arr.length - 1 && (
-                          <View style={styles.accountRowDivider} />
+                          <View style={styles.accountCardFullDivider} />
                         )}
                       </View>
                     );
@@ -2058,7 +2038,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 </ScrollView>
               )}
 
-              {allAccounts.length > 0 && <View style={styles.accountCardFullDivider} />}
+              {otherAccounts.length > 0 && <View style={styles.accountCardFullDivider} />}
 
               {/* Nút Đăng nhập hoặc Thêm tài khoản */}
               <TouchableOpacity
@@ -2081,7 +2061,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Feather name="user-plus" size={17} color="#007aff" style={{ marginRight: 10 }} />
                   <Text style={styles.addAccountText}>
-                    {allAccounts.length > 0 ? 'Thêm tài khoản khác...' : 'Đăng nhập với Google'}
+                    {userProfile.isLoggedIn ? 'Thêm tài khoản khác...' : 'Đăng nhập với Google'}
                   </Text>
                 </View>
               </TouchableOpacity>
