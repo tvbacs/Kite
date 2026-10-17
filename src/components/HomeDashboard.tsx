@@ -168,6 +168,93 @@ const STORAGE_USER_KEY = '@kite_user_profile';
 const STORAGE_SAVED_ACCOUNTS_KEY = '@kite_saved_accounts';
 const STORAGE_THEME_KEY = '@kite_theme_palette';
 export const STORAGE_SYNC_ACCOUNTS_KEY = '@kite_sync_all_accounts';
+const STORAGE_DISCOVER_CACHE_KEY = '@kite_discover_articles_cache';
+
+const parseVnExpressRss = (xml: string, offset: number = 0): DiscoverArticle[] => {
+  const items: DiscoverArticle[] = [];
+  const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/gi) || [];
+  if (itemMatches.length === 0) return [];
+
+  const maxOffset = Math.max(0, itemMatches.length - 6);
+  const startIndex = maxOffset > 0 ? offset % maxOffset : 0;
+  const sliced = itemMatches.slice(startIndex, startIndex + 6);
+
+  sliced.forEach((itemXml, idx) => {
+    const titleMatch =
+      itemXml.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/i) ||
+      itemXml.match(/<title>([\s\S]*?)<\/title>/i);
+    let title = titleMatch ? titleMatch[1].trim() : '';
+    title = title
+      .replace(/^<!\[CDATA\[/, '')
+      .replace(/\]\]>$/, '')
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .trim();
+
+    const linkMatch =
+      itemXml.match(/<link><!\[CDATA\[([\s\S]*?)\]\]><\/link>/i) ||
+      itemXml.match(/<link>([\s\S]*?)<\/link>/i);
+    let url = linkMatch ? linkMatch[1].trim() : '';
+    url = url.replace(/^<!\[CDATA\[/, '').replace(/\]\]>$/, '').trim();
+
+    const enclosureMatch = itemXml.match(/<enclosure[^>]+url=["']([^"']+)["']/i);
+    const imgMatch = itemXml.match(/<img[^>]+src=["']([^"']+)["']/i);
+    let imageUrl = enclosureMatch ? enclosureMatch[1] : imgMatch ? imgMatch[1] : '';
+    imageUrl = imageUrl.replace(/&amp;/g, '&');
+
+    const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+    let timeAgo = 'Vừa xong';
+    if (pubDateMatch) {
+      try {
+        const pubTime = new Date(pubDateMatch[1]).getTime();
+        const diffMins = Math.floor((Date.now() - pubTime) / 60000);
+        if (diffMins < 1) {
+          timeAgo = 'Vừa xong';
+        } else if (diffMins < 60) {
+          timeAgo = `${diffMins} phút trước`;
+        } else {
+          const diffHours = Math.floor(diffMins / 60);
+          if (diffHours < 24) {
+            timeAgo = `${diffHours} giờ trước`;
+          } else {
+            const diffDays = Math.floor(diffHours / 24);
+            timeAgo = `${diffDays} ngày trước`;
+          }
+        }
+      } catch (e) {}
+    }
+
+    let category = 'Tin mới';
+    if (url.includes('/khoa-hoc')) category = 'Khoa học';
+    else if (url.includes('/so-hoa')) category = 'Công nghệ';
+    else if (url.includes('/kinh-doanh')) category = 'Kinh doanh';
+    else if (url.includes('/the-thao')) category = 'Thể thao';
+    else if (url.includes('/giai-tri')) category = 'Giải trí';
+    else if (url.includes('/the-gioi')) category = 'Thế giới';
+    else if (url.includes('/thoi-su')) category = 'Thời sự';
+    else if (url.includes('/doi-song') || url.includes('/gia-dinh')) category = 'Đời sống';
+
+    if (title && url) {
+      items.push({
+        id: `vne-${idx}-${Date.now()}`,
+        title,
+        source: `VnExpress • ${category}`,
+        timeAgo,
+        imageUrl:
+          imageUrl ||
+          'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=80',
+        url,
+        layout: idx === 0 || idx === 3 ? 'hero' : 'compact',
+      });
+    }
+  });
+
+  return items;
+};
 
 export interface ThemePalette {
   id: string;
@@ -454,6 +541,94 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const [newTitle, setNewTitle] = useState<string>('');
   const [newUrl, setNewUrl] = useState<string>('');
   const [inputUserName, setInputUserName] = useState<string>('');
+
+  const [discoverArticles, setDiscoverArticles] = useState<DiscoverArticle[]>(DISCOVER_ARTICLES);
+  const [isRefreshingDiscover, setIsRefreshingDiscover] = useState<boolean>(false);
+  const discoverSpinAnim = useRef(new Animated.Value(0)).current;
+  const discoverRssOffsetRef = useRef<number>(0);
+
+  const fetchDiscoverFeed = async (isManualRefresh?: boolean) => {
+    if (isManualRefresh) {
+      setIsRefreshingDiscover(true);
+      discoverSpinAnim.setValue(0);
+      Animated.loop(
+        Animated.timing(discoverSpinAnim, {
+          toValue: 1,
+          duration: 750,
+          useNativeDriver: true,
+        })
+      ).start();
+    }
+
+    let success = false;
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6500);
+
+      const res = await fetch('https://vnexpress.net/rss/tin-moi-nhat.rss', {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+        },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const xml = await res.text();
+        const offset = isManualRefresh ? discoverRssOffsetRef.current + 5 : 0;
+        discoverRssOffsetRef.current = offset;
+        const parsed = parseVnExpressRss(xml, offset);
+        if (parsed.length > 0) {
+          setDiscoverArticles(parsed);
+          await AsyncStorage.setItem(STORAGE_DISCOVER_CACHE_KEY, JSON.stringify(parsed));
+          success = true;
+          if (isManualRefresh && onShowToast) {
+            onShowToast('Đã cập nhật tin tức mới nhất');
+          }
+        }
+      }
+    } catch (e) {
+      console.log('Fetch RSS Discover error:', e);
+    } finally {
+      if (isManualRefresh) {
+        setTimeout(() => {
+          discoverSpinAnim.stopAnimation();
+          discoverSpinAnim.setValue(0);
+          setIsRefreshingDiscover(false);
+        }, 350);
+      }
+    }
+
+    if (!success) {
+      const rotated = [...DISCOVER_ARTICLES]
+        .sort(() => Math.random() - 0.5)
+        .map((item, index) => ({
+          ...item,
+          id: `rot-${Date.now()}-${index}`,
+          timeAgo: index === 0 ? 'Vừa xong' : `${(index + 1) * 15} phút trước`,
+          layout: index === 0 || index === 3 ? ('hero' as const) : ('compact' as const),
+        }));
+      setDiscoverArticles(rotated);
+      if (isManualRefresh && onShowToast) {
+        onShowToast('Đã làm mới bảng tin Khám phá');
+      }
+    }
+  };
+
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_DISCOVER_CACHE_KEY).then((cache) => {
+      if (cache) {
+        try {
+          const parsed = JSON.parse(cache);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setDiscoverArticles(parsed);
+          }
+        } catch (e) {}
+      }
+    });
+    fetchDiscoverFeed(false);
+  }, []);
 
 
 
@@ -1544,19 +1719,32 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           <Text style={[styles.chromeCardTitle, { color: themeText }]}>Khám phá</Text>
           <TouchableOpacity
             style={styles.discoverCardRefreshBtn}
-            onPress={() => {
-              if (onShowToast) onShowToast('Đã làm mới bảng tin Khám phá');
-            }}
+            onPress={() => fetchDiscoverFeed(true)}
+            disabled={isRefreshingDiscover}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.65}
           >
-            <Feather name="rotate-cw" size={15} color={themeSub} />
+            <Animated.View
+              style={{
+                transform: [
+                  {
+                    rotate: discoverSpinAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0deg', '360deg'],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Feather name="rotate-cw" size={15} color={themeSub} />
+            </Animated.View>
           </TouchableOpacity>
         </View>
 
         {/* Danh sách bài báo tạp chí cao cấp: xen kẽ Hero Image lớn & Compact Cards */}
         <View style={styles.discoverArticlesWrapper}>
-          {DISCOVER_ARTICLES.map((article, idx) => {
-            const isLast = idx === DISCOVER_ARTICLES.length - 1;
+          {discoverArticles.map((article, idx) => {
+            const isLast = idx === discoverArticles.length - 1;
 
             if (article.layout === 'hero') {
               return (
