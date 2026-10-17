@@ -59,6 +59,10 @@ const STORAGE_ACTIVE_TAB_ID_KEY = '@kite_active_tab_id';
 const STORAGE_DATA_SAVER_KEY = '@kite_data_saver_mode';
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+const MOBILE_USER_AGENT =
+  Platform.OS === 'ios'
+    ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+    : 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36';
 const MAX_ACTIVE_WEBVIEWS = 2; // Giữ tối đa 1 đến 2 WebView trong RAM để tránh Jetsam kill trên iOS
 
 function BrowserMain() {
@@ -1868,6 +1872,8 @@ function BrowserMain() {
                     onFileDownload={handleFileDownload}
                     mediaPlaybackRequiresUserAction={false}
                     setSupportMultipleWindows={false}
+                    sharedCookiesEnabled={true}
+                    thirdPartyCookiesEnabled={true}
                     userAgent={
                       tab.isDesktop
                         ? DESKTOP_USER_AGENT
@@ -1875,7 +1881,7 @@ function BrowserMain() {
                           tab.url?.includes('searchbyimage') ||
                           tab.url?.includes('images.google.com')
                         ? DESKTOP_USER_AGENT
-                        : undefined
+                        : MOBILE_USER_AGENT
                     }
                   />
                 </View>
