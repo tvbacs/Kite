@@ -372,6 +372,8 @@ function BrowserMain() {
   const [extensions, setExtensions] = useState<ExtensionItem[]>(DEFAULT_EXTENSIONS);
   const [regionSettings, setRegionSettings] = useState<RegionSettings>(DEFAULT_REGION_SETTINGS);
   const [regionSheetVisible, setRegionSheetVisible] = useState<boolean>(false);
+  const [shieldBadgeMode, setShieldBadgeMode] = useState<'on' | 'vpn'>('on');
+  const shieldBadgeAnim = useRef(new Animated.Value(1)).current;
   const [browserMenuVisible, setBrowserMenuVisible] = useState<boolean>(false);
   const [isCurrentBookmarked, setIsCurrentBookmarked] = useState<boolean>(false);
   const [downloadPrompt, setDownloadPrompt] = useState<{
@@ -849,6 +851,43 @@ function BrowserMain() {
       linkingSub.remove();
     };
   }, []);
+
+  // Hiệu ứng luân phiên đổi huy hiệu Khiên ('On' màu xanh blue <-> 'VPN' màu xanh green) khi bật Chuyển vùng
+  useEffect(() => {
+    if (!regionSettings.enabled) {
+      setShieldBadgeMode('on');
+      shieldBadgeAnim.setValue(1);
+      return;
+    }
+
+    if (!stats.isShieldActive) {
+      setShieldBadgeMode('vpn');
+      shieldBadgeAnim.setValue(1);
+      return;
+    }
+
+    // Khi cả 2 cùng bật: Luân phiên đổi huy hiệu mỗi 2.8 giây
+    const interval = setInterval(() => {
+      Animated.sequence([
+        Animated.timing(shieldBadgeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(shieldBadgeAnim, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      setTimeout(() => {
+        setShieldBadgeMode((prev) => (prev === 'on' ? 'vpn' : 'on'));
+      }, 200);
+    }, 2800);
+
+    return () => clearInterval(interval);
+  }, [regionSettings.enabled, stats.isShieldActive]);
 
   // Tự động ghi nhớ thẻ đang xem gần nhất vào bộ nhớ để khi vào lại browser sẽ mở đúng trang đó
   useEffect(() => {
@@ -2953,22 +2992,62 @@ function BrowserMain() {
           onTouchEnd={handleHeaderTouchEnd}
         >
           <View style={styles.webTopGreetingRow}>
-            {/* Nút Khiên chặn quảng cáo bên trái (phong cách Cốc Cốc: icon đen, tag BẬT màu blue) */}
+            {/* Nút Khiên chặn quảng cáo bên trái: Luân phiên 'On' (xanh blue) và 'VPN' (xanh green) */}
             <TouchableOpacity
               style={styles.webTopShieldBtn}
-              onPress={() => setShieldSheetVisible(true)}
+              onPress={() => {
+                if (shieldBadgeMode === 'vpn' && regionSettings.enabled) {
+                  setRegionSheetVisible(true);
+                } else {
+                  setShieldSheetVisible(true);
+                }
+              }}
+              onLongPress={() => {
+                if (regionSettings.enabled) {
+                  setRegionSheetVisible(true);
+                } else {
+                  setShieldSheetVisible(true);
+                }
+              }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               activeOpacity={0.7}
             >
-              {stats.isShieldActive && (
-                <View style={styles.shieldTagBadge}>
-                  <Text style={styles.shieldTagText}>On</Text>
-                </View>
+              {(stats.isShieldActive || regionSettings.enabled) && (
+                <Animated.View
+                  style={[
+                    styles.shieldTagBadge,
+                    {
+                      backgroundColor:
+                        shieldBadgeMode === 'vpn' && regionSettings.enabled
+                          ? '#10b981' // Màu green cho VPN
+                          : '#007aff', // Màu blue cho On
+                      opacity: shieldBadgeAnim,
+                      transform: [
+                        {
+                          scale: shieldBadgeAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.75, 1],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <Text style={styles.shieldTagText}>
+                    {shieldBadgeMode === 'vpn' && regionSettings.enabled ? 'VPN' : 'On'}
+                  </Text>
+                </Animated.View>
               )}
               <Feather
                 name="shield"
                 size={17}
-                color={stats.isShieldActive ? (isIncognito ? '#e4e4e7' : '#09090b') : '#a1a1aa'}
+                color={
+                  stats.isShieldActive || regionSettings.enabled
+                    ? isIncognito
+                      ? '#e4e4e7'
+                      : '#09090b'
+                    : '#a1a1aa'
+                }
               />
             </TouchableOpacity>
 
@@ -3525,20 +3604,21 @@ function BrowserMain() {
         onShare={() => {
           setBrowserMenuVisible(false);
           const rawUrl = activeUrl || currentTab?.url || inputUrl;
-          if (!rawUrl || rawUrl.startsWith('about:') || rawUrl.startsWith('kite://')) {
-            showToast('Không có liên kết để chia sẻ');
-            return;
-          }
-          let shareUrl = rawUrl.trim();
-          if (!shareUrl.startsWith('http://') && !shareUrl.startsWith('https://')) {
-            shareUrl = 'https://' + shareUrl;
-          }
-          const titleToShare = currentTab?.title || 'Kite Browser';
+          const shareUrl =
+            rawUrl && !rawUrl.startsWith('about:') && !rawUrl.startsWith('kite://')
+              ? rawUrl.startsWith('http://') || rawUrl.startsWith('https://')
+                ? rawUrl.trim()
+                : `https://${rawUrl.trim()}`
+              : 'https://kitebrowser.com';
+          const titleToShare =
+            currentTab?.title || (rawUrl ? 'Kite Browser' : 'Kite Browser - Trình duyệt siêu tốc & an toàn');
 
           setTimeout(async () => {
             try {
               if (Platform.OS === 'ios') {
                 await Share.share({
+                  title: titleToShare,
+                  message: `${titleToShare}\n${shareUrl}`,
                   url: shareUrl,
                 });
               } else {
@@ -3552,7 +3632,7 @@ function BrowserMain() {
                 showToast('Không thể mở chia sẻ');
               }
             }
-          }, Platform.OS === 'ios' ? 500 : 150);
+          }, Platform.OS === 'ios' ? 450 : 100);
         }}
         onFindInPage={() => {
           if (!activeUrl) {
@@ -3851,13 +3931,15 @@ const styles = StyleSheet.create({
   shieldTagBadge: {
     position: 'absolute',
     top: 0,
-    left: 13,
+    left: 11,
     backgroundColor: '#007aff',
-    paddingHorizontal: 3.5,
+    paddingHorizontal: 3,
     paddingVertical: 1,
     borderRadius: 3.5,
     borderWidth: 0,
     zIndex: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   shieldTagText: {
     color: '#ffffff',

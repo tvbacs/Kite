@@ -101,32 +101,32 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
       onShare();
       return;
     }
-    if (!currentUrl) return;
-    let urlToShare = currentUrl.trim();
-    if (!urlToShare.startsWith('http://') && !urlToShare.startsWith('https://')) {
-      urlToShare = 'https://' + urlToShare;
-    }
-    const titleToShare = currentTitle || '';
+    const rawUrl = currentUrl;
+    const shareUrl = rawUrl && !rawUrl.startsWith('about:') && !rawUrl.startsWith('kite://')
+      ? (rawUrl.startsWith('http://') || rawUrl.startsWith('https://') ? rawUrl.trim() : `https://${rawUrl.trim()}`)
+      : 'https://kitebrowser.com';
+    const titleToShare = currentTitle || (rawUrl ? 'Kite Browser' : 'Kite Browser - Trình duyệt siêu tốc & an toàn');
 
     setTimeout(async () => {
       try {
         if (Platform.OS === 'ios') {
           await Share.share({
-            url: urlToShare,
-            message: titleToShare || undefined,
+            title: titleToShare,
+            message: `${titleToShare}\n${shareUrl}`,
+            url: shareUrl,
           });
         } else {
           await Share.share({
-            title: titleToShare || 'Chia sẻ liên kết',
-            message: titleToShare ? `${titleToShare}\n${urlToShare}` : urlToShare,
+            title: titleToShare,
+            message: `${titleToShare}\n${shareUrl}`,
           });
         }
       } catch (e: any) {
-        if (e?.message !== 'User did not share') {
+        if (e?.message && !e.message.includes('dismissed') && !e.message.includes('cancel')) {
           console.warn('Share error:', e);
         }
       }
-    }, Platform.OS === 'ios' ? 350 : 100);
+    }, Platform.OS === 'ios' ? 450 : 100);
   };
 
   const getDisplayDomain = (url?: string | null) => {
@@ -451,18 +451,9 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 12 }}>
                       <Text style={[styles.menuTitle, { flex: 0 }]}>Chuyển vùng & Proxy</Text>
                       {isRegionActive && (
-                        <View
-                          style={{
-                            backgroundColor: '#eff6ff',
-                            paddingHorizontal: 7,
-                            paddingVertical: 2,
-                            borderRadius: 8,
-                          }}
-                        >
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#007aff' }}>
-                            {currentRegionText || 'BẬT'}
-                          </Text>
-                        </View>
+                        <Text style={{ fontSize: 13, fontWeight: '500', color: '#007aff' }}>
+                          {currentRegionText || 'BẬT'}
+                        </Text>
                       )}
                     </View>
                     <Feather
