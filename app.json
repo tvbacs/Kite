@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/logokite.png",
       "resizeMode": "contain",
-      "backgroundColor": "#09090b"
+      "backgroundColor": "#0c0d13"
     },
     "ios": {
       "supportsTablet": true,
@@ -30,7 +30,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logokite.png",
-        "backgroundColor": "#09090b"
+        "backgroundColor": "#0c0d13"
       },
       "package": "com.workspace.kite"
     },

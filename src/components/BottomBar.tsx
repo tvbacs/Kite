@@ -129,7 +129,7 @@ export const BottomBar: React.FC<BottomBarProps> = ({
         activeOpacity={0.8}
       >
         {isBrowsing && isSecure ? (
-          <Feather name="lock" size={14} color="#16a34a" style={styles.pillIcon} />
+          <Feather name="lock" size={13} color={subIconColor} style={styles.pillIcon} />
         ) : (
           <Feather name="search" size={16} color={subIconColor} style={styles.pillIcon} />
         )}
