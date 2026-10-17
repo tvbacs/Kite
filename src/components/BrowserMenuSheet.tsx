@@ -14,6 +14,7 @@ import {
 import Feather from '@expo/vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SEARCH_ENGINES } from '../constants/searchEngines';
+import { theme } from '../constants/theme';
 
 interface BrowserMenuSheetProps {
   visible: boolean;
@@ -578,10 +579,9 @@ const styles = StyleSheet.create({
     color: '#18181b',
   },
   horizontalDivider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#f4f4f5',
-    marginLeft: 8,
-    marginRight: 8,
+    height: theme.divider.height,
+    backgroundColor: theme.divider.backgroundColor,
+    marginHorizontal: 8,
   },
   engineRightGroup: {
     flexDirection: 'row',

@@ -24,6 +24,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bookmark, UserProfile } from '../types/browser';
 import { SEARCH_ENGINES } from '../constants/searchEngines';
+import { theme } from '../constants/theme';
 import { VoiceSearchModal } from './VoiceSearchModal';
 import { getGoogleOAuthUrl } from '../services/supabase';
 
@@ -1653,13 +1654,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       >
                         {eng.name}
                       </Text>
-                      {isSelected && <Feather name="check" size={16} color="#007aff" />}
+                      {isSelected && <Feather name="check" size={16} color={theme.colors.black} />}
                     </TouchableOpacity>
                   );
                 })}
               </View>
 
-              {/* MỤC 3: HÌNH NỀN & BẢO MẬT (GOM CHUNG 1 CONTAINER CÁCH NHAU BẰNG HORIZONTAL DIVIDER) */}
+              {/* MỤC 3: HÌNH NỀN & BẢO MẬT (ĐỒNG BỘ THEO PHONG CÁCH BROWSER MENU SHEET) */}
               <Text style={[styles.sheetSubHeader, { marginTop: 14 }]}>Tùy chọn & Bảo mật</Text>
               <View style={styles.groupedOptionContainer}>
                 {/* 1. Hình nền trang chủ */}
@@ -1671,15 +1672,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   }}
                   activeOpacity={0.7}
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.bgOptionTitle}>Hình nền trang chủ</Text>
-                    <Text style={styles.bgOptionSub}>
-                      {bgImage ? 'Đang dùng ảnh nền tùy chỉnh' : 'Chọn ảnh đẹp từ thư viện'}
-                    </Text>
-                  </View>
-                  <View style={styles.rightCircleBtn}>
-                    <Feather name="image" size={18} color="#000000" />
-                  </View>
+                  <Text style={styles.bgOptionTitle}>Hình nền trang chủ</Text>
+                  <Feather name="image" size={20} color={theme.colors.grayDark} />
                 </TouchableOpacity>
 
                 {bgImage && (
@@ -1693,22 +1687,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       }}
                       activeOpacity={0.7}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.bgOptionTitle}>
-                          Xóa hình nền hiện tại
-                        </Text>
-                        <Text style={styles.bgOptionSub}>
-                          Khôi phục lại giao diện màu chủ đề
-                        </Text>
-                      </View>
-                      <View style={[styles.rightCircleBtn, { backgroundColor: '#fee2e2' }]}>
-                        <Feather name="trash-2" size={18} color="#dc2626" />
-                      </View>
+                      <Text style={styles.bgOptionTitle}>Xóa hình nền hiện tại</Text>
+                      <Feather name="trash-2" size={20} color={theme.colors.grayDark} />
                     </TouchableOpacity>
                   </>
                 )}
 
-                {/* Đường phân cách ngang (Horizontal Divider) */}
                 <View style={styles.horizontalDivider} />
 
                 {/* 2. Mã PIN bảo mật thẻ ẩn danh */}
@@ -1720,21 +1704,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   }}
                   activeOpacity={0.7}
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.bgOptionTitle}>Khóa bằng mã PIN</Text>
-                    <Text style={styles.bgOptionSub}>
-                      {incognitoPin
-                        ? 'Đang bật (Chạm để đổi hoặc tắt mã PIN)'
-                        : 'Chưa thiết lập (Yêu cầu mã PIN khi vào ẩn danh)'}
-                    </Text>
-                  </View>
-                  <View style={styles.rightCircleBtn}>
-                    <Feather
-                      name={incognitoPin ? 'lock' : 'shield'}
-                      size={18}
-                      color="#000000"
-                    />
-                  </View>
+                  <Text style={styles.bgOptionTitle}>Khóa bằng mã PIN</Text>
+                  <Feather
+                    name={incognitoPin ? 'lock' : 'shield'}
+                    size={20}
+                    color={theme.colors.grayDark}
+                  />
                 </TouchableOpacity>
 
                 {/* 3. Tệp đã tải xuống */}
@@ -1749,13 +1724,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       }}
                       activeOpacity={0.7}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.bgOptionTitle}>Tệp đã tải xuống</Text>
-                        <Text style={styles.bgOptionSub}>Mở thư mục Kite trong ứng dụng Tệp</Text>
-                      </View>
-                      <View style={styles.rightCircleBtn}>
-                        <Feather name="download" size={18} color="#000000" />
-                      </View>
+                      <Text style={styles.bgOptionTitle}>Tệp đã tải xuống</Text>
+                      <Feather name="download" size={20} color={theme.colors.grayDark} />
                     </TouchableOpacity>
                   </>
                 )}
@@ -1772,13 +1742,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       }}
                       activeOpacity={0.7}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.bgOptionTitle}>Trình quản lý mật khẩu</Text>
-                        <Text style={styles.bgOptionSub}>Bảo mật bằng Apple Keychain & Face ID</Text>
-                      </View>
-                      <View style={styles.rightCircleBtn}>
-                        <Feather name="key" size={18} color="#000000" />
-                      </View>
+                      <Text style={styles.bgOptionTitle}>Trình quản lý mật khẩu</Text>
+                      <Feather name="key" size={20} color={theme.colors.grayDark} />
                     </TouchableOpacity>
                   </>
                 )}
@@ -1795,18 +1760,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       }}
                       activeOpacity={0.7}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.bgOptionTitle}>Tiện ích mở rộng (Extensions)</Text>
-                        <Text style={styles.bgOptionSub}>Nhập script .js, tùy biến & can thiệp web</Text>
-                      </View>
-                      <View style={styles.rightCircleBtn}>
-                        <Feather name="box" size={18} color="#000000" />
-                      </View>
+                      <Text style={styles.bgOptionTitle}>Tiện ích mở rộng</Text>
+                      <Feather name="box" size={20} color={theme.colors.grayDark} />
                     </TouchableOpacity>
                   </>
                 )}
 
-                {/* 5. Dấu trang */}
+                {/* 6. Dấu trang */}
                 {onOpenBookmarks && (
                   <>
                     <View style={styles.horizontalDivider} />
@@ -1818,18 +1778,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       }}
                       activeOpacity={0.7}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.bgOptionTitle}>Dấu trang</Text>
-                        <Text style={styles.bgOptionSub}>Các trang web bạn đã lưu</Text>
-                      </View>
-                      <View style={styles.rightCircleBtn}>
-                        <Feather name="bookmark" size={18} color="#000000" />
-                      </View>
+                      <Text style={styles.bgOptionTitle}>Dấu trang</Text>
+                      <Feather name="bookmark" size={20} color={theme.colors.grayDark} />
                     </TouchableOpacity>
                   </>
                 )}
 
-                {/* 6. Lịch sử duyệt web */}
+                {/* 7. Lịch sử duyệt web */}
                 {onOpenHistory && (
                   <>
                     <View style={styles.horizontalDivider} />
@@ -1841,13 +1796,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                       }}
                       activeOpacity={0.7}
                     >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.bgOptionTitle}>Lịch sử duyệt web</Text>
-                        <Text style={styles.bgOptionSub}>Danh sách trang web đã truy cập</Text>
-                      </View>
-                      <View style={styles.rightCircleBtn}>
-                        <Feather name="clock" size={18} color="#000000" />
-                      </View>
+                      <Text style={styles.bgOptionTitle}>Lịch sử duyệt web</Text>
+                      <Feather name="clock" size={20} color={theme.colors.grayDark} />
                     </TouchableOpacity>
                   </>
                 )}
@@ -2555,7 +2505,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f4f4f5',
   },
   engineGridItemSelected: {
-    backgroundColor: '#e8f2ff',
+    backgroundColor: theme.colors.border,
   },
   engineGridLogo: {
     width: 24,
@@ -2566,38 +2516,37 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13.5,
     fontWeight: '600',
-    color: '#09090b',
+    color: theme.colors.textPrimary,
   },
   engineGridNameSelected: {
-    color: '#007aff',
+    color: theme.colors.black,
     fontWeight: '700',
   },
   sheetSubHeader: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#09090b',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 10,
-    marginTop: 6,
+    fontSize: theme.typography.fontSize.sm,
+    fontWeight: theme.typography.fontWeight.semibold,
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+    marginTop: 10,
     marginLeft: 4,
   },
   groupedOptionContainer: {
-    backgroundColor: '#f4f4f5',
-    borderRadius: 18,
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.xl,
     overflow: 'hidden',
     marginBottom: 10,
   },
   groupedOptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
   },
   horizontalDivider: {
-    height: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
-    marginHorizontal: 16,
+    height: theme.divider.height,
+    backgroundColor: theme.divider.backgroundColor,
+    marginHorizontal: 8,
   },
   bgOptionItem: {
     flexDirection: 'row',
@@ -2618,23 +2567,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   bgOptionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#09090b',
-    marginBottom: 2,
-  },
-  bgOptionSub: {
-    fontSize: 11,
-    color: '#71717a',
-  },
-  rightCircleBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#e5e5ea',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 12,
+    flex: 1,
+    fontSize: theme.typography.fontSize.menuTitle,
+    fontWeight: theme.typography.fontWeight.medium,
+    color: theme.colors.textPrimary,
   },
   sheetSectionHeaderRow: {
     flexDirection: 'row',

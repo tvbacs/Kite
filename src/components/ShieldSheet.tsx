@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Switch } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import { ShieldStats } from '../types/browser';
+import { theme } from '../constants/theme';
 
 interface ShieldSheetProps {
   visible: boolean;
@@ -129,13 +130,13 @@ export const ShieldSheet: React.FC<ShieldSheetProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: theme.colors.backdrop,
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: theme.radius.sheet,
+    borderTopRightRadius: theme.radius.sheet,
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 36,
@@ -143,7 +144,7 @@ const styles = StyleSheet.create({
   sheetDragHandle: {
     width: 36,
     height: 4,
-    backgroundColor: '#d4d4d8',
+    backgroundColor: theme.colors.dragHandle,
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 12,

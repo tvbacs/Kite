@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Sharing from 'expo-sharing';
 import { File } from 'expo-file-system';
+import { theme } from '../constants/theme';
 
 export const STORAGE_DOWNLOADS_KEY = '@kite_downloads_list';
 
@@ -383,13 +384,13 @@ export const DownloadSheet: React.FC<DownloadSheetProps> = ({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: theme.colors.backdrop,
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: '#ffffff',
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: theme.radius.sheet,
+    borderTopRightRadius: theme.radius.sheet,
     height: '78%',
     maxHeight: '90%',
     paddingHorizontal: 20,
@@ -404,7 +405,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#d4d4d8',
+    backgroundColor: theme.colors.dragHandle,
     alignSelf: 'center',
     marginBottom: 14,
   },
