@@ -3034,10 +3034,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   chromeCardTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-    opacity: 0.88,
+    fontSize: 13.5,
+    fontWeight: '500',
+    letterSpacing: -0.1,
+    opacity: 0.78,
   },
   circleShortcutsScrollContent: {
     paddingHorizontal: 2,
