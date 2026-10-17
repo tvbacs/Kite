@@ -156,14 +156,14 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               }}
               activeOpacity={0.7}
             >
-              <View style={[styles.quickActionIconBox, isBookmarked && { backgroundColor: '#eff6ff' }]}>
+              <View style={[styles.quickActionIconBox, isBookmarked && { backgroundColor: '#18181b' }]}>
                 <Feather
                   name="bookmark"
                   size={18}
-                  color={isBookmarked ? '#007aff' : '#09090b'}
+                  color={isBookmarked ? '#ffffff' : '#09090b'}
                 />
               </View>
-              <Text style={[styles.quickActionLabel, isBookmarked && { color: '#007aff' }]}>
+              <Text style={[styles.quickActionLabel, isBookmarked && { color: '#18181b' }]}>
                 {isBookmarked ? 'Đã lưu' : 'Dấu trang'}
               </Text>
             </TouchableOpacity>
@@ -192,14 +192,14 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               }}
               activeOpacity={0.7}
             >
-              <View style={[styles.quickActionIconBox, isDesktop && { backgroundColor: '#eff6ff' }]}>
+              <View style={[styles.quickActionIconBox, isDesktop && { backgroundColor: '#18181b' }]}>
                 <Feather
                   name="monitor"
                   size={18}
-                  color={isDesktop ? '#007aff' : '#09090b'}
+                  color={isDesktop ? '#ffffff' : '#09090b'}
                 />
               </View>
-              <Text style={[styles.quickActionLabel, isDesktop && { color: '#007aff' }]}>
+              <Text style={[styles.quickActionLabel, isDesktop && { color: '#18181b' }]}>
                 {isDesktop ? 'Máy tính' : 'Di động'}
               </Text>
             </TouchableOpacity>
@@ -212,7 +212,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.menuGroupCard}>
-              {/* 1. TÌM TRONG TRANG (Ctrl + F) */}
+              {/* 1. TÌM TRONG TRANG */}
               <TouchableOpacity
                 style={styles.menuRow}
                 onPress={() => {
@@ -225,28 +225,22 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Tìm trong trang</Text>
-                  <Text style={styles.menuSubtitle}>Tìm kiếm từ khóa trên trang web (Ctrl + F)</Text>
-                </View>
+                <Text style={styles.menuTitle}>Tìm trong trang</Text>
                 <Feather name="search" size={20} color="#27272a" />
               </TouchableOpacity>
 
               <View style={styles.horizontalDivider} />
 
-              {/* 2. CHẾ ĐỘ ĐỌC BÁO (READER MODE) */}
+              {/* 2. CHẾ ĐỘ ĐỌC BÁO */}
               {onToggleReaderMode && (
                 <>
                   <View style={styles.menuRow}>
-                    <View style={styles.menuTextContainer}>
-                      <Text style={styles.menuTitle}>Chế độ đọc báo (Reader Mode)</Text>
-                      <Text style={styles.menuSubtitle}>Bóc tách nội dung chính, đọc sạch không mỏi mắt</Text>
-                    </View>
+                    <Text style={styles.menuTitle}>Chế độ đọc báo</Text>
                     <Switch
                       value={!!isReaderMode}
                       onValueChange={onToggleReaderMode}
-                      trackColor={{ false: '#d1d5db', true: '#007aff' }}
-                      ios_backgroundColor="#d1d5db"
+                      trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                      ios_backgroundColor="#e4e4e7"
                       thumbColor="#ffffff"
                     />
                   </View>
@@ -258,15 +252,12 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               {onToggleKeepAwake && (
                 <>
                   <View style={styles.menuRow}>
-                    <View style={styles.menuTextContainer}>
-                      <Text style={styles.menuTitle}>Giữ màn hình luôn sáng</Text>
-                      <Text style={styles.menuSubtitle}>Không tắt màn hình khi xem phim & lướt web</Text>
-                    </View>
+                    <Text style={styles.menuTitle}>Giữ màn hình luôn sáng</Text>
                     <Switch
                       value={!!isKeepAwakeActive}
                       onValueChange={onToggleKeepAwake}
-                      trackColor={{ false: '#d1d5db', true: '#007aff' }}
-                      ios_backgroundColor="#d1d5db"
+                      trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                      ios_backgroundColor="#e4e4e7"
                       thumbColor="#ffffff"
                     />
                   </View>
@@ -278,15 +269,12 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               {onToggleDataSaver && (
                 <>
                   <View style={styles.menuRow}>
-                    <View style={styles.menuTextContainer}>
-                      <Text style={styles.menuTitle}>Tiết kiệm dữ liệu</Text>
-                      <Text style={styles.menuSubtitle}>Tối ưu gói cước di động 4G/5G giới hạn dung lượng</Text>
-                    </View>
+                    <Text style={styles.menuTitle}>Tiết kiệm dữ liệu</Text>
                     <Switch
                       value={!!isDataSaverActive}
                       onValueChange={onToggleDataSaver}
-                      trackColor={{ false: '#d1d5db', true: '#007aff' }}
-                      ios_backgroundColor="#d1d5db"
+                      trackColor={{ false: '#e4e4e7', true: '#18181b' }}
+                      ios_backgroundColor="#e4e4e7"
                       thumbColor="#ffffff"
                     />
                   </View>
@@ -303,10 +291,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Tệp đã tải xuống</Text>
-                  <Text style={styles.menuSubtitle}>Mở thư mục Kite trong ứng dụng Tệp</Text>
-                </View>
+                <Text style={styles.menuTitle}>Tệp đã tải xuống</Text>
                 <Feather name="download" size={20} color="#27272a" />
               </TouchableOpacity>
 
@@ -321,10 +306,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Trình quản lý mật khẩu</Text>
-                  <Text style={styles.menuSubtitle}>Quản lý tài khoản & mật khẩu an toàn (Keychain)</Text>
-                </View>
+                <Text style={styles.menuTitle}>Trình quản lý mật khẩu</Text>
                 <Feather name="key" size={20} color="#27272a" />
               </TouchableOpacity>
 
@@ -339,10 +321,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Tiện ích mở rộng (Extensions)</Text>
-                  <Text style={styles.menuSubtitle}>Nhập script .js, chặn quảng cáo & tùy biến web</Text>
-                </View>
+                <Text style={styles.menuTitle}>Tiện ích mở rộng</Text>
                 <Feather name="box" size={20} color="#27272a" />
               </TouchableOpacity>
 
@@ -357,10 +336,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Dấu trang</Text>
-                  <Text style={styles.menuSubtitle}>Các trang web bạn đã đánh dấu lưu lại</Text>
-                </View>
+                <Text style={styles.menuTitle}>Dấu trang</Text>
                 <Feather name="bookmark" size={20} color="#27272a" />
               </TouchableOpacity>
 
@@ -375,10 +351,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Lịch sử duyệt web</Text>
-                  <Text style={styles.menuSubtitle}>Tìm lại các trang web bạn đã truy cập gần đây</Text>
-                </View>
+                <Text style={styles.menuTitle}>Lịch sử duyệt web</Text>
                 <Feather name="clock" size={20} color="#27272a" />
               </TouchableOpacity>
 
@@ -393,10 +366,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Khiên Kite Shield & Chặn quảng cáo</Text>
-                  <Text style={styles.menuSubtitle}>Tùy chỉnh chặn pop-up, chống cướp tab</Text>
-                </View>
+                <Text style={styles.menuTitle}>Khiên Kite Shield & Chặn quảng cáo</Text>
                 <Feather name="shield" size={20} color="#27272a" />
               </TouchableOpacity>
 
@@ -410,10 +380,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Công cụ tìm kiếm</Text>
-                  <Text style={styles.menuSubtitle}>Google, Yahoo, Bing hoặc DuckDuckGo</Text>
-                </View>
+                <Text style={styles.menuTitle}>Công cụ tìm kiếm</Text>
                 <View style={styles.engineRightGroup}>
                   <View style={styles.engineBadge}>
                     <Text style={styles.engineBadgeText}>
@@ -435,10 +402,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Thẻ mới</Text>
-                  <Text style={styles.menuSubtitle}>Mở một thẻ duyệt web mới</Text>
-                </View>
+                <Text style={styles.menuTitle}>Thẻ mới</Text>
                 <Feather name="plus-circle" size={20} color="#27272a" />
               </TouchableOpacity>
 
@@ -453,10 +417,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                 }}
                 activeOpacity={0.7}
               >
-                <View style={styles.menuTextContainer}>
-                  <Text style={styles.menuTitle}>Thẻ ẩn danh mới</Text>
-                  <Text style={styles.menuSubtitle}>Duyệt web riêng tư không lưu lịch sử</Text>
-                </View>
+                <Text style={styles.menuTitle}>Thẻ ẩn danh mới</Text>
                 <Feather name="eye-off" size={20} color="#27272a" />
               </TouchableOpacity>
             </View>
@@ -505,7 +466,7 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                     <Text style={[styles.engineChoiceName, isSelected && styles.engineChoiceNameActive]}>
                       {eng.name}
                     </Text>
-                    {isSelected && <Feather name="check" size={18} color="#007aff" />}
+                    {isSelected && <Feather name="check" size={18} color="#18181b" />}
                   </TouchableOpacity>
                 );
               })}
@@ -599,38 +560,28 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   menuGroupCard: {
-    backgroundColor: '#f4f4f5',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-  },
-  menuTextContainer: {
-    flex: 1,
-    marginRight: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
   },
   menuTitle: {
-    fontSize: 14.5,
-    fontWeight: '600',
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
     color: '#18181b',
-  },
-  menuSubtitle: {
-    fontSize: 12,
-    color: '#71717a',
-    marginTop: 2,
-    lineHeight: 16,
   },
   horizontalDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: '#e4e4e7',
-    marginLeft: 16,
+    backgroundColor: '#f4f4f5',
+    marginLeft: 8,
+    marginRight: 8,
   },
   engineRightGroup: {
     flexDirection: 'row',
@@ -638,10 +589,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   engineBadge: {
-    backgroundColor: '#e4e4e7',
+    backgroundColor: '#f4f4f5',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
   engineBadgeText: {
     color: '#18181b',
@@ -670,7 +623,7 @@ const styles = StyleSheet.create({
   engineModalTitle: {
     fontSize: 16.5,
     fontWeight: '700',
-    color: '#1f1f1f',
+    color: '#18181b',
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -679,13 +632,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    backgroundColor: '#f8fafd',
+    backgroundColor: '#f4f4f5',
     borderWidth: 1,
-    borderColor: '#e8eaed',
+    borderColor: '#e4e4e7',
   },
   engineChoiceSelected: {
-    borderColor: '#007aff',
-    backgroundColor: '#eff6ff',
+    borderColor: '#18181b',
+    backgroundColor: '#ffffff',
   },
   enginePickerLogo: {
     width: 28,
@@ -696,10 +649,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     fontWeight: '500',
-    color: '#1f1f1f',
+    color: '#18181b',
   },
   engineChoiceNameActive: {
-    color: '#007aff',
-    fontWeight: '600',
+    color: '#18181b',
+    fontWeight: '700',
   },
 });
