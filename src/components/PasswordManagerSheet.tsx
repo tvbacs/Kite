@@ -309,6 +309,8 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
     setEditModalVisible(true);
   };
 
+
+
   const handleOpenEditModal = async (item: SavedCredential) => {
     const secret = await getCredentialPassword(item.id, settings.requireBiometrics);
     if (secret === null && settings.requireBiometrics) {
@@ -422,38 +424,43 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={styles.backdrop}
-        activeOpacity={1}
-        onPress={onClose}
-      >
+      <View style={styles.backdrop}>
         <TouchableOpacity
-          style={[styles.sheetContainer, { paddingBottom: bottomInset }]}
+          style={StyleSheet.absoluteFill}
           activeOpacity={1}
-          onPress={(e) => e.stopPropagation()}
-        >
+          onPress={onClose}
+        />
+        <View style={[styles.sheetContainer, { paddingBottom: bottomInset }]}>
           {/* Thanh kéo trang nhã */}
           <View style={styles.dragHandle} />
 
           {/* Header phong cách Google Password Manager */}
           <View style={styles.headerRow}>
             <View style={styles.headerTitleGroup}>
-              {/* Biểu tượng chìa khóa Google */}
-              <View style={styles.googleKeyBox}>
-                <Feather name="key" size={17} color="#18181b" />
-              </View>
               <Text style={styles.headerTitleText}>Trình quản lý mật khẩu</Text>
             </View>
 
-            {/* Nút đóng tròn tinh tế */}
-            <TouchableOpacity
-              style={styles.circleCloseBtn}
-              onPress={onClose}
-              activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather name="x" size={18} color="#3c4043" />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              {/* Nút thêm mật khẩu nhanh */}
+              <TouchableOpacity
+                style={styles.circleCloseBtn}
+                onPress={handleOpenAddModal}
+                activeOpacity={0.6}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="plus" size={20} color="#18181b" />
+              </TouchableOpacity>
+
+              {/* Nút đóng tròn tinh tế */}
+              <TouchableOpacity
+                style={styles.circleCloseBtn}
+                onPress={onClose}
+                activeOpacity={0.6}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="x" size={20} color="#3c4043" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Ô tìm kiếm dạng viên thuốc (Pill Search Bar chuẩn Google) */}
@@ -478,11 +485,15 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
           {/* Nội dung cuộn chính */}
           <ScrollView
             style={styles.contentScroll}
+            contentContainerStyle={{ paddingBottom: 24 }}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            nestedScrollEnabled={true}
+            bounces={true}
           >
             {/* Dòng mô tả & Tìm hiểu thêm */}
             <Text style={styles.descriptionParagraph}>
-              Tạo, lưu và quản lý mật khẩu và khoá truy cập để dễ dàng đăng nhập vào các trang web và ứng dụng.{' '}
+              Kite bảo vệ an toàn thông tin đăng nhập của bạn, giúp bạn tự động điền và truy cập nhanh vào các trang web yêu thích.{' '}
               <Text
                 style={styles.learnMoreLink}
                 onPress={() => {
@@ -496,7 +507,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
               </Text>
             </Text>
 
-            {/* Thẻ Kiểm tra mật khẩu (Password Checkup) chuẩn Google */}
+            {/* Thẻ Kiểm tra mật khẩu (Password Checkup) */}
             <TouchableOpacity
               style={styles.checkupCard}
               activeOpacity={0.7}
@@ -523,27 +534,15 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
               </View>
             </TouchableOpacity>
 
-            {/* Nút Thêm mật khẩu */}
-            <TouchableOpacity
-              style={styles.addPasswordRowBtn}
-              onPress={handleOpenAddModal}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.addPasswordRowBtnText}>Thêm mật khẩu...</Text>
-            </TouchableOpacity>
-
-            {/* Tiêu đề nhóm: Mật khẩu và khoá truy cập đã lưu */}
-            <Text style={styles.sectionHeaderLabel}>Mật khẩu và khoá truy cập đã lưu</Text>
+            {/* Tiêu đề nhóm: Tài khoản và mật khẩu đã lưu */}
+            <Text style={styles.sectionHeaderLabel}>Tài khoản và mật khẩu đã lưu</Text>
 
             {/* Danh sách tài khoản đã lưu */}
             {credentials.length === 0 ? (
               <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconCircle}>
-                  <Feather name="lock" size={28} color="#18181b" />
-                </View>
                 <Text style={styles.emptyTitle}>Chưa lưu mật khẩu nào</Text>
                 <Text style={styles.emptySub}>
-                  Khi bạn đăng nhập trên các trang web, Kite sẽ tự động hỏi để lưu mật khẩu an toàn vào Keychain.
+                  Kite sẽ tự động đề xuất lưu mật khẩu khi bạn đăng nhập tài khoản trên các trang web.
                 </Text>
               </View>
             ) : filteredCredentials.length === 0 ? (
@@ -685,23 +684,15 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
             <View style={{ height: 30 }} />
           </ScrollView>
 
-          {/* Thanh công cụ dưới cùng chuẩn ảnh tham chiếu Google (Cài đặt & Chọn) */}
+          {/* Thanh công cụ dưới cùng (Cài đặt) - Đã xóa nút Đóng theo yêu cầu */}
           <View style={styles.bottomBarRow}>
             <TouchableOpacity
               style={styles.bottomPillBtn}
               onPress={() => setSettingsModalVisible(true)}
               activeOpacity={0.7}
             >
-              <Feather name="sliders" size={15} color="#1f1f1f" style={{ marginRight: 6 }} />
+              <Feather name="settings" size={15} color="#1f1f1f" style={{ marginRight: 6 }} />
               <Text style={styles.bottomPillBtnText}>Cài đặt</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.bottomPillBtn}
-              onPress={onClose}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.bottomPillBtnText}>Đóng</Text>
             </TouchableOpacity>
           </View>
 
@@ -859,8 +850,8 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
               </TouchableOpacity>
             </TouchableOpacity>
           </Modal>
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
   );
 };
@@ -873,8 +864,8 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: theme.colors.sheetBackground,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     maxHeight: '92%',
     minHeight: '65%',
     paddingTop: 8,
@@ -913,12 +904,13 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
   },
   circleCloseBtn: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.backgroundSecondary,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   searchPillBox: {
     flexDirection: 'row',
@@ -957,8 +949,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#ffffff',
-    borderRadius: theme.radius.xl,
-    padding: 16,
+    borderRadius: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
     marginBottom: 12,
   },
   checkupTitle: {
@@ -985,33 +978,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addPasswordRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#ffffff',
-    borderRadius: theme.radius.xl,
-    paddingVertical: 12,
+    borderRadius: 24,
+    paddingVertical: 16,
     paddingHorizontal: 18,
     marginBottom: 16,
   },
   addPasswordRowBtnText: {
-    fontSize: theme.typography.fontSize.base,
+    fontSize: 16,
     color: theme.colors.textPrimary,
-    fontWeight: theme.typography.fontWeight.semibold,
+    fontWeight: '400',
   },
   sectionHeaderLabel: {
-    fontSize: theme.typography.fontSize.menuTitle,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '500',
+    color: theme.colors.textSecondary,
     marginBottom: 10,
   },
   groupedListCard: {
     backgroundColor: '#ffffff',
-    borderRadius: theme.radius.xl,
+    borderRadius: 24,
     overflow: 'hidden',
   },
   credRowItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
   faviconBox: {
     width: 36,
@@ -1032,8 +1028,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   credRowSite: {
-    fontSize: theme.typography.fontSize.menuTitle,
-    fontWeight: theme.typography.fontWeight.medium,
+    fontSize: 16,
+    fontWeight: '400',
     color: theme.colors.textPrimary,
     marginBottom: 2,
   },
@@ -1124,7 +1120,7 @@ const styles = StyleSheet.create({
   bottomBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     paddingHorizontal: 20,
     paddingTop: 10,
     borderTopWidth: 1,
@@ -1135,9 +1131,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
     borderRadius: 20,
     paddingVertical: 8,
     paddingHorizontal: 18,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   bottomPillBtnText: {
     fontSize: 13.5,
@@ -1149,17 +1152,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 36,
     paddingHorizontal: 20,
-    backgroundColor: '#f4f4f5',
-    borderRadius: 16,
-  },
-  emptyIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
   },
   emptyTitle: {
     fontSize: 15.5,
@@ -1173,6 +1165,40 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
+  emptyActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+  },
+  emptyAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#18181b',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: theme.radius.full,
+  },
+  emptyAddBtnText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  emptyDemoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: theme.radius.full,
+  },
+  emptyDemoBtnText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#007aff',
+  },
   dialogBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
@@ -1182,7 +1208,7 @@ const styles = StyleSheet.create({
   },
   dialogCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 24,
     width: '100%',
     padding: 22,
   },
@@ -1200,9 +1226,9 @@ const styles = StyleSheet.create({
   },
   dialogInput: {
     backgroundColor: '#f1f3f4',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    height: 42,
+    height: 44,
     fontSize: 14.5,
     color: '#1f1f1f',
     marginBottom: 14,
@@ -1222,9 +1248,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f1f3f4',
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 14,
-    height: 42,
+    height: 44,
     marginBottom: 20,
   },
   passwordInputInner: {
@@ -1251,9 +1277,9 @@ const styles = StyleSheet.create({
   },
   savePillBtn: {
     backgroundColor: '#007aff',
-    borderRadius: 18,
-    paddingVertical: 9,
-    paddingHorizontal: 20,
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
   },
   savePillBtnLabel: {
     fontSize: 14,
@@ -1264,13 +1290,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 15,
     borderBottomWidth: 1,
     borderColor: '#f1f3f4',
   },
   settingItemTitle: {
-    fontSize: 14.5,
-    fontWeight: '500',
+    fontSize: 15.5,
+    fontWeight: '400',
     color: '#1f1f1f',
     marginBottom: 2,
   },

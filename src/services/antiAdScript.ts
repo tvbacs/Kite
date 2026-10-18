@@ -24,15 +24,12 @@ export const INJECTED_BEFORE_CONTENT = `
   window.__kite_blocked_redirects = 0;
 
   var AD_SELECTORS = ${serializedSelectors};
-  var BLOCKED_DOMAINS = ${serializedBlockedDomains};
-  var BLOCKED_GAMBLING_KEYWORDS = ${serializedGamblingKeywords};
-  var COMMERCE_DOMAINS = ${serializedCommerceDomains};
 
   // 1. Tiêm bộ CSS chặn quảng cáo gom nhóm an toàn, không gián đoạn luồng streaming HTML của WebKit
   function injectAdStyle() {
     try {
       if (document.getElementById('kite-shield-ad-block-css')) return;
-      var target = document.head || document.documentElement;
+      var target = document.documentElement || document.head;
       if (!target) return;
       var styleEl = document.createElement('style');
       styleEl.type = 'text/css';
@@ -41,9 +38,8 @@ export const INJECTED_BEFORE_CONTENT = `
       target.appendChild(styleEl);
     } catch(e) {}
   }
-  if (document.head) {
-    injectAdStyle();
-  } else {
+  injectAdStyle();
+  if (!document.getElementById('kite-shield-ad-block-css')) {
     document.addEventListener('DOMContentLoaded', injectAdStyle, { once: true });
   }
 
@@ -92,20 +88,8 @@ export const INJECTED_BEFORE_CONTENT = `
   };
 
   try {
-    window.open = function(url, target, features) {
-      if (url && typeof url === 'string' && url.trim().length > 0 && !url.startsWith('javascript:')) {
-        if (!isKnownAdOrGambling(url)) {
-          window.location.href = url;
-          return window;
-        }
-      }
+    window.open = function() {
       window.__kite_blocked_popups++;
-      try {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'BLOCKED_POPUP',
-          url: url || ''
-        }));
-      } catch(e) {}
       return fakeWin;
     };
   } catch(e) {}
@@ -138,8 +122,50 @@ export const INJECTED_BEFORE_CONTENT = `
       return _origAlert.apply(window, arguments);
     }
   };
+})();
+true;
+`;
 
-  // 5. Kiểm tra URL đích có phải là mạng quảng cáo hoặc nhà cái cá cược không
+/**
+ * Script tối ưu hiển thị, bảo đảm CSS ẩn quảng cáo và nhận diện tài khoản Google an toàn
+ */
+export const INJECTED_AFTER_CONTENT = `
+(function() {
+  var _q = [], _t = null;
+  function report(type, url) {
+    _q.push({ type: type, url: url || '' });
+    if (_t) return;
+    _t = setTimeout(function() {
+      var batch = _q; _q = []; _t = null;
+      try {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'SHIELD_BATCH',
+            count: batch.length,
+            items: batch.slice(0, 10)
+          }));
+        }
+      } catch (e) {}
+    }, 500);
+  }
+
+  var AD_SELECTORS = ${serializedSelectors};
+  var BLOCKED_DOMAINS = ${serializedBlockedDomains};
+  var BLOCKED_GAMBLING_KEYWORDS = ${serializedGamblingKeywords};
+  var COMMERCE_DOMAINS = ${serializedCommerceDomains};
+
+  // 1. Đảm bảo CSS ẩn quảng cáo luôn hiện diện bằng textContent siêu tốc một lần duy nhất
+  try {
+    if (!document.getElementById('kite-shield-ad-block-css')) {
+      var s = document.createElement('style');
+      s.id = 'kite-shield-ad-block-css';
+      s.type = 'text/css';
+      s.textContent = AD_SELECTORS.join(', ') + ' { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; height: 0 !important; width: 0 !important; max-height: 0 !important; overflow: hidden !important; }';
+      (document.head || document.documentElement).appendChild(s);
+    }
+  } catch(e) {}
+
+  // Kiểm tra URL đích có phải là mạng quảng cáo hoặc nhà cái cá cược không
   var _adDomainMap = null;
   function getAdDomainMap() {
     if (!_adDomainMap) {
@@ -161,7 +187,6 @@ export const INJECTED_BEFORE_CONTENT = `
       var h = u.hostname.toLowerCase();
       var currentHost = window.location.hostname.toLowerCase();
 
-      // Nếu cùng domain hoặc subdomain với trang hiện tại thì không phải liên kết ngoài quảng cáo
       function getBaseDomain(hostname) {
         var parts = hostname.split('.');
         if (parts.length >= 2) {
@@ -175,13 +200,15 @@ export const INJECTED_BEFORE_CONTENT = `
         return false;
       }
 
-      // So khớp O(1) hostname và subdomain với danh sách mạng quảng cáo
       var map = getAdDomainMap();
       if (map[h]) return true;
       var dotIdx = h.indexOf('.');
       if (dotIdx !== -1 && map[h.slice(dotIdx + 1)]) return true;
+      for (var b = 0; b < BLOCKED_DOMAINS.length; b++) {
+        var bd = BLOCKED_DOMAINS[b];
+        if (h === bd || h.endsWith('.' + bd) || h.includes(bd)) return true;
+      }
 
-      // So khớp tên miền con với danh sách từ khóa nhà cái
       for (var j = 0; j < BLOCKED_GAMBLING_KEYWORDS.length; j++) {
         var g = BLOCKED_GAMBLING_KEYWORDS[j];
         if (h.includes(g)) return true;
@@ -190,18 +217,29 @@ export const INJECTED_BEFORE_CONTENT = `
     return false;
   }
 
-  // 5b. Chặn mã độc/quảng cáo tự ý đổi location (location.replace, location.assign) làm trắng màn hình
+  // Chặn mã quảng cáo tự động tạo thẻ <a> ẩn rồi gọi a.click() cướp màn hình
+  try {
+    var _origAnchorClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function() {
+      var href = this.href || this.getAttribute('href') || '';
+      if (href) {
+        if (isKnownAdOrGambling(href)) {
+          window.__kite_blocked_redirects = (window.__kite_blocked_redirects || 0) + 1;
+          report('BLOCKED_REDIRECT', href);
+          return;
+        }
+      }
+      return _origAnchorClick.apply(this, arguments);
+    };
+  } catch(e) {}
+
+  // Chặn mã độc/quảng cáo tự ý đổi location (location.replace, location.assign) làm trắng màn hình
   try {
     var _origAssign = window.location.assign;
     window.location.assign = function(url) {
       if (isKnownAdOrGambling(url)) {
-        window.__kite_blocked_redirects++;
-        try {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'BLOCKED_REDIRECT',
-            url: url || ''
-          }));
-        } catch(e) {}
+        window.__kite_blocked_redirects = (window.__kite_blocked_redirects || 0) + 1;
+        report('BLOCKED_REDIRECT', url || '');
         return;
       }
       if (_origAssign) return _origAssign.apply(window.location, arguments);
@@ -210,125 +248,36 @@ export const INJECTED_BEFORE_CONTENT = `
     var _origReplace = window.location.replace;
     window.location.replace = function(url) {
       if (isKnownAdOrGambling(url)) {
-        window.__kite_blocked_redirects++;
-        try {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'BLOCKED_REDIRECT',
-            url: url || ''
-          }));
-        } catch(e) {}
+        window.__kite_blocked_redirects = (window.__kite_blocked_redirects || 0) + 1;
+        report('BLOCKED_REDIRECT', url || '');
         return;
       }
       if (_origReplace) return _origReplace.apply(window.location, arguments);
     };
   } catch(e) {}
 
-  // 6. Chặn khởi tạo script/iframe tải từ các domain quảng cáo độc hại (cả qua setAttribute và gán property src)
-  try {
-    var _origCreateElement = document.createElement;
-    document.createElement = function(tagName, options) {
-      var el = _origCreateElement.call(document, tagName, options);
-      if (tagName && (tagName.toLowerCase() === 'script' || tagName.toLowerCase() === 'iframe')) {
-        var _origSetAttribute = el.setAttribute;
-        el.setAttribute = function(name, val) {
-          if (name && name.toLowerCase() === 'src' && typeof val === 'string') {
-            if (isKnownAdOrGambling(val)) {
-              return;
-            }
-          }
-          return _origSetAttribute.apply(el, arguments);
-        };
-      }
-      return el;
-    };
-  } catch(e) {}
-
-  // Chặn gán s.src = 'https://llvpn.com/tag.min.js' trên prototype của HTMLScriptElement
-  try {
-    var scriptProto = HTMLScriptElement.prototype;
-    var origSrcDesc = Object.getOwnPropertyDescriptor(scriptProto, 'src') || Object.getOwnPropertyDescriptor(Element.prototype, 'src');
-    if (origSrcDesc && origSrcDesc.set) {
-      Object.defineProperty(scriptProto, 'src', {
-        get: origSrcDesc.get,
-        set: function(val) {
-          if (typeof val === 'string' && isKnownAdOrGambling(val)) {
-            return;
-          }
-          return origSrcDesc.set.call(this, val);
-        },
-        configurable: true
-      });
-    }
-  } catch(e) {}
-
-  // Chặn appendChild script quảng cáo vào DOM
-  try {
-    var origAppend = Node.prototype.appendChild;
-    Node.prototype.appendChild = function(child) {
-      if (child && child.tagName && child.tagName.toLowerCase() === 'script') {
-        var s = child.src || (child.getAttribute && child.getAttribute('src')) || '';
-        if (s && isKnownAdOrGambling(s)) {
-          return child;
-        }
-      }
-      return origAppend.apply(this, arguments);
-    };
-  } catch(e) {}
-
-  // Chặn fetch và XMLHttpRequest đến các domain quảng cáo
-  try {
-    var _origFetch = window.fetch;
-    window.fetch = function(input, init) {
-      var url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
-      if (url && isKnownAdOrGambling(url)) {
-        return Promise.reject(new Error('Blocked by Kite Shield'));
-      }
-      return _origFetch.apply(this, arguments);
-    };
-  } catch(e) {}
-
-  try {
-    var _origXhrOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url) {
-      if (url && typeof url === 'string' && isKnownAdOrGambling(url)) {
-        this.abort();
-        return;
-      }
-      return _origXhrOpen.apply(this, arguments);
-    };
-  } catch(e) {}
-
-  // 7. Bẻ gãy bẫy clickjacking / lớp phủ ma và chuyển tiếp click tức thì đến nút thật (Play, Quality...)
+  // Bẻ gãy bẫy clickjacking / lớp phủ ma và chuyển tiếp click tức thì đến nút thật (Play, Quality...)
   document.addEventListener('click', function(e) {
     var target = e.target;
     if (!target) return;
 
     var anchor = target.closest ? target.closest('a') : null;
 
-    // A. Kiểm tra thẻ <a> dẫn sang web cá cược hoặc mạng quảng cáo
     if (anchor && anchor.href) {
       if (isKnownAdOrGambling(anchor.href)) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
-        window.__kite_blocked_redirects++;
-
-        try {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'BLOCKED_REDIRECT',
-            url: anchor.href
-          }));
-        } catch(err) {}
+        window.__kite_blocked_redirects = (window.__kite_blocked_redirects || 0) + 1;
+        report('BLOCKED_REDIRECT', anchor.href);
         return false;
       }
 
-      // Đảm bảo các liên kết target="_blank" hợp lệ mở bình thường trên iOS WKWebView
-      if (anchor.target === '_blank' || anchor.getAttribute('target') === '_blank') {
+      if (anchor.href.includes('accounts.google.com') || anchor.href.includes('myaccount.google.com')) {
         anchor.target = '_self';
       }
     }
 
-    // B. Kiểm tra lớp phủ ma / tấm chắn trong suốt (invisible transparent overlay) phủ lên video player
     var isOverlayTrap = false;
     var trapElement = null;
 
@@ -336,24 +285,23 @@ export const INJECTED_BEFORE_CONTENT = `
       try {
         var isModalOrForm = target.closest && target.closest('dialog, [role="dialog"], [role="alertdialog"], .modal, .modal-backdrop, .swal2-container, .popup-container, form, nav, header, footer');
         if (!isModalOrForm) {
-          var tag = target.tagName.toLowerCase();
-          var isControl = tag === 'video' || tag === 'audio' || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button' || tag === 'canvas';
+          var tag = target.tagName ? target.tagName.toLowerCase() : '';
+          var isControl = tag === 'video' || tag === 'audio' || tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button';
 
           if (!isControl) {
+            var rect = target.getBoundingClientRect ? target.getBoundingClientRect() : null;
             var style = window.getComputedStyle(target);
             var pos = style.position;
-            if (pos === 'fixed' || pos === 'absolute') {
-              var z = parseInt(style.zIndex, 10) || 0;
-              var styleAttr = target.getAttribute('style') || '';
-              var isInsaneZIndex = z >= 100000 || styleAttr.includes('2147483647') || styleAttr.includes('999999');
-              var isKnownAdClass = target.matches && target.matches('#transparentLayer, .playover, .video-ad-layer, .popunder-link, .float-ck, .aanetwork-ads-box, .dhw-ad-notice');
+            var z = parseInt(style.zIndex, 10) || 0;
+            var styleAttr = target.getAttribute('style') || '';
+            var isKnownAdClass = target.matches && target.matches('#transparentLayer, .playover, .video-ad-layer, .popunder-link, .float-ck, .aanetwork-ads-box, .dhw-ad-notice, [class*="overlay"], [class*="popup"], [id*="overlay"]');
+            var isLargeCover = rect && (rect.width >= window.innerWidth * 0.45 && rect.height >= window.innerHeight * 0.35);
 
-              if ((isInsaneZIndex || isKnownAdClass) && !target.querySelector('video, form, nav, header, input, button')) {
-                var text = (target.innerText || '').trim();
-                if (text.length < 20) {
-                  isOverlayTrap = true;
-                  trapElement = target;
-                }
+            if ((pos === 'fixed' || pos === 'absolute') && (z >= 10 || isKnownAdClass || isLargeCover || styleAttr.includes('z-index')) && !target.querySelector('video, form, nav, header, input, button')) {
+              var text = (target.innerText || '').trim();
+              if (text.length < 30) {
+                isOverlayTrap = true;
+                trapElement = target;
               }
             }
           }
@@ -361,27 +309,20 @@ export const INJECTED_BEFORE_CONTENT = `
       } catch(err) {}
     }
 
-    // C. Khi phát hiện lớp phủ ma: triệt tiêu lớp phủ và kích hoạt nút thật bên dưới
     if (isOverlayTrap && trapElement) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
 
-      window.__kite_blocked_redirects++;
+      window.__kite_blocked_redirects = (window.__kite_blocked_redirects || 0) + 1;
 
       trapElement.style.setProperty('display', 'none', 'important');
       trapElement.style.setProperty('pointer-events', 'none', 'important');
       trapElement.style.setProperty('visibility', 'hidden', 'important');
       trapElement.style.setProperty('opacity', '0', 'important');
 
-      try {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'BLOCKED_REDIRECT',
-          url: 'Lớp phủ ma'
-        }));
-      } catch(err) {}
+      report('BLOCKED_REDIRECT', 'Lớp phủ ma');
 
-      // CHUYỂN TIẾP CLICK TỨC THÌ ĐẾN NÚT THẬT (Play, Cài đặt 720p/1080p, Fullscreen...)
       try {
         var realTarget = document.elementFromPoint(e.clientX, e.clientY);
         if (realTarget && realTarget !== trapElement && !trapElement.contains(realTarget)) {
@@ -397,257 +338,15 @@ export const INJECTED_BEFORE_CONTENT = `
     }
   }, true);
 
-  // 8. Chặn trigger mở popup trên touchstart với link quảng cáo
-  document.addEventListener('touchstart', function(e) {
-    if (!e.touches || e.touches.length !== 1) return;
-    var target = e.target;
-    if (!target) return;
-    var anchor = target.closest ? target.closest('a') : null;
-    if (anchor && anchor.href && isKnownAdOrGambling(anchor.href)) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, { capture: true, passive: false });
-
-  // 9. Theo dõi cử chỉ vuốt kéo xuống trên trang web (Kite Pull Down Bar)
-  var pullTouchStartY = 0;
-  var pullTouchStartX = 0;
-  var isPullTracking = false;
-
-  window.addEventListener('touchstart', function(e) {
-    if (e.touches && e.touches.length === 1) {
-      var scrollY = window.pageYOffset || window.scrollY || (document.documentElement && document.documentElement.scrollTop) || (document.body && document.body.scrollTop) || 0;
-      if (scrollY <= 8) {
-        pullTouchStartY = e.touches[0].clientY;
-        pullTouchStartX = e.touches[0].clientX;
-        isPullTracking = true;
-      }
-    }
-  }, { passive: true });
-
-  window.addEventListener('touchmove', function(e) {
-    if (!isPullTracking) return;
-    var currentY = e.touches[0].clientY;
-    var currentX = e.touches[0].clientX;
-    var dy = currentY - pullTouchStartY;
-    var dx = currentX - pullTouchStartX;
-    var scrollY = window.pageYOffset || window.scrollY || (document.documentElement && document.documentElement.scrollTop) || (document.body && document.body.scrollTop) || 0;
-
-    if (dy > 6 && dy > Math.abs(dx) * 0.7 && scrollY <= 15) {
-      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'KITE_PULL_MOVE',
-          dy: dy,
-          dx: dx
-        }));
-      }
-    } else if (dy < -12) {
-      if (isPullTracking) {
-        isPullTracking = false;
-        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-          window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'KITE_PULL_CANCEL'
-          }));
-        }
-      }
-    }
-  }, { passive: true });
-
-  window.addEventListener('touchend', function(e) {
-    if (isPullTracking) {
-      isPullTracking = false;
-      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'KITE_PULL_END'
-        }));
-      }
-    }
-  }, { passive: true });
-
-  window.addEventListener('touchcancel', function(e) {
-    if (isPullTracking) {
-      isPullTracking = false;
-      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'KITE_PULL_CANCEL'
-        }));
-      }
-    }
-  }, { passive: true });
-})();
-true;
-`;
-
-/**
- * Script tối ưu hiển thị, bảo đảm CSS ẩn quảng cáo và nhận diện tài khoản Google an toàn
- */
-export const INJECTED_AFTER_CONTENT = `
-(function() {
-  var AD_SELECTORS = ${serializedSelectors};
-
-  // 1. Đảm bảo CSS ẩn quảng cáo luôn hiện diện bằng textContent siêu tốc một lần duy nhất
+  // 2. Dọn dẹp các lớp phủ rác khi trang tải xong hoàn tất
   try {
-    if (!document.getElementById('kite-shield-ad-block-css')) {
-      var s = document.createElement('style');
-      s.id = 'kite-shield-ad-block-css';
-      s.type = 'text/css';
-      s.textContent = AD_SELECTORS.join(', ') + ' { display: none !important; opacity: 0 !important; pointer-events: none !important; visibility: hidden !important; height: 0 !important; width: 0 !important; max-height: 0 !important; overflow: hidden !important; }';
-      (document.head || document.documentElement).appendChild(s);
-    }
-  } catch(e) {}
-
-  // 2. Tự động quét và triệt tiêu lớp phủ ma, catfish ads trên các trang web xem phim với Debounce
-  try {
-    var adQuery = [
-      '#mobileCatfish', '#catfish', '#catfish-ad', '.mobile-catfish-top', '.mobile-catfixx',
-      '.aanetwork-ads-box', '.float-ck', '.under_player', '#_AM_POPUP_FRAME',
-      '#transparentLayer', '.playover', '.video-ad-layer', '.popunder-link',
-      '#footer_fixed_ads', '#_preload-ads-1', '#invideo_wrapper', '#avs-banner-overlay', '#avs-pause-ad',
-      '.dhw-ad-notice', '[class*="dhw-ad"]', '[id*="aclib"]', '[class*="aclib"]'
-    ].join(', ');
-
-    var neutralizeElement = function(el) {
-      if (!el || el.nodeType !== 1) return;
-      var tag = el.tagName ? el.tagName.toLowerCase() : '';
-      if (tag === 'video' || tag === 'nav' || tag === 'header' || tag === 'form' || tag === 'main' || tag === 'article') return;
-      if (el.querySelector && el.querySelector('video, form, nav, header, main, article')) return;
-
-      // Bảo vệ các hộp thoại xác nhận 18+, cookie, cảnh báo độ tuổi để người dùng có thể bấm vào xem trang
-      var text = (el.innerText || '').toLowerCase();
-      if (
-        text.includes('18+') ||
-        text.includes('18 tuổi') ||
-        text.includes('agree') ||
-        text.includes('enter') ||
-        text.includes('cookie') ||
-        text.includes('xác nhận') ||
-        text.includes('độ tuổi') ||
-        text.includes('tuổi') ||
-        text.includes('adult')
-      ) {
-        return;
-      }
-
-      // Không ẩn các phần tử có nhiều nội dung hoặc có nhiều link/ảnh
-      if (el.querySelectorAll && (el.querySelectorAll('p, a, img').length > 4 || text.length > 200)) {
-        return;
-      }
-
-      var matches = false;
-      try {
-        if (el.matches && el.matches(adQuery)) matches = true;
-      } catch(e) {}
-
-      if (matches) {
+    var zapSelectors = '#transparentLayer, .playover, .video-ad-layer, .popunder-link, .float-ck, .aanetwork-ads-box, .dhw-ad-notice, #mobileCatfish, #catfish, .ad-overlay, #ad-overlay, [class*="catfish"]';
+    document.querySelectorAll(zapSelectors).forEach(function(el) {
+      if (!el.querySelector('video, form, nav, header, input, button')) {
         el.style.setProperty('display', 'none', 'important');
         el.style.setProperty('pointer-events', 'none', 'important');
-        el.style.setProperty('visibility', 'hidden', 'important');
-        el.style.setProperty('opacity', '0', 'important');
-      }
-    };
-
-    var pendingNodes = [];
-    var scheduledTimer = null;
-
-    var processPendingNodes = function() {
-      var nodes = pendingNodes.slice();
-      pendingNodes = [];
-      scheduledTimer = null;
-      for (var i = 0; i < nodes.length; i++) {
-        var node = nodes[i];
-        neutralizeElement(node);
-        if (node.querySelectorAll) {
-          try {
-            var children = node.querySelectorAll(adQuery);
-            for (var c = 0; c < children.length; c++) {
-              neutralizeElement(children[c]);
-            }
-          } catch(e) {}
-        }
-      }
-    };
-
-    // Quét triệt tiêu các huy hiệu giả mạo VPN và nút đóng quảng cáo nổi (nhẹ nhàng, không ép reflow)
-    var scanVpnBadges = function(root) {
-      try {
-        var base = root || document;
-        var candidates = base.querySelectorAll('[class*="vpn"], [id*="vpn"], [class*="chatmate"], [id*="chatmate"], [class*="overlay"]');
-        for (var bIdx = 0; bIdx < candidates.length; bIdx++) {
-          var el = candidates[bIdx];
-          if (!el || el.children.length > 4) continue;
-          var txt = (el.textContent || '').toLowerCase();
-          if (
-            txt.includes('vpn recommended') ||
-            txt.includes('tap to install and continue watching') ||
-            txt.includes('install chatmate') ||
-            (txt.includes('close ad') && txt.length < 25)
-          ) {
-            el.style.setProperty('display', 'none', 'important');
-            el.style.setProperty('pointer-events', 'none', 'important');
-            el.style.setProperty('visibility', 'hidden', 'important');
-            el.style.setProperty('opacity', '0', 'important');
-          }
-        }
-      } catch(e) {}
-    };
-
-    // Tự động phát hiện và khôi phục nội dung nếu trang web bị script chống AdBlock ép trắng màn hình
-    var unblankBody = function() {
-      try {
-        if (document.body) {
-          var bStyle = window.getComputedStyle(document.body);
-          if (bStyle.display === 'none' || bStyle.visibility === 'hidden' || parseFloat(bStyle.opacity) === 0) {
-            document.body.style.setProperty('display', 'block', 'important');
-            document.body.style.setProperty('visibility', 'visible', 'important');
-            document.body.style.setProperty('opacity', '1', 'important');
-          }
-        }
-        if (document.documentElement) {
-          var dStyle = window.getComputedStyle(document.documentElement);
-          if (dStyle.display === 'none' || dStyle.visibility === 'hidden' || parseFloat(dStyle.opacity) === 0) {
-            document.documentElement.style.setProperty('display', 'block', 'important');
-            document.documentElement.style.setProperty('visibility', 'visible', 'important');
-            document.documentElement.style.setProperty('opacity', '1', 'important');
-          }
-        }
-      } catch(e) {}
-    };
-
-    // Quét toàn bộ DOM ban đầu
-    processPendingNodes();
-    scanVpnBadges();
-    unblankBody();
-    setTimeout(function() { processPendingNodes(); scanVpnBadges(); unblankBody(); }, 400);
-    setTimeout(function() { processPendingNodes(); scanVpnBadges(); unblankBody(); }, 1200);
-
-    // Lắng nghe MutationObserver có debounce tiết kiệm pin (300ms)
-    var observer = new MutationObserver(function(mutations) {
-      for (var mIdx = 0; mIdx < mutations.length; mIdx++) {
-        var mut = mutations[mIdx];
-        if (mut.addedNodes) {
-          for (var nIdx = 0; nIdx < mut.addedNodes.length; nIdx++) {
-            var n = mut.addedNodes[nIdx];
-            if (n.nodeType === 1) {
-              pendingNodes.push(n);
-            }
-          }
-        }
-      }
-      if (pendingNodes.length > 0 && !scheduledTimer) {
-        scheduledTimer = setTimeout(function() {
-          processPendingNodes();
-        }, 300);
       }
     });
-
-    if (document.body) {
-      observer.observe(document.body, { childList: true, subtree: true });
-    }
-
-    // Tự động ngắt observer sau 12 giây để giải phóng 100% CPU và hạ nhiệt máy tối đa
-    setTimeout(function() {
-      try { observer.disconnect(); } catch(e) {}
-    }, 12000);
   } catch(e) {}
 
   // 3. Nhận diện tài khoản Google một cách an toàn
@@ -759,72 +458,16 @@ export const INJECTED_AFTER_CONTENT = `
           }
         }
 
-        // 2. Trên trang myaccount.google.com: Quét trực tiếp thẻ thông tin tài khoản
-        if (isMyAccount) {
+        // 2. Tren trang myaccount.google.com: Tim the email truc tiep
+        if (isMyAccount && !userEmail) {
           try {
-            var allDivs = document.querySelectorAll('div, span, p, a, h1, h2, h3');
-            for (var i = 0; i < allDivs.length; i++) {
-              var el = allDivs[i];
-              if (el.children.length <= 1) {
-                var txt = (el.innerText || el.textContent || '').trim();
-                var em = txt.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-                if (em) {
-                  if (!userEmail) userEmail = em[0];
-                  var parent = el.parentElement;
-                  for (var depth = 0; depth < 3 && parent; depth++) {
-                    var siblings = parent.querySelectorAll('div, span, h1, h2, h3, p');
-                    for (var s = 0; s < siblings.length; s++) {
-                      var sTxt = (siblings[s].innerText || siblings[s].textContent || '').trim();
-                      if (
-                        sTxt &&
-                        sTxt !== userEmail &&
-                        !sTxt.includes('@') &&
-                        sTxt.length >= 2 &&
-                        sTxt.length <= 50
-                      ) {
-                        var sLow = sTxt.toLowerCase();
-                        if (
-                          !sLow.includes('google') &&
-                          !sLow.includes('tài khoản') &&
-                          !sLow.includes('quản lý') &&
-                          !sLow.includes('bảo mật') &&
-                          !sLow.includes('wallet') &&
-                          !sLow.includes('thông tin')
-                        ) {
-                          if (!userName) userName = sTxt;
-                          break;
-                        }
-                      }
-                    }
-                    if (userName) break;
-                    parent = parent.parentElement;
-                  }
-                  if (userEmail && userName) break;
-                }
-              }
+            var emEl = document.querySelector('[data-email], [aria-label*="@"]');
+            if (emEl) {
+              var emVal = emEl.getAttribute('data-email') || emEl.getAttribute('aria-label') || '';
+              var mEm = emVal.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+              if (mEm) userEmail = mEm[0];
             }
           } catch(err) {}
-
-          // Quét ảnh đại diện nếu có ảnh tùy chỉnh
-          if (!userAvatar) {
-            var imgs = document.querySelectorAll('img[src*="googleusercontent.com"], img[src*="ggpht.com"]');
-            for (var imgIdx = 0; imgIdx < imgs.length; imgIdx++) {
-              var src = imgs[imgIdx].src || '';
-              if (src.includes('/a/') || src.includes('/a-/') || src.includes('/ogw/')) {
-                userAvatar = src.replace(/=s\d+(-[a-z]+)?/i, '=s256-c');
-                break;
-              }
-            }
-          }
-        }
-
-        // 3. Fallback tìm email từ toàn bộ trang
-        if (!userEmail && isMyAccount) {
-          var allText = (document.body ? document.body.innerText : '') + ' ' + (document.body ? document.body.innerHTML : '');
-          var m = allText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-          if (m) {
-            userEmail = m[0];
-          }
         }
 
         if (userEmail) {
@@ -851,28 +494,7 @@ export const INJECTED_AFTER_CONTENT = `
         }
       };
 
-      findGoogleProfile();
-      setTimeout(findGoogleProfile, 400);
-      setTimeout(findGoogleProfile, 1000);
-      setTimeout(findGoogleProfile, 2000);
-      setTimeout(findGoogleProfile, 4000);
-
-      try {
-        if (typeof MutationObserver !== 'undefined' && document.body) {
-          var googleDebounce = null;
-          var obs = new MutationObserver(function() {
-            if (googleDebounce) return;
-            googleDebounce = setTimeout(function() {
-              googleDebounce = null;
-              findGoogleProfile();
-            }, 1000);
-          });
-          obs.observe(document.body, { childList: true, subtree: true });
-          setTimeout(function() {
-            try { obs.disconnect(); } catch(e) {}
-          }, 10000);
-        }
-      } catch(e) {}
+      setTimeout(findGoogleProfile, 1500);
     }
   } catch(e) {}
 
@@ -1087,77 +709,7 @@ export const getDataSaverScript = (mode: 'block_images' | 'compress_images' | 'o
     }
   } catch(e) {}
 
-  // 6. Nhận diện Form Đăng nhập & Mật khẩu để tự động hỏi người dùng có muốn lưu không
-  try {
-    var lastCapturedLogin = null;
-
-    var captureLoginForm = function(targetEl) {
-      try {
-        var form = targetEl ? targetEl.closest('form') : null;
-        var pwdInput = null;
-        var userInput = null;
-
-        if (form) {
-          pwdInput = form.querySelector('input[type="password"]');
-          userInput = form.querySelector('input[type="email"], input[type="text"], input[name*="user"], input[name*="login"], input[id*="user"], input[id*="login"], input[autocomplete="username"]');
-        }
-
-        if (!pwdInput) {
-          pwdInput = document.querySelector('input[type="password"]');
-        }
-
-        if (pwdInput && pwdInput.value) {
-          if (!userInput) {
-            var allInputs = Array.from(document.querySelectorAll('input:not([type="password"]):not([type="hidden"]):not([type="submit"]):not([type="button"])'));
-            for (var i = 0; i < allInputs.length; i++) {
-              if (allInputs[i].value && (allInputs[i].type === 'email' || allInputs[i].type === 'text')) {
-                userInput = allInputs[i];
-                break;
-              }
-            }
-          }
-
-          var usernameVal = userInput ? userInput.value.trim() : '';
-          var passwordVal = pwdInput.value;
-
-          if (passwordVal && passwordVal.length >= 2) {
-            var loginData = {
-              type: 'DETECTED_LOGIN',
-              website: location.hostname || location.host,
-              username: usernameVal || 'Tài khoản',
-              password: passwordVal,
-            };
-
-            var loginKey = loginData.website + '|' + loginData.username + '|' + loginData.password;
-            if (lastCapturedLogin !== loginKey) {
-              lastCapturedLogin = loginKey;
-              window.ReactNativeWebView.postMessage(JSON.stringify(loginData));
-            }
-          }
-        }
-      } catch(e) {}
-    };
-
-    document.addEventListener('submit', function(e) {
-      captureLoginForm(e.target);
-    }, true);
-
-    document.addEventListener('click', function(e) {
-      var btn = e.target ? e.target.closest('button, input[type="submit"], [role="button"], a') : null;
-      if (btn) {
-        var btnText = (btn.innerText || btn.value || '').toLowerCase();
-        if (
-          btnText.includes('đăng nhập') ||
-          btnText.includes('login') ||
-          btnText.includes('sign in') ||
-          btnText.includes('log in') ||
-          btn.type === 'submit'
-        ) {
-          captureLoginForm(btn);
-        }
-      }
-    }, true);
-  } catch(e) {}
+  // 6. Nhận diện Đăng nhập & Mật khẩu: Đã được chuyển giao và xử lý bảo mật toàn diện tại passwordScript.ts
 })();
 true;
 `;
@@ -1308,6 +860,8 @@ export const READER_MODE_SCRIPT = `
       window.__kite_reader_active = false;
       var style = document.getElementById('__kite_reader_styles');
       if (style) style.remove();
+      var fontStyle = document.getElementById('__kite_font_style');
+      if (fontStyle) fontStyle.remove();
       if (window.__kite_original_scroll) {
         window.scrollTo(0, window.__kite_original_scroll);
       }
@@ -1391,6 +945,18 @@ export const READER_MODE_SCRIPT = `
   ];
   clone.querySelectorAll(junkSelectors.join(', ')).forEach(function(j) { j.remove(); });
 
+  // Xóa sạch các thuộc tính inline font-size, line-height, color, background gây xung đột font & dark theme
+  clone.querySelectorAll('*').forEach(function(el) {
+    try {
+      el.style.removeProperty('font-size');
+      el.style.removeProperty('line-height');
+      el.style.removeProperty('font-family');
+      el.style.removeProperty('color');
+      el.style.removeProperty('background');
+      el.style.removeProperty('background-color');
+    } catch(e) {}
+  });
+
   var cleanHtml = '';
   var validElements = clone.querySelectorAll('p, h2, h3, h4, blockquote, figure, ul, ol');
   if (validElements.length > 0) {
@@ -1415,10 +981,14 @@ export const READER_MODE_SCRIPT = `
     '#kite-reader-root.theme-sepia { background: #fbf0d9; color: #5f4b32; }',
     '#kite-reader-root.theme-light { background: #ffffff; color: #18181b; }',
     '.kite-reader-topbar { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; margin-bottom: 24px; border-bottom: 1px solid rgba(150, 150, 150, 0.2); }',
-    '.kite-reader-exit-btn { background: rgba(120, 120, 128, 0.2); border: none; padding: 8px 14px; border-radius: 18px; font-size: 13px; font-weight: 600; color: inherit; cursor: pointer; }',
+    '.kite-reader-exit-btn { display: inline-flex; align-items: center; justify-content: center; background: rgba(120, 120, 128, 0.22); border: none; padding: 8px 16px; border-radius: 20px; font-size: 13.5px; font-weight: 600; color: inherit; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; transition: opacity 0.15s, transform 0.15s; }',
+    '.kite-reader-exit-btn:active { opacity: 0.65; transform: scale(0.96); }',
+    '.kite-reader-exit-x { font-size: 17px; font-weight: 700; line-height: 1; margin-right: 8px; display: inline-flex; align-items: center; justify-content: center; }',
     '.kite-reader-tools { display: flex; gap: 8px; align-items: center; }',
-    '.kite-reader-tool-btn { background: rgba(120, 120, 128, 0.2); border: none; width: 34px; height: 34px; border-radius: 17px; font-size: 14px; font-weight: 700; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; }',
-    '.kite-reader-theme-dot { width: 22px; height: 22px; border-radius: 11px; border: 1.5px solid rgba(150, 150, 150, 0.4); cursor: pointer; }',
+    '.kite-reader-tool-btn { background: rgba(120, 120, 128, 0.22); border: none; width: 38px; height: 38px; border-radius: 19px; font-size: 14.5px; font-weight: 700; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; transition: opacity 0.15s, transform 0.15s; }',
+    '.kite-reader-tool-btn:active { opacity: 0.65; transform: scale(0.92); }',
+    '.kite-reader-theme-dot { width: 24px; height: 24px; border-radius: 12px; border: 2px solid rgba(150, 150, 150, 0.4); cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; box-sizing: border-box; transition: transform 0.15s; }',
+    '.kite-reader-theme-dot:active { transform: scale(0.88); }',
     '.kite-reader-h1 { font-size: 26px; font-weight: 800; line-height: 1.35; margin: 0 0 14px 0; letter-spacing: -0.3px; }',
     '.kite-reader-meta { font-size: 13px; opacity: 0.65; margin-bottom: 28px; line-height: 1.4; }',
     '.kite-reader-content p { margin: 0 0 20px 0; text-align: justify; }',
@@ -1442,10 +1012,10 @@ export const READER_MODE_SCRIPT = `
   var template = [
     '<div id="kite-reader-root" class="theme-dark">',
       '<div class="kite-reader-topbar">',
-        '<button class="kite-reader-exit-btn" id="__kite_exit_btn">✕ Đóng chế độ đọc</button>',
+        '<button class="kite-reader-exit-btn" id="__kite_exit_btn" type="button"><span class="kite-reader-exit-x">✕</span><span>Đóng chế độ đọc</span></button>',
         '<div class="kite-reader-tools">',
-          '<button class="kite-reader-tool-btn" id="__kite_font_dec">A-</button>',
-          '<button class="kite-reader-tool-btn" id="__kite_font_inc">A+</button>',
+          '<button class="kite-reader-tool-btn" id="__kite_font_dec" type="button">A-</button>',
+          '<button class="kite-reader-tool-btn" id="__kite_font_inc" type="button">A+</button>',
           '<div class="kite-reader-theme-dot" style="background:#000000;" id="__kite_theme_dark" title="Tối (OLED)"></div>',
           '<div class="kite-reader-theme-dot" style="background:#fbf0d9;" id="__kite_theme_sepia" title="Vàng dịu"></div>',
           '<div class="kite-reader-theme-dot" style="background:#ffffff;" id="__kite_theme_light" title="Sáng"></div>',
@@ -1465,40 +1035,83 @@ export const READER_MODE_SCRIPT = `
   window.__kite_reader_active = true;
   window.scrollTo(0, 0);
 
+  // Quản lý cỡ chữ bài báo (áp dụng động qua style tag để override style inline của các báo)
+  var curFontSize = 18;
+  var rootEl = document.getElementById('kite-reader-root');
+
+  function applyFontSize(size) {
+    curFontSize = Math.min(30, Math.max(14, size));
+    rootEl.style.fontSize = curFontSize + 'px';
+    var fontStyle = document.getElementById('__kite_font_style');
+    if (!fontStyle) {
+      fontStyle = document.createElement('style');
+      fontStyle.id = '__kite_font_style';
+      (document.head || document.documentElement).appendChild(fontStyle);
+    }
+    fontStyle.textContent = [
+      '#kite-reader-root, .kite-reader-content, .kite-reader-content p, .kite-reader-content span, .kite-reader-content div, .kite-reader-content li, .kite-reader-content a, .kite-reader-content blockquote { font-size: ' + curFontSize + 'px !important; line-height: 1.75 !important; }',
+      '.kite-reader-content h2 { font-size: ' + Math.round(curFontSize * 1.25) + 'px !important; line-height: 1.35 !important; }',
+      '.kite-reader-content h3 { font-size: ' + Math.round(curFontSize * 1.15) + 'px !important; line-height: 1.35 !important; }',
+      '.kite-reader-content h4 { font-size: ' + curFontSize + 'px !important; line-height: 1.35 !important; }'
+    ].join(' ');
+  }
+
+  // Áp dụng cỡ chữ chuẩn tức thì
+  applyFontSize(curFontSize);
+
+  // Helper bắt sự kiện click/tap tức thì trên mobile (không trễ 300ms, không bị nuốt sự kiện)
+  function bindPress(id, fn) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var firedByTouch = false;
+    el.addEventListener('touchend', function(e) {
+      firedByTouch = true;
+      e.preventDefault();
+      e.stopPropagation();
+      fn();
+      setTimeout(function() { firedByTouch = false; }, 400);
+    }, { passive: false });
+    el.addEventListener('click', function(e) {
+      if (firedByTouch) return;
+      e.preventDefault();
+      e.stopPropagation();
+      fn();
+    });
+  }
+
   // Gán sự kiện điều khiển
-  document.getElementById('__kite_exit_btn').onclick = function() {
+  bindPress('__kite_exit_btn', function() {
     document.body.innerHTML = window.__kite_original_body;
     window.__kite_reader_active = false;
-    if (styleEl) styleEl.remove();
+    var s1 = document.getElementById('__kite_reader_styles');
+    if (s1) s1.remove();
+    var s2 = document.getElementById('__kite_font_style');
+    if (s2) s2.remove();
     if (window.__kite_original_scroll) window.scrollTo(0, window.__kite_original_scroll);
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'READER_MODE_STATE', active: false }));
     } catch(e) {}
-  };
+  });
 
-  var curFontSize = 18;
-  var rootEl = document.getElementById('kite-reader-root');
-  document.getElementById('__kite_font_dec').onclick = function() {
-    curFontSize = Math.max(14, curFontSize - 2);
-    rootEl.style.fontSize = curFontSize + 'px';
-  };
-  document.getElementById('__kite_font_inc').onclick = function() {
-    curFontSize = Math.min(26, curFontSize + 2);
-    rootEl.style.fontSize = curFontSize + 'px';
-  };
+  bindPress('__kite_font_dec', function() {
+    applyFontSize(curFontSize - 2);
+  });
+  bindPress('__kite_font_inc', function() {
+    applyFontSize(curFontSize + 2);
+  });
 
-  document.getElementById('__kite_theme_dark').onclick = function() {
+  bindPress('__kite_theme_dark', function() {
     rootEl.className = 'theme-dark';
     document.body.style.background = '#000000';
-  };
-  document.getElementById('__kite_theme_sepia').onclick = function() {
+  });
+  bindPress('__kite_theme_sepia', function() {
     rootEl.className = 'theme-sepia';
     document.body.style.background = '#fbf0d9';
-  };
-  document.getElementById('__kite_theme_light').onclick = function() {
+  });
+  bindPress('__kite_theme_light', function() {
     rootEl.className = 'theme-light';
     document.body.style.background = '#ffffff';
-  };
+  });
 
   try {
     window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -1518,6 +1131,8 @@ export const EXIT_READER_MODE_SCRIPT = `
     window.__kite_reader_active = false;
     var style = document.getElementById('__kite_reader_styles');
     if (style) style.remove();
+    var fontStyle = document.getElementById('__kite_font_style');
+    if (fontStyle) fontStyle.remove();
     if (window.__kite_original_scroll) window.scrollTo(0, window.__kite_original_scroll);
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'READER_MODE_STATE', active: false }));

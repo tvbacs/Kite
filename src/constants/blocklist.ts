@@ -196,6 +196,9 @@ export const AD_SELECTORS = [
   // Bộ chọn triệt tiêu quảng cáo trên DonghuaWorld và các trang anime/donghua
   '.dhw-ad-notice',
   '[class*="dhw-ad"]',
+  '.telegramim_button',
+  '.telegramim_shadow',
+  '.telegramim_pulse',
   '[id*="aclib"]',
   '[class*="aclib"]',
   '.inpage-ad',

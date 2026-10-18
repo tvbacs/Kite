@@ -28,28 +28,309 @@ export interface ExtensionItem {
   updatedAt: number;
 }
 
+export const LIGHT_MODE_START_SCRIPT = `(function() {
+  try {
+    var _origMM = window.matchMedia;
+    window.__kite_orig_matchMedia = window.__kite_orig_matchMedia || _origMM;
+    window.matchMedia = function(query) {
+      if (typeof query === 'string' && query.indexOf('prefers-color-scheme') !== -1) {
+        var isDark = query.indexOf('dark') !== -1;
+        return {
+          matches: !isDark,
+          media: query,
+          onchange: null,
+          addListener: function() {},
+          removeListener: function() {},
+          addEventListener: function() {},
+          removeEventListener: function() {},
+          dispatchEvent: function() { return false; }
+        };
+      }
+      if (window.__kite_orig_matchMedia) {
+        return window.__kite_orig_matchMedia.call(window, query);
+      }
+      return { matches: false, media: query };
+    };
+
+    var applyLightEarly = function() {
+      try {
+        if (document.documentElement) {
+          document.documentElement.style.colorScheme = 'light';
+          document.documentElement.classList.remove('dark', 'night');
+          if (document.documentElement.getAttribute('data-theme') === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+        }
+        if (document.body) {
+          document.body.classList.remove('dark', 'night');
+        }
+        var meta = document.querySelector('meta[name="color-scheme"]');
+        if (!meta && (document.head || document.documentElement)) {
+          meta = document.createElement('meta');
+          meta.name = 'color-scheme';
+          (document.head || document.documentElement).appendChild(meta);
+        }
+        if (meta) meta.content = 'light';
+      } catch(e) {}
+    };
+
+    applyLightEarly();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', applyLightEarly);
+    }
+  } catch(e) {}
+})(); true;`;
+
+export const DARK_MODE_START_SCRIPT = `(function() {
+  try {
+    var _origMM = window.matchMedia;
+    window.__kite_orig_matchMedia = window.__kite_orig_matchMedia || _origMM;
+    window.matchMedia = function(query) {
+      if (typeof query === 'string' && query.indexOf('prefers-color-scheme') !== -1) {
+        var isDark = query.indexOf('dark') !== -1;
+        return {
+          matches: isDark,
+          media: query,
+          onchange: null,
+          addListener: function() {},
+          removeListener: function() {},
+          addEventListener: function() {},
+          removeEventListener: function() {},
+          dispatchEvent: function() { return false; }
+        };
+      }
+      if (window.__kite_orig_matchMedia) {
+        return window.__kite_orig_matchMedia.call(window, query);
+      }
+      return { matches: false, media: query };
+    };
+
+    var applyDarkEarly = function() {
+      try {
+        if (document.documentElement) {
+          document.documentElement.style.colorScheme = 'dark';
+          document.documentElement.classList.add('dark');
+        }
+        var meta = document.querySelector('meta[name="color-scheme"]');
+        if (!meta && (document.head || document.documentElement)) {
+          meta = document.createElement('meta');
+          meta.name = 'color-scheme';
+          (document.head || document.documentElement).appendChild(meta);
+        }
+        if (meta) meta.content = 'dark';
+      } catch(e) {}
+    };
+
+    applyDarkEarly();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', applyDarkEarly);
+    }
+  } catch(e) {}
+})(); true;`;
+
+export const DARK_MODE_INJECT_SCRIPT = `(function() {
+  try {
+    // 1. Ghi đè window.matchMedia để trả về prefers-color-scheme: dark
+    var _origMM = window.matchMedia;
+    window.__kite_orig_matchMedia = window.__kite_orig_matchMedia || _origMM;
+    window.matchMedia = function(query) {
+      if (typeof query === 'string' && query.indexOf('prefers-color-scheme') !== -1) {
+        var isDark = query.indexOf('dark') !== -1;
+        return {
+          matches: isDark,
+          media: query,
+          onchange: null,
+          addListener: function() {},
+          removeListener: function() {},
+          addEventListener: function() {},
+          removeEventListener: function() {},
+          dispatchEvent: function() { return false; }
+        };
+      }
+      if (window.__kite_orig_matchMedia) {
+        return window.__kite_orig_matchMedia.call(window, query);
+      }
+      return { matches: false, media: query };
+    };
+
+    // 2. Kích hoạt color-scheme dark và class dark cho trang web
+    if (document.documentElement) {
+      document.documentElement.style.colorScheme = 'dark';
+      document.documentElement.classList.add('dark');
+    }
+    if (document.body) {
+      document.body.classList.add('dark');
+    }
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    if (!meta && (document.head || document.documentElement)) {
+      meta = document.createElement('meta');
+      meta.name = 'color-scheme';
+      (document.head || document.documentElement).appendChild(meta);
+    }
+    if (meta) meta.content = 'dark';
+
+    // 3. Khôi phục các media query dark mode trong stylesheet nếu trước đó bị vô hiệu hóa
+    for (var i = 0; i < document.styleSheets.length; i++) {
+      try {
+        var sheet = document.styleSheets[i];
+        var rules = sheet.cssRules || sheet.rules;
+        if (!rules) continue;
+        for (var j = 0; j < rules.length; j++) {
+          var rule = rules[j];
+          if (rule.type === CSSRule.MEDIA_RULE && rule.media && rule.media.mediaText) {
+            if (rule.media.mediaText.indexOf('not all and (prefers-color-scheme: dark)') !== -1) {
+              rule.media.mediaText = '(prefers-color-scheme: dark)';
+            }
+          }
+        }
+      } catch(e) {}
+    }
+
+    var checkEl = function(el) {
+      if (!el) return null;
+      var bg = window.getComputedStyle(el).backgroundColor;
+      if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') return null;
+      var rgb = bg.match(/\\d+/g);
+      if (rgb && rgb.length >= 3) {
+        return (parseInt(rgb[0], 10) * 299 + parseInt(rgb[1], 10) * 587 + parseInt(rgb[2], 10) * 114) / 1000;
+      }
+      return null;
+    };
+
+    var isPageAlreadyDark = function() {
+      // a. Danh sách các trang vốn dĩ đã là giao diện tối
+      var host = window.location.hostname.toLowerCase();
+      if (host.includes('youtube.com') || host.includes('bilibili.com') || host.includes('phim') || host.includes('filmove') || host.includes('motchill') || host.includes('tvhay') || host.includes('netflix.com')) {
+        return true;
+      }
+
+      // b. Kiểm tra data-theme hoặc class night
+      var rootTheme = ((document.documentElement ? (document.documentElement.getAttribute('data-theme') || '') : '') + ' ' + (document.body ? (document.body.getAttribute('data-theme') || '') : '')).toLowerCase();
+      if (rootTheme.includes('dark') || rootTheme.includes('night')) return true;
+
+      // c. Kiểm tra độ sáng nền thực tế
+      var lum = checkEl(document.body);
+      if (lum === null) lum = checkEl(document.documentElement);
+      if (lum === null) {
+        var mainEl = document.querySelector('#root, #app, #main, main, .main-content, #content, [class*="player"], [class*="movie"], [class*="film"], #viewport');
+        if (mainEl) lum = checkEl(mainEl);
+      }
+      if (lum !== null && lum < 140) return true;
+
+      return false;
+    };
+
+    var applyOrRemove = function() {
+      var styleId = 'kite-dark-mode-style';
+      var existingStyle = document.getElementById(styleId);
+
+      // Nếu trang web ĐÃ TỐI SẴN (hoặc đã chuyển sang tối bởi native dark mode) -> Tuyệt đối KHÔNG đảo màu
+      if (isPageAlreadyDark()) {
+        if (existingStyle) existingStyle.remove();
+        if (document.documentElement) document.documentElement.style.filter = '';
+        if (document.body) document.body.style.filter = '';
+        window.__kite_dark_mode_applied = false;
+        return;
+      }
+
+      // Nếu là trang web nền sáng thông thường -> Đảo màu sang nền than đen chống lóa
+      if (!existingStyle) {
+        existingStyle = document.createElement('style');
+        existingStyle.id = styleId;
+        (document.head || document.documentElement).appendChild(existingStyle);
+      }
+      existingStyle.textContent = 'html { filter: invert(90%) hue-rotate(180deg) !important; background-color: #171717 !important; } img, video, iframe, canvas, picture, [style*="background-image"], svg, .video-stream, .html5-video-player { filter: invert(100%) hue-rotate(180deg) !important; } body { background-color: transparent !important; }';
+      window.__kite_dark_mode_applied = true;
+    };
+
+    applyOrRemove();
+    setTimeout(applyOrRemove, 350);
+    setTimeout(applyOrRemove, 1000);
+  } catch(e) {}
+})(); true;`;
+
+export const DARK_MODE_REMOVE_SCRIPT = `(function() {
+  try {
+    // 1. Gỡ bỏ style đảo màu & filter
+    var s = document.getElementById('kite-dark-mode-style');
+    if (s) s.remove();
+    window.__kite_dark_mode_applied = false;
+    if (document.documentElement) {
+      document.documentElement.style.filter = '';
+      document.documentElement.style.backgroundColor = '';
+      document.documentElement.style.colorScheme = 'light';
+      document.documentElement.classList.remove('dark', 'night');
+      if (document.documentElement.getAttribute('data-theme') === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    }
+    if (document.body) {
+      document.body.style.filter = '';
+      document.body.style.backgroundColor = '';
+      document.body.classList.remove('dark', 'night');
+      if (document.body.getAttribute('data-theme') === 'dark') {
+        document.body.setAttribute('data-theme', 'light');
+      }
+    }
+
+    // 2. Ghi đè window.matchMedia để luôn trả về light mode
+    var _origMM = window.matchMedia;
+    window.__kite_orig_matchMedia = window.__kite_orig_matchMedia || _origMM;
+    window.matchMedia = function(query) {
+      if (typeof query === 'string' && query.indexOf('prefers-color-scheme') !== -1) {
+        var isDark = query.indexOf('dark') !== -1;
+        return {
+          matches: !isDark,
+          media: query,
+          onchange: null,
+          addListener: function() {},
+          removeListener: function() {},
+          addEventListener: function() {},
+          removeEventListener: function() {},
+          dispatchEvent: function() { return false; }
+        };
+      }
+      if (window.__kite_orig_matchMedia) {
+        return window.__kite_orig_matchMedia.call(window, query);
+      }
+      return { matches: false, media: query };
+    };
+
+    // 3. Đặt meta color-scheme thành light
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    if (!meta && (document.head || document.documentElement)) {
+      meta = document.createElement('meta');
+      meta.name = 'color-scheme';
+      (document.head || document.documentElement).appendChild(meta);
+    }
+    if (meta) meta.content = 'light';
+
+    // 4. Vô hiệu hóa media query dark mode trong stylesheets để đảm bảo trang hiển thị nền sáng mặc định
+    for (var i = 0; i < document.styleSheets.length; i++) {
+      try {
+        var sheet = document.styleSheets[i];
+        var rules = sheet.cssRules || sheet.rules;
+        if (!rules) continue;
+        for (var j = 0; j < rules.length; j++) {
+          var rule = rules[j];
+          if (rule.type === CSSRule.MEDIA_RULE && rule.media && rule.media.mediaText) {
+            if (rule.media.mediaText.indexOf('prefers-color-scheme: dark') !== -1 || rule.media.mediaText.indexOf('prefers-color-scheme:dark') !== -1) {
+              rule.media.mediaText = 'not all and (prefers-color-scheme: dark)';
+            }
+          }
+        }
+      } catch(e) {}
+    }
+  } catch(e) {}
+})(); true;`;
+
 export const DEFAULT_EXTENSIONS: ExtensionItem[] = [
   {
     id: 'ext-dark-mode',
     name: 'Giao diện nền tối (Dark Mode)',
     description: 'Tự động kích hoạt nền tối bảo vệ mắt trên các trang web.',
     matchUrl: '*',
-    code: `(function() {
-  if (window.__kite_dark_mode_applied) return;
-  window.__kite_dark_mode_applied = true;
-  const style = document.createElement('style');
-  style.id = 'kite-dark-mode-style';
-  style.textContent = \`
-    html, body {
-      background-color: #121212 !important;
-      color: #e4e4e7 !important;
-    }
-    img, video, iframe, canvas {
-      filter: brightness(0.9) contrast(1.05) !important;
-    }
-  \`;
-  document.head ? document.head.appendChild(style) : document.documentElement.appendChild(style);
-})();`,
+    code: DARK_MODE_INJECT_SCRIPT,
     runAt: 'document_end',
     enabled: false,
     isBuiltIn: true,
@@ -173,11 +454,22 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
       const stored = await AsyncStorage.getItem(STORAGE_EXTENSIONS_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        setExtensions(parsed);
-      } else {
-        setExtensions(DEFAULT_EXTENSIONS);
-        await AsyncStorage.setItem(STORAGE_EXTENSIONS_KEY, JSON.stringify(DEFAULT_EXTENSIONS));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const merged = DEFAULT_EXTENSIONS.map((builtin) => {
+            const found = parsed.find((p: any) => p.id === builtin.id);
+            return found ? { ...builtin, enabled: found.enabled } : builtin;
+          });
+          const custom = parsed.filter(
+            (p: any) => !DEFAULT_EXTENSIONS.some((b) => b.id === p.id)
+          );
+          const finalExts = [...merged, ...custom];
+          setExtensions(finalExts);
+          await AsyncStorage.setItem(STORAGE_EXTENSIONS_KEY, JSON.stringify(finalExts));
+          return;
+        }
       }
+      setExtensions(DEFAULT_EXTENSIONS);
+      await AsyncStorage.setItem(STORAGE_EXTENSIONS_KEY, JSON.stringify(DEFAULT_EXTENSIONS));
     } catch (e) {
       setExtensions(DEFAULT_EXTENSIONS);
     }
@@ -294,8 +586,8 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: theme.colors.sheetBackground,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     maxHeight: '86%',
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -326,7 +618,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#18181b',
   },
   countBadge: {
@@ -437,8 +729,8 @@ const styles = StyleSheet.create({
   },
   extCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 24,
+    padding: 16,
     marginBottom: 10,
   },
   extCardTopRow: {
@@ -447,8 +739,8 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   extName: {
-    fontSize: 14.5,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '400',
     color: '#18181b',
     marginBottom: 3,
   },

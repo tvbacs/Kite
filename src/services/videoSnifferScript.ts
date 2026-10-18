@@ -7,57 +7,103 @@
  */
 export const VIDEO_SNIFFER_SCRIPT = `
 (function() {
-  if (window.__kite_sniffer_installed) return;
-  window.__kite_sniffer_installed = true;
+  var hooksInstalled = window.__kite_sniffer_hooks_installed;
+  window.__kite_sniffer_hooks_installed = true;
 
-  var seenSignatures = {};
-  var resolvedDailymotionIds = {};
+  var seenSignatures = window.__kite_seen_signatures || {};
+  window.__kite_seen_signatures = seenSignatures;
+  var resolvedDailymotionIds = window.__kite_resolved_dm_ids || {};
+  window.__kite_resolved_dm_ids = resolvedDailymotionIds;
 
-  var MEDIA_EXT_REGEX = /\\.(mp4|m3u8|webm|mov|m4v)(\\?|$|#)/i;
-  var STREAM_PATTERN_REGEX = /(videoplayback\\?|mime=video\\b|\\/manifest\\.m3u8|\\/playlist\\.m3u8|\\/master\\.m3u8|cdn\\/manifest\\/video)/i;
+  // Chỉ bắt các tệp video hoàn chỉnh (.mp4, .webm, .mov, .m4v, .mkv)
+  // Tuyệt đối không bắt các luồng stream m3u8 / hls / live stream
+  var MEDIA_EXT_REGEX = /\\.(mp4|webm|mov|m4v|mkv)(\\?|$|#|\\/)/i;
+  var STREAM_PATTERN_REGEX = /(videoplayback|googlevideo\\.com)/i;
 
-  // Kiểm tra xem URL có phải là file chunk / segment rời rạc không (Tuyệt đối không bắt các file này)
+  // Kiểm tra luồng phát hoặc trang web có phải là Live Stream (Trực tiếp) không
+  var isLiveStream = function(url) {
+    if (!url || typeof url !== 'string') return false;
+    var lower = url.toLowerCase();
+
+    // 1. YouTube Live (chứa live=1, livestream hoặc chunk chuỗi sq của live)
+    if (lower.includes('live=1') || lower.includes('&live=1') || lower.includes('live_stream') || lower.includes('/livestream')) {
+      return true;
+    }
+    if (lower.includes('videoplayback') && (lower.includes('&sq=') || lower.includes('?sq=') || lower.includes('live-') || lower.includes('-live'))) {
+      return true;
+    }
+
+    // 2. Nền tảng chuyên live stream (Twitch, TikTok Live, Facebook Live, Stripchat...)
+    if (lower.includes('twitch.tv') || lower.includes('ttvnw.net') || lower.includes('doppiocdn') || lower.includes('stripchat')) return true;
+    if (lower.includes('/live/') || lower.includes('/live-') || lower.includes('live.m3u8') || lower.includes('live_playlist') || lower.includes('type=live') || lower.includes('&is_live=1')) return true;
+
+    // 3. Kiểm tra trang web hiện tại có đang mở trang live không
+    try {
+      var loc = window.location.href.toLowerCase();
+      if (loc.includes('twitch.tv') || loc.includes('/live') || loc.includes('livestream') || loc.includes('stripchat')) {
+        return true;
+      }
+      if (document.querySelector('.ytp-live, .ytp-live-badge, ytd-watch-flexy[is-live]')) {
+        return true;
+      }
+    } catch(e) {}
+
+    return false;
+  };
+
+  // Kiểm tra xem URL có phải là file chunk / segment rời rạc hoặc luồng stream m3u8 không
   var isChunkOrSegment = function(url) {
     if (!url || typeof url !== 'string') return true;
     var lower = url.toLowerCase();
-    // 1. Loại bỏ các đuôi file phân đoạn HLS / DASH / phụ đề
+
+    // 1. LOẠI BỎ HOÀN TOÀN TẤT CẢ các luồng m3u8 / hls / playlist / manifest
+    // Người dùng chỉ cần tải các tệp video MP4/WebM/MOV/MKV thực tế
+    if (lower.includes('.m3u8') || lower.includes('/hls/') || lower.includes('manifest') || lower.includes('playlist')) {
+      return true;
+    }
+
+    // 2. Bỏ qua hoàn toàn các luồng Live Stream (Xem stream không cần tải xuống)
+    if (isLiveStream(url)) return true;
+
+    // 3. TUYỆT ĐỐI LOẠI BỎ mọi file phân đoạn nhỏ (.ts, .m4s, .m4f, .key, subtitle)
     if (/\\.(ts|m4s|m4f|key|vtt|srt|dfxp|ass|ssa)(\\?|$|#)/i.test(lower)) return true;
-    // 2. Loại bỏ các đường dẫn chunk / segment trong player
-    if (/\\/(seg|chunk|fragment|range)[-_\\d]/i.test(lower)) return true;
-    if (/[\\?&](range|segment|chunk|frag|byterange)=\\d+/i.test(lower)) return true;
-    if (lower.includes('init.mp4') || lower.includes('/init-') || lower.includes('/segment-') || lower.includes('/seg_')) return true;
-    // 3. Loại bỏ ảnh, font, css
-    if (/\\.(jpe?g|png|webp|gif|svg|ico|css|woff2?|ttf)(\\?|$|#)/i.test(lower)) return true;
+
+    // 4. Loại bỏ các file init, fragment, segment rời rạc
+    if (lower.includes('init.mp4') || lower.includes('/init-') || lower.includes('/segment-') || lower.includes('/seg_') || lower.includes('-frag-') || lower.includes('/frag-')) return true;
+    if (/\\/(seg|chunk|fragment)[-_0-9]/i.test(lower)) return true;
+    if (/[\\?&](segment|chunk|frag|sq)=\\d+/i.test(lower)) return true;
+
+    // 5. Loại bỏ ảnh, font, css, script
+    if (/\\.(jpe?g|png|webp|gif|svg|ico|css|js|woff2?|ttf)(\\?|$|#)/i.test(lower)) return true;
+
+    // 6. YouTube videoplayback
+    if (lower.includes('videoplayback')) {
+      if (lower.includes('&sq=') || lower.includes('?sq=') || lower.includes('live=1')) return true;
+      return false;
+    }
+
     return false;
   };
 
   var getFormat = function(url) {
     var lower = url.toLowerCase();
-    if (lower.includes('.m3u8') || lower.includes('playlist.m3u8') || lower.includes('manifest.m3u8') || lower.includes('hls')) return 'm3u8';
     if (lower.includes('.webm')) return 'webm';
     if (lower.includes('.mov')) return 'mov';
     if (lower.includes('.m4v')) return 'm4v';
+    if (lower.includes('.mkv')) return 'mkv';
     return 'mp4';
   };
 
-  // Gom nhóm các URL biến thể (1080p, 720p, 480p, master) của cùng 1 luồng video
+  // Gom nhóm các URL biến thể của cùng 1 luồng video
   var getStreamSignature = function(u) {
     try {
       var clean = u.split('?')[0].split('#')[0].toLowerCase();
-      // Gom nhóm Dailymotion theo ID video
-      var dm = u.match(/video\\/fmp4\\/([a-zA-Z0-9]+)/i) ||
-               u.match(/manifest\\/video\\/([a-zA-Z0-9]+)/i) ||
-               u.match(/[?&]video=([a-zA-Z0-9]+)/i);
-      if (dm) return 'dm-' + dm[1];
-
       // Gom nhóm YouTube videoplayback
       var yt = u.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
       if (yt && u.includes('videoplayback')) return 'yt-' + yt[1];
-
-      // Gom nhóm các file m3u8 trong cùng 1 thư mục stream
-      var baseHls = clean.replace(/\\/(master|playlist|index|1080p|720p|480p|360p|chunklist[^\\/]*|h264[^\\/]*|manifest)\\.m3u8$/i, '');
-      if (baseHls !== clean) return 'hls-' + baseHls;
-
+      if (u.includes('videoplayback') && window.location.href.includes('youtube.com')) {
+        return 'yt-' + window.location.pathname;
+      }
       return clean;
     } catch(e) {
       return u;
@@ -130,11 +176,13 @@ export const VIDEO_SNIFFER_SCRIPT = `
     if (!url) return;
     if (isChunkOrSegment(url)) return;
 
+    // Chỉ nhận video MP4, WEBM, MOV, M4V, MKV hoặc videoplayback
+    if (!MEDIA_EXT_REGEX.test(url) && !STREAM_PATTERN_REGEX.test(url)) return;
+
     // Kiểm tra trùng lặp luồng video
     var sig = getStreamSignature(url);
     if (seenSignatures[sig]) {
-      // Nếu đã có luồng này và URL mới không phải master playlist thì bỏ qua
-      if (!url.toLowerCase().includes('master.m3u8')) return;
+      return;
     }
     seenSignatures[sig] = true;
 
@@ -202,7 +250,7 @@ export const VIDEO_SNIFFER_SCRIPT = `
     }
   };
 
-  // Trích xuất và giải mã luồng video Vimeo từ iframe hoặc URL
+  // Trích xuất và giải mã luồng video Vimeo từ iframe hoặc URL (ưu tiên MP4 progressive)
   var checkVimeoUrl = function(url, title) {
     if (!url || typeof url !== 'string') return;
     var match = url.match(/player\\.vimeo\\.com\\/video\\/([0-9]+)/i);
@@ -215,11 +263,13 @@ export const VIDEO_SNIFFER_SCRIPT = `
           if (xhr.readyState === 4 && xhr.status === 200) {
             try {
               var data = JSON.parse(xhr.responseText);
-              var hls = data.request && data.request.files && data.request.files.hls;
-              var streamUrl = hls && hls.cdns && Object.values(hls.cdns)[0] && Object.values(hls.cdns)[0].url;
+              var progressive = data.request && data.request.files && data.request.files.progressive;
               var vTitle = (data.video && data.video.title) || title || getBestPageTitle();
-              if (streamUrl) {
-                reportMedia(streamUrl, vTitle);
+              if (progressive && progressive.length > 0) {
+                var streamUrl = progressive[0].url;
+                if (streamUrl) {
+                  reportMedia(streamUrl, vTitle);
+                }
               }
             } catch(e) {}
           }
@@ -236,14 +286,31 @@ export const VIDEO_SNIFFER_SCRIPT = `
       var mediaEls = document.querySelectorAll('video, audio');
       for (var i = 0; i < mediaEls.length; i++) {
         var el = mediaEls[i];
+        // Bỏ qua hoàn toàn Live Stream (duration là Infinity theo chuẩn W3C HTML5 Media)
+        if (el.duration === Infinity || (el.duration && !isFinite(el.duration))) {
+          continue;
+        }
+
         var src = el.currentSrc || el.src || el.getAttribute('src');
         var title = el.getAttribute('title') || el.getAttribute('alt') || getBestPageTitle();
-        if (src) inspectUrl(src, title);
+        if (src) {
+          if (!src.startsWith('blob:') && !src.startsWith('data:')) {
+            reportMedia(src, title);
+          } else {
+            inspectUrl(src, title);
+          }
+        }
 
         var sources = el.querySelectorAll('source');
         for (var j = 0; j < sources.length; j++) {
           var sSrc = sources[j].src || sources[j].getAttribute('src');
-          if (sSrc) inspectUrl(sSrc, title);
+          if (sSrc) {
+            if (!sSrc.startsWith('blob:') && !sSrc.startsWith('data:')) {
+              reportMedia(sSrc, title);
+            } else {
+              inspectUrl(sSrc, title);
+            }
+          }
         }
       }
 
@@ -263,75 +330,117 @@ export const VIDEO_SNIFFER_SCRIPT = `
     } catch(e) {}
   };
 
-  // 2. Hook HTMLMediaElement (Thẻ <video> và <audio>)
-  try {
-    if (HTMLMediaElement && HTMLMediaElement.prototype) {
-      var proto = HTMLMediaElement.prototype;
-      var origSrcDesc = Object.getOwnPropertyDescriptor(proto, 'src');
-      if (origSrcDesc && origSrcDesc.set) {
-        Object.defineProperty(proto, 'src', {
-          set: function(val) {
-            inspectUrl(val, this.getAttribute ? this.getAttribute('title') : '');
-            return origSrcDesc.set.call(this, val);
-          },
-          get: function() {
-            return origSrcDesc.get.call(this);
-          }
-        });
-      }
-    }
-
-    ['play', 'loadedmetadata', 'canplay', 'playing'].forEach(function(evt) {
-      document.addEventListener(evt, function(e) {
-        if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {
-          var el = e.target;
-          var src = el.currentSrc || el.src || el.getAttribute('src');
-          if (src) inspectUrl(src, el.getAttribute('title'));
+  // Cài đặt các hooks can thiệp luồng phát mạng (Chỉ cài đặt 1 lần duy nhất)
+  if (!hooksInstalled) {
+    // 2. Hook HTMLMediaElement (Thẻ <video> và <audio>)
+    try {
+      if (HTMLMediaElement && HTMLMediaElement.prototype) {
+        var proto = HTMLMediaElement.prototype;
+        var origSrcDesc = Object.getOwnPropertyDescriptor(proto, 'src');
+        if (origSrcDesc && origSrcDesc.set) {
+          Object.defineProperty(proto, 'src', {
+            set: function(val) {
+              inspectUrl(val, this.getAttribute ? this.getAttribute('title') : '');
+              return origSrcDesc.set.call(this, val);
+            },
+            get: function() {
+              return origSrcDesc.get.call(this);
+            }
+          });
         }
-      }, true);
-    });
-  } catch(e) {}
 
-  // 3. Hook Fetch API để bắt luồng stream mạng của player
-  try {
-    var origFetch = window.fetch;
-    if (typeof origFetch === 'function') {
-      window.fetch = function(input, init) {
+        var origPlay = proto.play;
+        proto.play = function() {
+          try {
+            // Bỏ qua Live Stream khi gọi play
+            if (this.duration === Infinity || (this.duration && !isFinite(this.duration))) {
+              return origPlay.apply(this, arguments);
+            }
+            var vSrc = this.currentSrc || this.src || (this.querySelector && this.querySelector('source') ? this.querySelector('source').src : '');
+            if (vSrc && !vSrc.startsWith('blob:') && !vSrc.startsWith('data:')) {
+              reportMedia(vSrc, this.getAttribute('title') || getBestPageTitle());
+            }
+          } catch(e) {}
+          return origPlay.apply(this, arguments);
+        };
+      }
+
+      ['play', 'loadedmetadata', 'canplay', 'playing'].forEach(function(evt) {
+        document.addEventListener(evt, function(e) {
+          if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {
+            var el = e.target;
+            // Bỏ qua Live Stream khi phát
+            if (el.duration === Infinity || (el.duration && !isFinite(el.duration))) {
+              return;
+            }
+            var src = el.currentSrc || el.src || el.getAttribute('src');
+            if (src && !src.startsWith('blob:') && !src.startsWith('data:')) {
+              reportMedia(src, el.getAttribute('title') || getBestPageTitle());
+            } else if (src) {
+              inspectUrl(src, el.getAttribute('title'));
+            }
+          }
+        }, true);
+      });
+    } catch(e) {}
+
+    // 3. Hook Fetch API để bắt luồng stream mạng của player
+    try {
+      var origFetch = window.fetch;
+      if (typeof origFetch === 'function') {
+        window.fetch = function(input, init) {
+          try {
+            var fUrl = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+            if (fUrl) {
+              inspectUrl(fUrl);
+              checkDailymotionUrl(fUrl);
+            }
+          } catch(e) {}
+          return origFetch.apply(this, arguments);
+        };
+      }
+    } catch(e) {}
+
+    // 4. Hook XMLHttpRequest để bắt request tải manifest của player
+    try {
+      var origXhrOpen = XMLHttpRequest.prototype.open;
+      XMLHttpRequest.prototype.open = function(method, url) {
         try {
-          var fUrl = typeof input === 'string' ? input : (input && input.url ? input.url : '');
-          if (fUrl) {
-            inspectUrl(fUrl);
-            checkDailymotionUrl(fUrl);
+          if (url) {
+            inspectUrl(url);
+            checkDailymotionUrl(url);
           }
         } catch(e) {}
-        return origFetch.apply(this, arguments);
+        return origXhrOpen.apply(this, arguments);
       };
-    }
-  } catch(e) {}
+    } catch(e) {}
 
-  // 4. Hook XMLHttpRequest để bắt request tải manifest của player
-  try {
-    var origXhrOpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function(method, url) {
-      try {
-        if (url) {
-          inspectUrl(url);
-          checkDailymotionUrl(url);
+    // 5. MutationObserver theo dõi player được mount động vào DOM (có debounce 800ms tiết kiệm CPU)
+    try {
+      var scanTimeout = null;
+      var videoObs = new MutationObserver(function() {
+        if (!scanTimeout) {
+          scanTimeout = setTimeout(function() {
+            scanTimeout = null;
+            scanDomElements();
+          }, 800);
         }
-      } catch(e) {}
-      return origXhrOpen.apply(this, arguments);
-    };
-  } catch(e) {}
+      });
+      if (document.body || document.documentElement) {
+        videoObs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+      }
+    } catch(e) {}
+  }
 
-  // 5. Quét định kỳ DOM một cách mượt mà và tiết kiệm CPU
+  // 6. Quét định kỳ DOM một cách mượt mà và tiết kiệm CPU (6s/lần)
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() {
-      setTimeout(scanDomElements, 400);
+      setTimeout(scanDomElements, 500);
     }, { once: true });
   } else {
-    setTimeout(scanDomElements, 400);
+    setTimeout(scanDomElements, 500);
   }
-  setInterval(scanDomElements, 2500);
+  setInterval(scanDomElements, 6000);
 })();
 true;
 `;

@@ -16,6 +16,7 @@ import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../constants/theme';
+import { extractSearchQuery, isJunkHistoryItem, STORAGE_SEARCH_QUERIES_KEY } from '../constants/searchEngines';
 
 export interface HistoryItem {
   id: string;
@@ -49,6 +50,9 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
   const getStorageKey = () =>
     userEmail ? `${STORAGE_HISTORY_KEY}_${userEmail.toLowerCase()}` : STORAGE_HISTORY_KEY;
 
+  const getSearchQueriesKey = () =>
+    userEmail ? `${STORAGE_SEARCH_QUERIES_KEY}_${userEmail.toLowerCase()}` : STORAGE_SEARCH_QUERIES_KEY;
+
   useEffect(() => {
     if (visible) {
       loadHistory();
@@ -59,7 +63,44 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
     try {
       const data = await AsyncStorage.getItem(getStorageKey());
       if (data) {
-        setHistory(JSON.parse(data));
+        const rawList: HistoryItem[] = JSON.parse(data);
+        // Loại bỏ triệt để các trang chuyển hướng và rác
+        const cleanRawList = rawList.filter((item) => !isJunkHistoryItem(item.url, item.title));
+
+        const seenQueries = new Set<string>();
+        const seenUrls = new Set<string>();
+        const deduped: HistoryItem[] = [];
+
+        for (const item of cleanRawList) {
+          const q = extractSearchQuery(item.url)?.trim().toLowerCase();
+          const cleanUrl = item.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '').toLowerCase();
+          let cleanTitle = (item.title || '').trim();
+          if (
+            !q &&
+            (cleanTitle.includes(' - Tìm trên Google') ||
+              cleanTitle.includes(' - Google Search') ||
+              cleanTitle.includes(' - Bing') ||
+              cleanTitle.includes(' - Yahoo'))
+          ) {
+            cleanTitle = cleanUrl;
+          }
+
+          if (q) {
+            if (seenQueries.has(q)) continue;
+            seenQueries.add(q);
+            deduped.push({ ...item, title: cleanTitle || q });
+          } else {
+            if (seenUrls.has(cleanUrl)) continue;
+            seenUrls.add(cleanUrl);
+            deduped.push({ ...item, title: cleanTitle || cleanUrl });
+          }
+        }
+
+        setHistory(deduped);
+        // Tự động làm sạch dữ liệu trong storage nếu có rác hoặc trùng lặp
+        if (cleanRawList.length < rawList.length || deduped.length < rawList.length) {
+          AsyncStorage.setItem(getStorageKey(), JSON.stringify(deduped)).catch(() => {});
+        }
       }
     } catch (e) {
       console.log('Error loading history:', e);
@@ -78,6 +119,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
           onPress: async () => {
             setHistory([]);
             await AsyncStorage.removeItem(getStorageKey());
+            await AsyncStorage.removeItem(getSearchQueriesKey());
           },
         },
       ]
@@ -85,7 +127,23 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
   };
 
   const handleDeleteItem = async (id: string) => {
-    const updated = history.filter((item) => item.id !== id);
+    const targetItem = history.find((item) => item.id === id);
+    const targetQuery = targetItem ? extractSearchQuery(targetItem.url)?.trim().toLowerCase() : null;
+    const targetClean = targetItem ? targetItem.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '').toLowerCase() : null;
+
+    const updated = history.filter((item) => {
+      if (item.id === id) return false;
+      if (targetQuery) {
+        const q = extractSearchQuery(item.url)?.trim().toLowerCase();
+        if (q && q === targetQuery) return false;
+      }
+      if (!targetQuery && targetClean) {
+        const clean = item.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '').toLowerCase();
+        if (clean === targetClean) return false;
+      }
+      return true;
+    });
+
     setHistory(updated);
     await AsyncStorage.setItem(getStorageKey(), JSON.stringify(updated));
   };
@@ -243,9 +301,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     marginHorizontal: 16,
     marginVertical: 12,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    height: 40,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    height: 42,
   },
   searchIcon: {
     marginRight: 8,
@@ -263,10 +321,10 @@ const styles = StyleSheet.create({
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 11,
-    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     backgroundColor: '#ffffff',
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 8,
   },
   favicon: {
@@ -281,8 +339,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   itemTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15.5,
+    fontWeight: '400',
     color: '#09090b',
     marginBottom: 2,
   },

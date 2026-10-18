@@ -25,23 +25,29 @@ export const PullDownBar: React.FC<PullDownBarProps> = ({
     return null;
   }
 
-  // Tiến trình kéo từ 0 -> 1 khi kéo từ 6 -> 55px
-  const progress = Math.min(Math.max((pullDistance - 6) / 49, 0), 1);
+  // Tiến trình kéo từ 0 -> 1 khi kéo từ 3 -> 20px
+  const progress = Math.min(Math.max((pullDistance - 3) / 17, 0), 1);
   const opacity = progress;
-  const isTriggered = pullDistance >= 50;
+  const isTriggered = pullDistance >= 20;
 
   // Di chuyển thanh bar nhẹ nhàng từ trên xuống dưới
-  const translateY = (progress - 1) * 16 + Math.min(pullDistance * 0.25, 22);
+  const translateY = (progress - 1) * 14 + Math.min(pullDistance * 0.45, 26);
 
   const isDark = isIncognito;
-  const bubbleBg = isTriggered
-    ? isDark
-      ? '#2563eb'
-      : '#d4d4d8'
-    : isDark
-    ? '#374151'
-    : '#e4e4e7';
-  const activeIconColor = isDark ? '#ffffff' : '#09090b';
+  const getBubbleBg = (action: PullActionType) => {
+    if (!isTriggered) {
+      return isDark ? '#374151' : '#e4e4e7';
+    }
+    if (action === 'close_tab') {
+      return '#ef4444'; // Màu đỏ cảnh báo khi chọn Đóng thẻ
+    }
+    return isDark ? '#2563eb' : '#007aff'; // Màu xanh nổi bật khi Thẻ mới hoặc Tải lại
+  };
+
+  const getActiveIconColor = () => {
+    if (isTriggered) return '#ffffff';
+    return isDark ? '#ffffff' : '#09090b';
+  };
   const activeTextColor = isDark ? '#ffffff' : '#09090b';
   const inactiveIconColor = isDark ? '#9ca3af' : '#71717a';
 
@@ -73,8 +79,8 @@ export const PullDownBar: React.FC<PullDownBarProps> = ({
           <View style={styles.actionSlot}>
             {activeAction === 'new_tab' ? (
               <View style={styles.activeWrapper}>
-                <View style={[styles.bubble, { backgroundColor: bubbleBg }]}>
-                  <Feather name="plus" size={24} color={activeIconColor} />
+                <View style={[styles.bubble, { backgroundColor: getBubbleBg('new_tab') }]}>
+                  <Feather name="plus" size={24} color={getActiveIconColor()} />
                 </View>
                 <Text style={[styles.label, { color: activeTextColor }]}>Thẻ mới</Text>
               </View>
@@ -89,8 +95,8 @@ export const PullDownBar: React.FC<PullDownBarProps> = ({
           <View style={styles.actionSlot}>
             {activeAction === 'reload' ? (
               <View style={styles.activeWrapper}>
-                <View style={[styles.bubble, { backgroundColor: bubbleBg }]}>
-                  <Feather name="rotate-cw" size={22} color={activeIconColor} />
+                <View style={[styles.bubble, { backgroundColor: getBubbleBg('reload') }]}>
+                  <Feather name="rotate-cw" size={22} color={getActiveIconColor()} />
                 </View>
                 <Text style={[styles.label, { color: activeTextColor }]}>Tải lại</Text>
               </View>
@@ -105,8 +111,8 @@ export const PullDownBar: React.FC<PullDownBarProps> = ({
           <View style={styles.actionSlot}>
             {activeAction === 'close_tab' ? (
               <View style={styles.activeWrapper}>
-                <View style={[styles.bubble, { backgroundColor: bubbleBg }]}>
-                  <Feather name="x" size={22} color={activeIconColor} />
+                <View style={[styles.bubble, { backgroundColor: getBubbleBg('close_tab') }]}>
+                  <Feather name="x" size={22} color={getActiveIconColor()} />
                 </View>
                 <Text style={[styles.label, { color: activeTextColor }]}>Đóng thẻ</Text>
               </View>

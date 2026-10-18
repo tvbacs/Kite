@@ -375,7 +375,7 @@ export const PinModal: React.FC<PinModalProps> = ({
       backgroundColor: 'rgba(255, 255, 255, 0.94)',
     },
     inlineOverlay: {
-      ...StyleSheet.absoluteFill,
+      ...StyleSheet.absoluteFillObject,
       zIndex: 99999,
       elevation: 99999,
     },
@@ -440,12 +440,12 @@ export const PinModal: React.FC<PinModalProps> = ({
     height: 16,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: '#a1a1aa',
+    borderColor: '#cbd5e1',
     backgroundColor: 'transparent',
   },
   pinDotFilled: {
-    borderColor: '#09090b',
-    backgroundColor: '#09090b',
+    borderColor: '#007aff',
+    backgroundColor: '#007aff',
   },
   pinDotError: {
     borderColor: '#ef4444',

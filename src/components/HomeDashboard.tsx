@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Dimensions,
   Switch,
+  useWindowDimensions,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -28,6 +29,7 @@ import { SEARCH_ENGINES } from '../constants/searchEngines';
 import { theme } from '../constants/theme';
 import { VoiceSearchModal } from './VoiceSearchModal';
 import { getGoogleOAuthUrl } from '../services/supabase';
+import { preconnectTarget } from '../services/networkPreconnectService';
 
 const GoogleGIcon = ({ size = 20 }: { size?: number }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -79,14 +81,12 @@ interface HomeDashboardProps {
   onPullEnd?: () => void;
   onPullCancel?: () => void;
   pullDistance?: number;
+  refreshTrigger?: number;
 }
 
+let cachedShortcuts: Bookmark[] | null = null;
+
 const DEFAULT_BOOKMARKS: Bookmark[] = [
-  {
-    id: 'donghua',
-    title: 'Donghua World',
-    url: 'https://donghuaworld.com',
-  },
   {
     id: 'google',
     title: 'Google',
@@ -98,11 +98,93 @@ const DEFAULT_BOOKMARKS: Bookmark[] = [
     url: 'https://m.youtube.com',
   },
   {
-    id: 'bilibili',
-    title: 'Bilibili TV',
-    url: 'https://www.bilibili.tv',
+    id: 'facebook',
+    title: 'Facebook',
+    url: 'https://m.facebook.com',
+  },
+  {
+    id: 'vnexpress',
+    title: 'VnExpress',
+    url: 'https://vnexpress.net',
+  },
+  {
+    id: 'dantri',
+    title: 'Dân Trí',
+    url: 'https://dantri.com.vn',
+  },
+  {
+    id: 'chatgpt',
+    title: 'ChatGPT',
+    url: 'https://chatgpt.com',
+  },
+  {
+    id: 'tiktok',
+    title: 'TikTok',
+    url: 'https://www.tiktok.com',
+  },
+  {
+    id: 'shopee',
+    title: 'Shopee',
+    url: 'https://shopee.vn',
   },
 ];
+
+const ShortcutFaviconImage = ({ url, title }: { url: string; title: string }) => {
+  const [hasError, setHasError] = useState(false);
+  if (hasError) {
+    const letter = (title || url.replace(/^https?:\/\//, '')).charAt(0).toUpperCase();
+    return (
+      <View style={styles.shortcutLetterFallback}>
+        <Text style={styles.shortcutLetterText}>{letter}</Text>
+      </View>
+    );
+  }
+  return (
+    <Image
+      source={{ uri: `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(url)}` }}
+      style={styles.circleShortcutFavicon}
+      resizeMode="contain"
+      onError={() => setHasError(true)}
+    />
+  );
+};
+
+const renderShortcutIcon = (item: Bookmark) => {
+  const urlLower = item.url.toLowerCase();
+  if (urlLower.includes('google.com')) {
+    return <GoogleGIcon size={24} />;
+  }
+  if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
+    return <MaterialCommunityIcons name="youtube" size={26} color="#FF0000" />;
+  }
+  if (urlLower.includes('facebook.com') || urlLower.includes('fb.com')) {
+    return <MaterialCommunityIcons name="facebook" size={26} color="#1877F2" />;
+  }
+  if (urlLower.includes('tiktok.com')) {
+    return <MaterialCommunityIcons name="music-note" size={24} color="#000000" />;
+  }
+  if (urlLower.includes('chatgpt.com') || urlLower.includes('openai.com')) {
+    return <MaterialCommunityIcons name="robot" size={22} color="#10a37f" />;
+  }
+  if (urlLower.includes('vnexpress.net')) {
+    return (
+      <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#900000', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>V</Text>
+      </View>
+    );
+  }
+  if (urlLower.includes('dantri.com.vn')) {
+    return (
+      <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#006633', alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>D</Text>
+      </View>
+    );
+  }
+  if (urlLower.includes('shopee.vn')) {
+    return <MaterialCommunityIcons name="shopping" size={22} color="#EE4D2D" />;
+  }
+  return <ShortcutFaviconImage url={item.url} title={item.title} />;
+};
 
 interface DiscoverArticle {
   id: string;
@@ -170,16 +252,22 @@ const STORAGE_THEME_KEY = '@kite_theme_palette';
 export const STORAGE_SYNC_ACCOUNTS_KEY = '@kite_sync_all_accounts';
 const STORAGE_DISCOVER_CACHE_KEY = '@kite_discover_articles_cache';
 
-const parseVnExpressRss = (xml: string, offset: number = 0): DiscoverArticle[] => {
+// BỘ BÓC TÁCH RSS ĐA NGUỒN (VNEXPRESS, DÂN TRÍ, THANH NIÊN, TUỔI TRẺ)
+const parseRssFeed = (
+  xml: string,
+  defaultSource: string = 'Tin tức',
+  offset: number = 0,
+  maxItems: number = 10
+): DiscoverArticle[] => {
   const items: DiscoverArticle[] = [];
-  const itemMatches = xml.match(/<item>([\s\S]*?)<\/item>/gi) || [];
+  const itemMatches = xml.match(/<item[\s\S]*?<\/item>/gi) || [];
   if (itemMatches.length === 0) return [];
 
-  const maxOffset = Math.max(0, itemMatches.length - 6);
-  const startIndex = maxOffset > 0 ? offset % maxOffset : 0;
-  const sliced = itemMatches.slice(startIndex, startIndex + 6);
+  const startIndex = offset % Math.max(1, itemMatches.length - maxItems);
+  const selected = itemMatches.slice(startIndex, startIndex + maxItems);
 
-  sliced.forEach((itemXml, idx) => {
+  selected.forEach((itemXml, idx) => {
+    // 1. Tiêu đề bài viết
     const titleMatch =
       itemXml.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/i) ||
       itemXml.match(/<title>([\s\S]*?)<\/title>/i);
@@ -195,58 +283,100 @@ const parseVnExpressRss = (xml: string, offset: number = 0): DiscoverArticle[] =
       .replace(/&nbsp;/g, ' ')
       .trim();
 
+    // Bỏ qua tiêu đề kênh RSS cấp cao
+    if (!title || title.toLowerCase().includes('rss') || title.toLowerCase().includes('kênh thông tin')) {
+      return;
+    }
+
+    // 2. Link bài viết
     const linkMatch =
       itemXml.match(/<link><!\[CDATA\[([\s\S]*?)\]\]><\/link>/i) ||
-      itemXml.match(/<link>([\s\S]*?)<\/link>/i);
+      itemXml.match(/<link>([\s\S]*?)<\/link>/i) ||
+      itemXml.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i);
     let url = linkMatch ? linkMatch[1].trim() : '';
     url = url.replace(/^<!\[CDATA\[/, '').replace(/\]\]>$/, '').trim();
 
+    // 3. Ảnh bài viết chất lượng cao (Hỗ trợ enclosure, img tag, media:content)
+    let imageUrl = '';
     const enclosureMatch = itemXml.match(/<enclosure[^>]+url=["']([^"']+)["']/i);
-    const imgMatch = itemXml.match(/<img[^>]+src=["']([^"']+)["']/i);
-    let imageUrl = enclosureMatch ? enclosureMatch[1] : imgMatch ? imgMatch[1] : '';
-    imageUrl = imageUrl.replace(/&amp;/g, '&');
+    const mediaMatch = itemXml.match(/<media:content[^>]+url=["']([^"']+)["']/i);
+    const imgMatch =
+      itemXml.match(/<img[^>]+src=["']([^"']+)["']/i) ||
+      itemXml.match(/src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/i);
 
+    if (enclosureMatch && enclosureMatch[1]) {
+      imageUrl = enclosureMatch[1];
+    } else if (mediaMatch && mediaMatch[1]) {
+      imageUrl = mediaMatch[1];
+    } else if (imgMatch && imgMatch[1]) {
+      imageUrl = imgMatch[1];
+    }
+    imageUrl = imageUrl.replace(/&amp;/g, '&').trim();
+
+    // 4. Thời gian đăng
     const pubDateMatch = itemXml.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
     let timeAgo = 'Vừa xong';
     if (pubDateMatch) {
       try {
         const pubTime = new Date(pubDateMatch[1]).getTime();
-        const diffMins = Math.floor((Date.now() - pubTime) / 60000);
-        if (diffMins < 1) {
-          timeAgo = 'Vừa xong';
-        } else if (diffMins < 60) {
-          timeAgo = `${diffMins} phút trước`;
-        } else {
-          const diffHours = Math.floor(diffMins / 60);
-          if (diffHours < 24) {
-            timeAgo = `${diffHours} giờ trước`;
+        if (!isNaN(pubTime)) {
+          const diffMins = Math.floor((Date.now() - pubTime) / 60000);
+          if (diffMins < 1) {
+            timeAgo = 'Vừa xong';
+          } else if (diffMins < 60) {
+            timeAgo = `${diffMins} phút trước`;
           } else {
-            const diffDays = Math.floor(diffHours / 24);
-            timeAgo = `${diffDays} ngày trước`;
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) {
+              timeAgo = `${diffHours} giờ trước`;
+            } else {
+              const diffDays = Math.floor(diffHours / 24);
+              timeAgo = `${diffDays} ngày trước`;
+            }
           }
         }
       } catch (e) {}
     }
 
+    // 5. Xác định nguồn và phân loại
+    let sourceName = defaultSource;
+    if (url.includes('vnexpress.net')) sourceName = 'VnExpress';
+    else if (url.includes('dantri.com.vn')) sourceName = 'Dân Trí';
+    else if (url.includes('thanhnien.vn')) sourceName = 'Thanh Niên';
+    else if (url.includes('tuoitre.vn')) sourceName = 'Tuổi Trẻ';
+
     let category = 'Tin mới';
-    if (url.includes('/khoa-hoc')) category = 'Khoa học';
-    else if (url.includes('/so-hoa')) category = 'Công nghệ';
-    else if (url.includes('/kinh-doanh')) category = 'Kinh doanh';
-    else if (url.includes('/the-thao')) category = 'Thể thao';
-    else if (url.includes('/giai-tri')) category = 'Giải trí';
-    else if (url.includes('/the-gioi')) category = 'Thế giới';
-    else if (url.includes('/thoi-su')) category = 'Thời sự';
-    else if (url.includes('/doi-song') || url.includes('/gia-dinh')) category = 'Đời sống';
+    if (url.includes('/khoa-hoc') || url.includes('/cong-nghe') || url.includes('/so-hoa') || url.includes('/suc-manh-so')) {
+      category = 'Công nghệ';
+    } else if (url.includes('/kinh-doanh') || url.includes('/kinh-te')) {
+      category = 'Kinh doanh';
+    } else if (url.includes('/the-thao')) {
+      category = 'Thể thao';
+    } else if (url.includes('/giai-tri')) {
+      category = 'Giải trí';
+    } else if (url.includes('/the-gioi')) {
+      category = 'Thế giới';
+    } else if (url.includes('/thoi-su') || url.includes('/xa-hoi')) {
+      category = 'Thời sự';
+    } else if (url.includes('/doi-song') || url.includes('/gia-dinh')) {
+      category = 'Đời sống';
+    }
+
+    // Ảnh fallback chất lượng cao nếu bài báo không có thumbnail
+    const fallbackImages = [
+      'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=80',
+      'https://images.unsplash.com/photo-1495020689067-958852a7765e?w=800&q=80',
+      'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&q=80',
+      'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80',
+    ];
 
     if (title && url) {
       items.push({
-        id: `vne-${idx}-${Date.now()}`,
+        id: `news-${idx}-${Date.now()}`,
         title,
-        source: `VnExpress • ${category}`,
+        source: `${sourceName} • ${category}`,
         timeAgo,
-        imageUrl:
-          imageUrl ||
-          'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&q=80',
+        imageUrl: imageUrl || fallbackImages[idx % fallbackImages.length],
         url,
         layout: idx === 0 || idx === 3 ? 'hero' : 'compact',
       });
@@ -271,10 +401,23 @@ export interface ThemePalette {
 }
 
 export const THEME_PALETTES: Record<string, ThemePalette> = {
+  light: {
+    id: 'light',
+    name: 'Trắng sứ tối giản',
+    tag: 'Mặc định',
+    previewBg: '#f8fafc',
+    previewCard: '#f1f5f9',
+    accent: '#007aff',
+    bg: '#f8fafc',
+    card: '#f1f5f9',
+    cardGlass: 'rgba(248, 250, 252, 0.88)',
+    textColor: '#09090b',
+    subColor: '#64748b',
+  },
   sand: {
     id: 'sand',
     name: 'Vàng cát ấm',
-    tag: 'Mặc định',
+    tag: 'Cát ấm',
     previewBg: '#f7f3ec',
     previewCard: '#ede5da',
     accent: '#d97706',
@@ -322,19 +465,6 @@ export const THEME_PALETTES: Record<string, ThemePalette> = {
     cardGlass: 'rgba(251, 242, 235, 0.88)',
     textColor: '#271c16',
     subColor: '#6e5a4f',
-  },
-  light: {
-    id: 'light',
-    name: 'Trắng sứ tối giản',
-    tag: 'Sáng',
-    previewBg: '#f8fafc',
-    previewCard: '#f1f5f9',
-    accent: '#2563eb',
-    bg: '#f8fafc',
-    card: '#f1f5f9',
-    cardGlass: 'rgba(248, 250, 252, 0.88)',
-    textColor: '#09090b',
-    subColor: '#64748b',
   },
   dark: {
     id: 'dark',
@@ -500,16 +630,24 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onPullEnd,
   onPullCancel,
   pullDistance = 0,
+  refreshTrigger,
 }) => {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 47 : 24);
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 34 : 16);
 
+  const { width: windowWidth } = useWindowDimensions();
+  // Tính toán chiều rộng cột đồng nhất cho Lối tắt và Tiện ích (Dấu trang, Nhật ký...)
+  // 36 = padding 18*2 của dashboard content, 28 = padding 14*2 của chromeCardContainer
+  const cardInnerWidth = Math.max(windowWidth - 64, 280);
+  const slotWidth = Math.floor(cardInnerWidth / 4);
+  const iconInset = Math.max(Math.floor((slotWidth - 52) / 2), 4);
+
   const slideAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
 
-  const [shortcuts, setShortcuts] = useState<Bookmark[]>(DEFAULT_BOOKMARKS);
+  const [shortcuts, setShortcuts] = useState<Bookmark[]>(cachedShortcuts || DEFAULT_BOOKMARKS);
   const [bgImage, setBgImage] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile>(
     propUserProfile || {
@@ -536,7 +674,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const [engineModalVisible, setEngineModalVisible] = useState<boolean>(false);
   const [userModalVisible, setUserModalVisible] = useState<boolean>(false);
   const [voiceModalVisible, setVoiceModalVisible] = useState<boolean>(false);
-  const [currentThemeId, setCurrentThemeId] = useState<string>('sand');
+  const [currentThemeId, setCurrentThemeId] = useState<string>('light');
 
   const [newTitle, setNewTitle] = useState<string>('');
   const [newUrl, setNewUrl] = useState<string>('');
@@ -546,6 +684,16 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const [isRefreshingDiscover, setIsRefreshingDiscover] = useState<boolean>(false);
   const discoverSpinAnim = useRef(new Animated.Value(0)).current;
   const discoverRssOffsetRef = useRef<number>(0);
+  const rssSourceIndexRef = useRef<number>(0);
+
+  const RSS_SOURCES = [
+    { name: 'VnExpress', url: 'https://vnexpress.net/rss/tin-moi-nhat.rss' },
+    { name: 'Dân Trí', url: 'https://dantri.com.vn/rss/tin-moi-nhat.rss' },
+    { name: 'Thanh Niên', url: 'https://thanhnien.vn/rss/home.rss' },
+    { name: 'VnExpress Thời sự', url: 'https://vnexpress.net/rss/thoi-su.rss' },
+    { name: 'Dân Trí Xã hội', url: 'https://dantri.com.vn/rss/xa-hoi.rss' },
+    { name: 'Dân Trí Thể thao', url: 'https://dantri.com.vn/rss/the-thao.rss' },
+  ];
 
   const fetchDiscoverFeed = async (isManualRefresh?: boolean) => {
     if (isManualRefresh) {
@@ -560,59 +708,63 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       ).start();
     }
 
+    if (isManualRefresh) {
+      rssSourceIndexRef.current = (rssSourceIndexRef.current + 1) % RSS_SOURCES.length;
+      discoverRssOffsetRef.current = (discoverRssOffsetRef.current + 6) % 24;
+    }
+
     let success = false;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6500);
+    // Thử fetch nguồn hiện tại, nếu lỗi tự động fallback qua nguồn kế tiếp
+    const trySources = [
+      RSS_SOURCES[rssSourceIndexRef.current],
+      RSS_SOURCES[(rssSourceIndexRef.current + 1) % RSS_SOURCES.length],
+      RSS_SOURCES[(rssSourceIndexRef.current + 2) % RSS_SOURCES.length],
+    ];
 
-      const res = await fetch('https://vnexpress.net/rss/tin-moi-nhat.rss', {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+    for (const source of trySources) {
+      if (success) break;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
 
-      if (res.ok) {
-        const xml = await res.text();
-        const offset = isManualRefresh ? discoverRssOffsetRef.current + 5 : 0;
-        discoverRssOffsetRef.current = offset;
-        const parsed = parseVnExpressRss(xml, offset);
-        if (parsed.length > 0) {
-          setDiscoverArticles(parsed);
-          await AsyncStorage.setItem(STORAGE_DISCOVER_CACHE_KEY, JSON.stringify(parsed));
-          success = true;
-          if (isManualRefresh && onShowToast) {
-            onShowToast('Đã cập nhật tin tức mới nhất');
+        const res = await fetch(source.url, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+            Accept: 'application/rss+xml, application/xml, text/xml, */*',
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const xml = await res.text();
+          const parsed = parseRssFeed(xml, source.name, discoverRssOffsetRef.current, 10);
+          if (parsed.length > 0) {
+            setDiscoverArticles(parsed);
+            await AsyncStorage.setItem(STORAGE_DISCOVER_CACHE_KEY, JSON.stringify(parsed));
+            success = true;
+            if (isManualRefresh && onShowToast) {
+              onShowToast(`Đã cập nhật bài viết mới từ ${source.name}`);
+            }
+            break;
           }
         }
-      }
-    } catch (e) {
-      console.log('Fetch RSS Discover error:', e);
-    } finally {
-      if (isManualRefresh) {
-        setTimeout(() => {
-          discoverSpinAnim.stopAnimation();
-          discoverSpinAnim.setValue(0);
-          setIsRefreshingDiscover(false);
-        }, 350);
+      } catch (e) {
+        // Nguồn này lỗi, vòng lặp tự thử nguồn tiếp theo
       }
     }
 
-    if (!success) {
-      const rotated = [...DISCOVER_ARTICLES]
-        .sort(() => Math.random() - 0.5)
-        .map((item, index) => ({
-          ...item,
-          id: `rot-${Date.now()}-${index}`,
-          timeAgo: index === 0 ? 'Vừa xong' : `${(index + 1) * 15} phút trước`,
-          layout: index === 0 || index === 3 ? ('hero' as const) : ('compact' as const),
-        }));
-      setDiscoverArticles(rotated);
-      if (isManualRefresh && onShowToast) {
-        onShowToast('Đã làm mới bảng tin Khám phá');
-      }
+    if (isManualRefresh) {
+      setTimeout(() => {
+        discoverSpinAnim.stopAnimation();
+        discoverSpinAnim.setValue(0);
+        setIsRefreshingDiscover(false);
+      }, 350);
+    }
+
+    if (!success && isManualRefresh && onShowToast) {
+      onShowToast('Không có kết nối mạng để tải bài viết mới');
     }
   };
 
@@ -629,6 +781,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     });
     fetchDiscoverFeed(false);
   }, []);
+
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      fetchDiscoverFeed(true);
+    }
+  }, [refreshTrigger]);
 
 
 
@@ -735,14 +893,23 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
   useEffect(() => {
     loadSavedData();
-  }, [activeTabId]);
+    const engineHost =
+      currentEngineId === 'bing'
+        ? 'www.bing.com'
+        : currentEngineId === 'duckduckgo'
+        ? 'duckduckgo.com'
+        : currentEngineId === 'yahoo'
+        ? 'search.yahoo.com'
+        : 'www.google.com';
+    preconnectTarget(engineHost);
+  }, [currentEngineId]);
 
   useEffect(() => {
     if (propUserProfile) {
       setUserProfile(propUserProfile);
-      loadSavedData();
     }
-  }, [propUserProfile]);
+    loadSavedData();
+  }, [propUserProfile?.email, syncAllAccounts]);
 
   useEffect(() => {
     if (userModalVisible) {
@@ -988,9 +1155,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
       if (accShortcuts) {
         try {
-          setShortcuts(JSON.parse(accShortcuts));
+          const parsed = JSON.parse(accShortcuts);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            cachedShortcuts = parsed;
+            setShortcuts(parsed);
+          }
         } catch {}
       } else {
+        cachedShortcuts = DEFAULT_BOOKMARKS;
         setShortcuts(DEFAULT_BOOKMARKS);
         AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(DEFAULT_BOOKMARKS));
       }
@@ -998,7 +1170,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       if (accTheme && THEME_PALETTES[accTheme]) {
         setCurrentThemeId(accTheme);
       } else {
-        setCurrentThemeId('sand');
+        setCurrentThemeId('light');
       }
     }
 
@@ -1046,10 +1218,38 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           AsyncStorage.getItem(STORAGE_USER_KEY),
         ]);
 
+      let loadedShortcuts: Bookmark[] | null = null;
       if (savedShortcuts) {
         try {
-          setShortcuts(JSON.parse(savedShortcuts));
+          const parsed = JSON.parse(savedShortcuts);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            loadedShortcuts = parsed;
+          }
         } catch {}
+      }
+
+      if (!loadedShortcuts) {
+        try {
+          const fallback = await AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY);
+          if (fallback) {
+            const parsed = JSON.parse(fallback);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              loadedShortcuts = parsed;
+            }
+          }
+        } catch {}
+      }
+
+      if (loadedShortcuts) {
+        cachedShortcuts = loadedShortcuts;
+        setShortcuts(loadedShortcuts);
+      } else {
+        cachedShortcuts = DEFAULT_BOOKMARKS;
+        setShortcuts(DEFAULT_BOOKMARKS);
+        AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
+        if (shortcutsKey !== STORAGE_SHORTCUTS_KEY) {
+          AsyncStorage.setItem(shortcutsKey, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
+        }
       }
 
       if (savedBg) setBgImage(savedBg);
@@ -1128,11 +1328,15 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const saveShortcuts = async (newList: Bookmark[]) => {
+    cachedShortcuts = newList;
     setShortcuts(newList);
     try {
-      const email = userProfile.email?.toLowerCase();
-      const key = syncAllAccounts || !email ? STORAGE_SHORTCUTS_KEY : `${STORAGE_SHORTCUTS_KEY}_${email}`;
+      const activeEmail = (userProfile.email || propUserProfile?.email)?.toLowerCase();
+      const key = syncAllAccounts || !activeEmail ? STORAGE_SHORTCUTS_KEY : `${STORAGE_SHORTCUTS_KEY}_${activeEmail}`;
       await AsyncStorage.setItem(key, JSON.stringify(newList));
+      if (key !== STORAGE_SHORTCUTS_KEY) {
+        await AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(newList));
+      }
     } catch (e) {
       console.log('Error saving shortcuts:', e);
     }
@@ -1191,12 +1395,18 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     const dy = currentY - touchStartY.current;
     const dx = currentX - touchStartX.current;
 
-    if (scrollYRef.current <= 2 && dy > 28 && dy > Math.abs(dx) * 1.1) {
-      isPullingRef.current = true;
-      if (onPullMove) onPullMove(dy, dx);
-    } else if (dy < 0 && isPullingRef.current) {
-      isPullingRef.current = false;
-      if (onPullCancel) onPullCancel();
+    if (isPullingRef.current) {
+      if (dy > 0) {
+        if (onPullMove) onPullMove(dy, dx);
+      } else {
+        isPullingRef.current = false;
+        if (onPullCancel) onPullCancel();
+      }
+    } else if (scrollYRef.current <= 5 && dy > 12) {
+      if (dy > Math.abs(dx) * 0.7) {
+        isPullingRef.current = true;
+        if (onPullMove) onPullMove(dy, dx);
+      }
     }
   };
 
@@ -1326,7 +1536,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     }
   };
 
-  const activeTheme = THEME_PALETTES[currentThemeId] || THEME_PALETTES.sand;
+  const activeTheme = THEME_PALETTES[currentThemeId] || THEME_PALETTES.light;
   const themeBg = isIncognito ? '#202124' : activeTheme.bg;
   const themeCard = isIncognito ? '#2d2f31' : activeTheme.card;
   const themeCardGlass = isIncognito ? 'rgba(45, 47, 49, 0.88)' : activeTheme.cardGlass;
@@ -1348,6 +1558,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         },
       ]}
       showsVerticalScrollIndicator={false}
+      canCancelContentTouches={true}
+      keyboardShouldPersistTaps="handled"
       onScroll={(e) => {
         scrollYRef.current = e.nativeEvent.contentOffset.y;
       }}
@@ -1451,6 +1663,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             style={styles.simpleWeatherBlock}
             onPress={() => onSelectUrl(`${currentEngine.searchUrl}${encodeURIComponent('thời tiết ' + weather.location)}`)}
             activeOpacity={0.75}
+            delayPressIn={0}
           >
             <View style={styles.simpleWeatherRow}>
               <MaterialCommunityIcons
@@ -1467,6 +1680,15 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               {weather.location}
             </Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Logo App Kite ở màn hình chính */}
+        <View style={styles.homeAppLogoWrapper}>
+          <Image
+            source={require('../../assets/logokite.png')}
+            style={styles.homeAppLogoImage}
+            resizeMode="contain"
+          />
         </View>
 
         {/* Giờ số to và Ngày tháng năm tiếng Việt căn giữa màn hình (có khoảng cách margin thoáng đãng với thời tiết) */}
@@ -1499,6 +1721,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         ]}
         onPress={onFocusSearch}
         activeOpacity={0.85}
+        delayPressIn={0}
       >
         {bgImage && (
           <BlurView
@@ -1507,7 +1730,25 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             style={StyleSheet.absoluteFill}
           />
         )}
-        <Feather name="search" size={20} color={isIncognito ? '#9aa0a6' : '#202124'} style={{ marginRight: 12 }} />
+        {/* Icon công cụ tìm kiếm bên trái */}
+        <TouchableOpacity
+          onPress={() => setEngineModalVisible(true)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={{ marginRight: 12 }}
+          activeOpacity={0.7}
+        >
+          {currentEngineId === 'google' ? (
+            <GoogleGIcon size={24} />
+          ) : (
+            <Image
+              source={{ uri: currentEngine.logoUrl }}
+              style={{ width: 24, height: 24 }}
+              resizeMode="contain"
+            />
+          )}
+        </TouchableOpacity>
+
+        {/* Text gợi ý tìm kiếm ở giữa */}
         <Text
           style={[
             styles.homeSearchPlaceholder,
@@ -1517,29 +1758,23 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         >
           Tìm kiếm hoặc nhập URL
         </Text>
+
+        {/* Cụm icon bên phải: icon mic cạnh icon search bên phải ngoài cùng */}
         <View style={styles.homeSearchRightGroup}>
-          <TouchableOpacity
-            onPress={() => setEngineModalVisible(true)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            activeOpacity={0.7}
-          >
-            {currentEngineId === 'google' ? (
-              <GoogleGIcon size={24} />
-            ) : (
-              <Image
-                source={{ uri: currentEngine.logoUrl }}
-                style={{ width: 24, height: 24 }}
-                resizeMode="contain"
-              />
-            )}
-          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setVoiceModalVisible(true)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={{ marginLeft: 12 }}
             activeOpacity={0.7}
           >
             <Feather name="mic" size={20} color={isIncognito ? '#9aa0a6' : '#202124'} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onFocusSearch}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ marginLeft: 14 }}
+            activeOpacity={0.7}
+          >
+            <Feather name="search" size={20} color={isIncognito ? '#9aa0a6' : '#202124'} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -1560,7 +1795,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             style={StyleSheet.absoluteFill}
           />
         )}
-        <View style={styles.chromeCardHeaderRow}>
+        <View style={[styles.chromeCardHeaderRow, { paddingHorizontal: iconInset }]}>
           <Text style={[styles.chromeCardTitle, { color: themeText }]}>Lối tắt</Text>
           <TouchableOpacity
             onPress={() => setIsEditMode(!isEditMode)}
@@ -1575,25 +1810,26 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.circleShortcutsScrollContent}
+          canCancelContentTouches={true}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[styles.circleShortcutsScrollContent, { paddingHorizontal: 0, gap: 0 }]}
         >
           {shortcuts.map((item) => (
-            <View key={item.id} style={styles.circleShortcutCol}>
+            <View key={item.id} style={[styles.circleShortcutCol, { width: slotWidth }]}>
               <TouchableOpacity
                 style={styles.circleShortcutIconBox}
                 onPress={() => onSelectUrl(item.url)}
+                onPressIn={() => preconnectTarget(item.url)}
                 activeOpacity={0.7}
+                delayPressIn={0}
               >
-                <Image
-                  source={{ uri: getFaviconUrl(item.url) }}
-                  style={styles.circleShortcutFavicon}
-                  resizeMode="contain"
-                />
+                {renderShortcutIcon(item)}
                 {isEditMode && (
                   <TouchableOpacity
                     style={styles.circleDeleteBadge}
                     onPress={() => handleDeleteShortcut(item.id)}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    delayPressIn={0}
                   >
                     <Feather name="x" size={10} color="#ffffff" />
                   </TouchableOpacity>
@@ -1609,11 +1845,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           ))}
 
           {/* Nút Thêm lối tắt hình tròn */}
-          <View style={styles.circleShortcutCol}>
+          <View style={[styles.circleShortcutCol, { width: slotWidth }]}>
             <TouchableOpacity
               style={styles.circleAddIconBox}
               onPress={() => setAddModalVisible(true)}
               activeOpacity={0.7}
+              delayPressIn={0}
             >
               <Feather name="plus" size={24} color="#007aff" />
             </TouchableOpacity>
@@ -1640,11 +1877,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
             style={StyleSheet.absoluteFill}
           />
         )}
-        <View style={styles.toolsRow}>
+        <View style={[styles.toolsRow, { paddingHorizontal: 0, justifyContent: 'flex-start' }]}>
           <TouchableOpacity
-            style={styles.toolCol}
+            style={[styles.toolCol, { width: slotWidth, flex: 0 }]}
             onPress={onOpenBookmarks}
             activeOpacity={0.7}
+            delayPressIn={0}
           >
             <View style={styles.toolIconBox}>
               <Feather name="bookmark" size={22} color="#1f2024" />
@@ -1655,9 +1893,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.toolCol}
+            style={[styles.toolCol, { width: slotWidth, flex: 0 }]}
             onPress={onOpenHistory}
             activeOpacity={0.7}
+            delayPressIn={0}
           >
             <View style={styles.toolIconBox}>
               <Feather name="clock" size={22} color="#1f2024" />
@@ -1669,9 +1908,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
 
           {onOpenTabs && (
             <TouchableOpacity
-              style={styles.toolCol}
+              style={[styles.toolCol, { width: slotWidth, flex: 0 }]}
               onPress={onOpenTabs}
               activeOpacity={0.7}
+              delayPressIn={0}
             >
               <View style={styles.toolIconBox}>
                 <Feather name="layers" size={22} color="#1f2024" />
@@ -1683,9 +1923,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           )}
 
           <TouchableOpacity
-            style={styles.toolCol}
+            style={[styles.toolCol, { width: slotWidth, flex: 0 }]}
             onPress={handlePickBgImage}
             activeOpacity={0.7}
+            delayPressIn={0}
           >
             <View style={styles.toolIconBox}>
               <Feather name="image" size={22} color="#1f2024" />
@@ -1715,7 +1956,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           />
         )}
         {/* Tiêu đề Khám phá & Nút làm mới nằm TRONG container */}
-        <View style={styles.chromeCardHeaderRow}>
+        <View style={[styles.chromeCardHeaderRow, { paddingHorizontal: iconInset }]}>
           <Text style={[styles.chromeCardTitle, { color: themeText }]}>Khám phá</Text>
           <TouchableOpacity
             style={styles.discoverCardRefreshBtn}
@@ -1756,6 +1997,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   ]}
                   onPress={() => onSelectUrl(article.url)}
                   activeOpacity={0.82}
+                  delayPressIn={0}
                 >
                   <Image
                     source={{ uri: article.imageUrl }}
@@ -1787,6 +2029,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 ]}
                 onPress={() => onSelectUrl(article.url)}
                 activeOpacity={0.75}
+                delayPressIn={0}
               >
                 <View style={styles.discoverArticleLeft}>
                   <Text
@@ -1833,6 +2076,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         },
       ]}
       showsVerticalScrollIndicator={false}
+      canCancelContentTouches={true}
+      keyboardShouldPersistTaps="handled"
       onScroll={(e) => {
         scrollYRef.current = e.nativeEvent.contentOffset.y;
       }}
@@ -1900,6 +2145,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           style={styles.incognitoSearchPill}
           onPress={onFocusSearch}
           activeOpacity={0.8}
+          delayPressIn={0}
         >
           {currentEngineId === 'google' ? (
             <GoogleGIcon size={20} />
@@ -1913,6 +2159,23 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           <Text style={styles.incognitoSearchPlaceholder} numberOfLines={1}>
             Tìm trên {currentEngine.name} hoặc nhập URL
           </Text>
+          <View style={styles.homeSearchRightGroup}>
+            <TouchableOpacity
+              onPress={() => setVoiceModalVisible(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Feather name="mic" size={19} color="#9aa0a6" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onFocusSearch}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={{ marginLeft: 14 }}
+              activeOpacity={0.7}
+            >
+              <Feather name="search" size={19} color="#9aa0a6" />
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
 
         {/* Khung nội dung chính của Chế độ Ẩn danh Kite */}
@@ -2074,7 +2337,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                           >
                             {pal.name}
                           </Text>
-                          <Text style={styles.themeItemTag}>{pal.tag}</Text>
                         </TouchableOpacity>
                       );
                     })}
@@ -2164,7 +2426,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.bgOptionTitle}>Khóa bằng mã PIN</Text>
+                  <Text style={styles.bgOptionTitle}>Mã PIN cho ẩn danh</Text>
                   <Feather
                     name={incognitoPin ? 'lock' : 'shield'}
                     size={20}
@@ -3073,8 +3335,8 @@ const styles = StyleSheet.create({
   },
   bottomSheetContainer: {
     backgroundColor: theme.colors.sheetBackground,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     paddingTop: 10,
     paddingHorizontal: 20,
     maxHeight: '90%',
@@ -3099,8 +3361,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sheetTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 17.5,
+    fontWeight: '600',
     color: '#09090b',
   },
   sheetCloseBtn: {
@@ -3124,7 +3386,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     paddingHorizontal: 12,
-    borderRadius: 14,
+    borderRadius: 18,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: '#e4e4e7',
@@ -3141,18 +3403,18 @@ const styles = StyleSheet.create({
   },
   engineGridName: {
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
     color: theme.colors.textPrimary,
   },
   engineGridNameSelected: {
     color: theme.colors.accentBlue,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   sheetSubHeader: {
-    fontSize: 14.5,
-    fontWeight: '700',
-    color: '#09090b',
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#71717a',
     marginBottom: 8,
     marginTop: 12,
     marginLeft: 4,
@@ -3160,7 +3422,7 @@ const styles = StyleSheet.create({
   },
   groupedOptionContainer: {
     backgroundColor: theme.colors.sheetCard,
-    borderRadius: theme.radius.xl,
+    borderRadius: 24,
     overflow: 'hidden',
     marginBottom: 10,
   },
@@ -3168,20 +3430,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 16.5,
+    paddingHorizontal: 18,
   },
   horizontalDivider: {
     height: theme.divider.height,
     backgroundColor: theme.divider.backgroundColor,
-    marginHorizontal: 16,
+    marginHorizontal: 18,
   },
   bgOptionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 13,
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    borderRadius: 18,
     backgroundColor: '#f4f4f5',
     marginBottom: 8,
   },
@@ -3196,8 +3458,8 @@ const styles = StyleSheet.create({
   },
   bgOptionTitle: {
     flex: 1,
-    fontSize: theme.typography.fontSize.menuTitle,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '400',
     color: '#09090b',
   },
   sheetSectionHeaderRow: {
@@ -3270,7 +3532,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2024',
     textAlign: 'center',
-    marginBottom: 2,
+    paddingBottom: 2,
   },
   themeItemTag: {
     fontSize: 10,
@@ -3280,8 +3542,8 @@ const styles = StyleSheet.create({
   // CHROME-STYLE GOOGLE ACCOUNT BOTTOM SHEET
   accountSheetContainer: {
     backgroundColor: theme.colors.sheetBackground,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     paddingTop: 16,
     paddingHorizontal: 16,
     maxHeight: '92%',
@@ -3327,7 +3589,7 @@ const styles = StyleSheet.create({
   },
   activeAccountName: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#000000',
     marginBottom: 3,
     textAlign: 'center',
@@ -3339,7 +3601,7 @@ const styles = StyleSheet.create({
   },
   accountListCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
   },
   accountRowItem: {
@@ -3373,8 +3635,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   accountRowName: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 15.5,
+    fontWeight: '400',
     color: '#000000',
     marginBottom: 2,
   },
@@ -3408,20 +3670,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   addAccountText: {
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: '500',
     color: '#007aff',
   },
   logoutCardBtn: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 24,
     marginTop: 12,
     paddingVertical: 14,
     alignItems: 'center',
   },
   logoutCardText: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 15.5,
+    fontWeight: '500',
     color: '#007aff',
   },
   doneDeleteBtn: {
@@ -3465,7 +3727,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 24,
     marginTop: 12,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -3489,8 +3751,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   syncOptionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15.5,
+    fontWeight: '400',
     color: '#09090b',
     marginBottom: 2,
   },
@@ -3523,8 +3785,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   actionMenuTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 16.5,
+    fontWeight: '600',
     color: '#18181b',
     marginBottom: 2,
   },
@@ -3551,8 +3813,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   actionMenuItemTitle: {
-    fontSize: 14.5,
-    fontWeight: '600',
+    fontSize: 15.5,
+    fontWeight: '400',
     color: '#18181b',
     marginBottom: 2,
   },
@@ -3687,8 +3949,8 @@ const styles = StyleSheet.create({
     color: '#22c55e',
   },
   incognitoSearchPill: {
-    height: 48,
-    borderRadius: 24,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#2d2f31',
     flexDirection: 'row',
     alignItems: 'center',
@@ -3831,6 +4093,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginLeft: 2,
   },
+  homeAppLogoWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  homeAppLogoImage: {
+    width: 68,
+    height: 68,
+    borderRadius: 18,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    elevation: 3,
+  },
   simpleClockBlock: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -3851,8 +4129,8 @@ const styles = StyleSheet.create({
   },
   homeSearchPill: {
     width: '100%',
-    height: 56,
-    borderRadius: 28,
+    height: 62,
+    borderRadius: 31,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 18,
@@ -3907,14 +4185,12 @@ const styles = StyleSheet.create({
     opacity: 0.78,
   },
   circleShortcutsScrollContent: {
-    paddingHorizontal: 2,
+    paddingHorizontal: 0,
     paddingVertical: 4,
     alignItems: 'center',
-    gap: 12,
   },
   circleShortcutCol: {
     alignItems: 'center',
-    width: 68,
   },
   circleShortcutIconBox: {
     width: 52,
@@ -3935,6 +4211,19 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 6,
+  },
+  shortcutLetterFallback: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shortcutLetterText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
   },
   circleShortcutTitle: {
     fontSize: 11.5,
@@ -3970,13 +4259,12 @@ const styles = StyleSheet.create({
   },
   toolsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingVertical: 4,
   },
   toolCol: {
     alignItems: 'center',
-    flex: 1,
   },
   toolIconBox: {
     width: 52,

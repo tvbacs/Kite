@@ -463,7 +463,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#09090b',
     flexShrink: 1,
   },
@@ -494,9 +494,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.sheetCard,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingHorizontal: 12,
-    height: 38,
+    height: 40,
     marginBottom: 10,
   },
   searchInput: {
@@ -569,10 +569,10 @@ const styles = StyleSheet.create({
   fileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     backgroundColor: theme.colors.sheetCard,
-    borderRadius: theme.radius.md,
+    borderRadius: 16,
     marginBottom: 8,
   },
   fileIconBox: {
@@ -594,8 +594,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   fileName: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15.5,
+    fontWeight: '400',
     color: '#09090b',
     marginBottom: 3,
   },

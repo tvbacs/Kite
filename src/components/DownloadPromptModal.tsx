@@ -1,112 +1,113 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Modal,
   TouchableOpacity,
-  ActivityIndicator,
+  Platform,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+export type DownloadDestination = 'files' | 'kite';
 
 interface DownloadPromptModalProps {
   visible: boolean;
   fileName: string;
-  downloadUrl: string;
-  onSaveToKite: () => void;
-  onChooseLocation: () => void;
-  onCancel: () => void;
+  downloadUrl?: string;
+  onConfirm: (destination: DownloadDestination) => void;
+  onClose: () => void;
 }
 
 export const DownloadPromptModal: React.FC<DownloadPromptModalProps> = ({
   visible,
   fileName,
-  downloadUrl,
-  onSaveToKite,
-  onChooseLocation,
-  onCancel,
+  onConfirm,
+  onClose,
 }) => {
-  const getFileIcon = (name: string) => {
-    const ext = name.split('.').pop()?.toLowerCase() || '';
-    if (['mp4', 'mov', 'mkv', 'avi'].includes(ext)) {
-      return { icon: 'video', color: '#8b5cf6', bg: '#f3e8ff' };
-    }
-    if (['mp3', 'm4a', 'wav'].includes(ext)) {
-      return { icon: 'music', color: '#ec4899', bg: '#fdf2f8' };
-    }
-    if (['jpg', 'png', 'jpeg', 'webp', 'gif'].includes(ext)) {
-      return { icon: 'image', color: '#06b6d4', bg: '#ecfeff' };
-    }
-    if (['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(ext)) {
-      return { icon: 'file-text', color: '#ef4444', bg: '#fee2e2' };
-    }
-    if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
-      return { icon: 'archive', color: '#f59e0b', bg: '#fef3c7' };
-    }
-    return { icon: 'download', color: '#007aff', bg: '#eff6ff' };
-  };
-
-  const fileInfo = getFileIcon(fileName);
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
+  const [destination, setDestination] = useState<DownloadDestination>('files');
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
-      onRequestClose={onCancel}
+      animationType="slide"
+      onRequestClose={onClose}
     >
       <TouchableOpacity
         style={styles.backdrop}
         activeOpacity={1}
-        onPress={onCancel}
+        onPress={onClose}
       >
         <TouchableOpacity
-          style={styles.card}
+          style={[styles.sheetContainer, { paddingBottom: bottomInset }]}
           activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
         >
-          {/* Biểu tượng loại tệp */}
-          <View style={[styles.iconCircle, { backgroundColor: fileInfo.bg }]}>
-            <Feather name={fileInfo.icon as any} size={26} color={fileInfo.color} />
+          {/* Header với tiêu đề và nút X đóng gọn gàng không viền */}
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>Lưu tệp vào...</Text>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={onClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.6}
+            >
+              <Feather name="x" size={20} color="#71717a" />
+            </TouchableOpacity>
           </View>
 
-          {/* Tiêu đề & Tên tệp */}
-          <Text style={styles.title}>Tải xuống tệp</Text>
-          <Text style={styles.fileName} numberOfLines={2}>
-            {fileName}
+          {/* Dòng mô tả tệp */}
+          <Text style={styles.descriptionText} numberOfLines={2}>
+            Chọn vị trí bạn muốn lưu "{fileName}"
           </Text>
 
-          {/* Các nút lựa chọn nơi lưu */}
-          <View style={styles.buttonCol}>
-            {/* 1. Lưu vào Kite */}
+          {/* Hộp lựa chọn Files / Kite */}
+          <View style={styles.optionsCard}>
+            {/* Lựa chọn 1: Files */}
             <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={onSaveToKite}
-              activeOpacity={0.8}
-            >
-              <Feather name="folder" size={17} color="#ffffff" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryBtnText}>Lưu vào Kite (Tệp đã tải)</Text>
-            </TouchableOpacity>
-
-            {/* 2. Chọn nơi lưu (Nút màu xám tinh tế, không còn dấu ngoặc đơn) */}
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={onChooseLocation}
+              style={styles.optionRow}
+              onPress={() => setDestination('files')}
               activeOpacity={0.7}
             >
-              <Feather name="share" size={17} color="#52525b" style={{ marginRight: 8 }} />
-              <Text style={styles.secondaryBtnText}>Chọn nơi lưu...</Text>
+              <View style={styles.iconBox}>
+                <Feather name="folder" size={22} color="#007aff" />
+              </View>
+              <Text style={styles.optionLabel}>Files</Text>
+              {destination === 'files' && (
+                <Feather name="check" size={20} color="#007aff" />
+              )}
             </TouchableOpacity>
 
-            {/* 3. Nút Hủy */}
+            <View style={styles.divider} />
+
+            {/* Lựa chọn 2: Kite (Tệp đã tải) */}
             <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={onCancel}
+              style={styles.optionRow}
+              onPress={() => setDestination('kite')}
               activeOpacity={0.7}
             >
-              <Text style={styles.cancelBtnText}>Hủy bỏ</Text>
+              <View style={styles.iconBox}>
+                <Feather name="download" size={22} color="#007aff" />
+              </View>
+              <Text style={styles.optionLabel}>Kite (Tệp đã tải)</Text>
+              {destination === 'kite' && (
+                <Feather name="check" size={20} color="#007aff" />
+              )}
             </TouchableOpacity>
           </View>
+
+          {/* Nút hành động Lưu lớn màu xanh */}
+          <TouchableOpacity
+            style={styles.confirmBtn}
+            onPress={() => onConfirm(destination)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.confirmBtnText}>Lưu</Text>
+          </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -117,96 +118,84 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
+    justifyContent: 'flex-end',
   },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 22,
-    width: '100%',
-    maxWidth: 380,
-    padding: 22,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 8,
+  sheetContainer: {
+    backgroundColor: '#f4f4f5',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 18,
+    paddingHorizontal: 20,
   },
-  iconCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+  headerRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    position: 'relative',
+    marginBottom: 16,
   },
   title: {
     fontSize: 18,
     fontWeight: '700',
     color: '#09090b',
-    marginBottom: 6,
-    textAlign: 'center',
   },
-  fileName: {
-    fontSize: 13.5,
-    color: '#52525b',
-    textAlign: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 8,
-    lineHeight: 18,
-  },
-  loadingBox: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  loadingSub: {
-    fontSize: 13,
-    color: '#71717a',
-    textAlign: 'center',
-  },
-  buttonCol: {
-    width: '100%',
-    gap: 10,
-  },
-  primaryBtn: {
-    flexDirection: 'row',
+  closeBtn: {
+    position: 'absolute',
+    right: 0,
+    padding: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#007aff',
-    borderRadius: 14,
-    paddingVertical: 13,
-    paddingHorizontal: 16,
   },
-  primaryBtnText: {
-    fontSize: 14.5,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  secondaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f4f4f5',
-    borderRadius: 14,
-    paddingVertical: 13,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-  },
-  secondaryBtnText: {
-    fontSize: 14.5,
-    fontWeight: '600',
-    color: '#18181b',
-  },
-  cancelBtn: {
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  cancelBtnText: {
+  descriptionText: {
     fontSize: 14,
-    color: '#71717a',
+    color: '#3f3f46',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  optionsCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 20,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  iconBox: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  optionLabel: {
+    flex: 1,
+    fontSize: 15.5,
     fontWeight: '500',
+    color: '#09090b',
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#e4e4e7',
+    marginLeft: 56,
+  },
+  confirmBtn: {
+    backgroundColor: '#007aff',
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#007aff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  confirmBtnText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

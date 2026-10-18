@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet, Text, Platform } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface BottomBarProps {
@@ -21,9 +22,12 @@ interface BottomBarProps {
   isIncognito?: boolean;
   isReaderMode?: boolean;
   onToggleReaderMode?: () => void;
+  onOpenSitePermissions?: () => void;
+  isTranslated?: boolean;
+  onToggleTranslate?: () => void;
 }
 
-export const BottomBar: React.FC<BottomBarProps> = ({
+export const BottomBar = memo<BottomBarProps>(({
   canGoBack,
   canGoForward,
   onGoBack,
@@ -41,6 +45,9 @@ export const BottomBar: React.FC<BottomBarProps> = ({
   isIncognito,
   isReaderMode,
   onToggleReaderMode,
+  onOpenSitePermissions,
+  isTranslated = false,
+  onToggleTranslate,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 16 : 8);
@@ -90,17 +97,18 @@ export const BottomBar: React.FC<BottomBarProps> = ({
         },
       ]}
     >
-      {/* 1. NÚT QUAY LẠI (BACK) */}
+      {/* 1. NÚT QUAY LẠI (BACK): Luôn bấm được khi có lịch sử HOẶC đang duyệt web/đang loading để hủy tải & về Home */}
       <TouchableOpacity
-        style={[styles.navBtn, !canGoBack && styles.btnDisabled]}
+        style={[styles.navBtn, !(canGoBack || isBrowsing) && styles.btnDisabled]}
         onPress={onGoBack}
-        disabled={!canGoBack}
+        disabled={!(canGoBack || isBrowsing)}
         activeOpacity={0.6}
+        hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
       >
         <Feather
           name="chevron-left"
           size={24}
-          color={canGoBack ? iconColor : disabledColor}
+          color={(canGoBack || isBrowsing) ? iconColor : disabledColor}
         />
       </TouchableOpacity>
 
@@ -128,17 +136,36 @@ export const BottomBar: React.FC<BottomBarProps> = ({
         onPress={onPressSearch}
         activeOpacity={0.8}
       >
-        {isBrowsing && isSecure ? (
-          <Feather name="lock" size={13} color={subIconColor} style={styles.pillIcon} />
+        {isBrowsing && isSecure && onOpenSitePermissions ? (
+          <TouchableOpacity
+            onPress={(e) => {
+              e.stopPropagation();
+              onOpenSitePermissions();
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+          >
+            <Feather name="lock" size={13} color={isIncognito ? '#bdc1c6' : subIconColor} style={styles.pillIcon} />
+          </TouchableOpacity>
+        ) : isBrowsing && isSecure ? (
+          <Feather name="lock" size={13} color={isIncognito ? '#bdc1c6' : subIconColor} style={styles.pillIcon} />
         ) : (
-          <Feather name="search" size={16} color={subIconColor} style={styles.pillIcon} />
+          <Feather name="search" size={16} color={isIncognito ? '#bdc1c6' : subIconColor} style={styles.pillIcon} />
         )}
 
         <Text
           style={[
             styles.searchPillText,
-            { color: isBrowsing ? iconColor : subIconColor },
             isBrowsing && styles.searchPillTextActive,
+            {
+              color: isBrowsing
+                ? isIncognito
+                  ? '#ffffff'
+                  : '#09090b'
+                : isIncognito
+                ? '#9aa0a6'
+                : '#71717a',
+            },
           ]}
           numberOfLines={1}
         >
@@ -146,6 +173,25 @@ export const BottomBar: React.FC<BottomBarProps> = ({
             ? displayDomain
             : placeholder || 'Tìm hoặc nhập tên trang web...'}
         </Text>
+
+        {/* Nút Dịch nhanh trang web (1 chạm để dịch sang tiếng Việt) */}
+        {isBrowsing && onToggleTranslate && (
+          <TouchableOpacity
+            style={styles.pillActionBtn}
+            onPress={(e) => {
+              e.stopPropagation();
+              onToggleTranslate();
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name="language"
+              size={18}
+              color={isTranslated ? '#007aff' : isIncognito ? '#bdc1c6' : subIconColor}
+            />
+          </TouchableOpacity>
+        )}
 
         {/* Nút lưu Dấu trang (Bookmark) khi đang xem web */}
         {isBrowsing && onToggleBookmark && (
@@ -158,11 +204,19 @@ export const BottomBar: React.FC<BottomBarProps> = ({
             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             activeOpacity={0.7}
           >
-            <Feather
-              name="bookmark"
-              size={17}
-              color={isBookmarked ? '#007aff' : subIconColor}
-            />
+            {isBookmarked ? (
+              <Ionicons
+                name="bookmark"
+                size={17}
+                color="#007aff"
+              />
+            ) : (
+              <Ionicons
+                name="bookmark-outline"
+                size={17}
+                color={isIncognito ? '#bdc1c6' : subIconColor}
+              />
+            )}
           </TouchableOpacity>
         )}
       </TouchableOpacity>
@@ -173,7 +227,7 @@ export const BottomBar: React.FC<BottomBarProps> = ({
           style={styles.navBtn}
           onPress={onNewTab}
           activeOpacity={0.6}
-          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
         >
           <Feather name="plus" size={21} color={iconColor} />
         </TouchableOpacity>
@@ -184,7 +238,7 @@ export const BottomBar: React.FC<BottomBarProps> = ({
         style={styles.navBtn}
         onPress={onOpenTabs}
         activeOpacity={0.6}
-        hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
       >
         <View style={[styles.tabBadgeBox, isIncognito && { borderColor: iconColor }]}>
           <Text style={[styles.tabCountText, isIncognito && { color: iconColor }]}>
@@ -194,7 +248,7 @@ export const BottomBar: React.FC<BottomBarProps> = ({
       </TouchableOpacity>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -207,7 +261,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
-    elevation: 4,
+    elevation: 35,
+    zIndex: 99999,
   },
   navBtn: {
     width: 36,
@@ -221,8 +276,8 @@ const styles = StyleSheet.create({
   },
   searchPill: {
     flex: 1,
-    height: 40,
-    borderRadius: 20,
+    height: 44,
+    borderRadius: 22,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -242,7 +297,6 @@ const styles = StyleSheet.create({
     color: '#71717a',
   },
   searchPillTextActive: {
-    color: '#09090b',
     fontWeight: '600',
   },
   pillActionBtn: {

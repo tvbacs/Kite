@@ -9,7 +9,16 @@ import {
   Image,
   Platform,
   StatusBar,
+  ActivityIndicator,
+  Animated,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import Feather from '@expo/vector-icons/Feather';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +46,191 @@ interface TabSheetProps {
   onFreezeBackgroundTabs?: () => void;
   isIncognito?: boolean;
 }
+
+interface TabCardItemProps {
+  tab: BrowserTab;
+  isActive: boolean;
+  onPress: () => void;
+  onClose: (tabId: string) => void;
+  failedSnapshot: boolean;
+  onSnapshotError: (tabId: string) => void;
+}
+
+const TabCardItem: React.FC<TabCardItemProps> = React.memo(({
+  tab,
+  isActive,
+  onPress,
+  onClose,
+  failedSnapshot,
+  onSnapshotError,
+}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const opacityAnim = useRef(new Animated.Value(1)).current;
+  const isClosingRef = useRef(false);
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [tab.snapshotUri]);
+
+  const handleClose = () => {
+    if (isClosingRef.current) return;
+    isClosingRef.current = true;
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {}
+
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 0.75,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      onClose(tab.id);
+    });
+  };
+
+  const faviconUrl = tab.url
+    ? `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(tab.url)}`
+    : null;
+
+  return (
+    <Animated.View
+      style={[
+        styles.tabCardWrapper,
+        {
+          transform: [{ scale: scaleAnim }],
+          opacity: opacityAnim,
+        },
+      ]}
+    >
+      <TouchableOpacity
+        style={[styles.tabCard, isActive && styles.activeTabCard]}
+        onPress={onPress}
+        activeOpacity={0.85}
+      >
+        {/* Header của từng thẻ Tab */}
+        <View style={styles.cardTopHeader}>
+          <View style={styles.cardTitleArea}>
+            {tab.isLoading && tab.url ? (
+              <ActivityIndicator
+                size="small"
+                color="#007aff"
+                style={{ marginRight: 6, width: 14, height: 14 }}
+              />
+            ) : faviconUrl ? (
+              <Image source={{ uri: faviconUrl }} style={styles.tabFavicon} />
+            ) : (
+              <Feather name="globe" size={13} color="#09090b" />
+            )}
+            <Text style={styles.tabCardTitle} numberOfLines={1}>
+              {tab.isLoading && tab.url ? (tab.title ? `${tab.title}` : 'Đang tải...') : (tab.title || 'Thẻ mới')}
+            </Text>
+          </View>
+
+          {/* Huy hiệu đánh dấu thẻ đang kích hoạt hoặc đang ngủ */}
+          {isActive ? (
+            <View style={styles.activeDot} />
+          ) : tab.isSleeping ? (
+            <View style={styles.sleepingBadge}>
+              <Feather name="moon" size={11} color="#0284c7" />
+            </View>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.cardCloseBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={(e) => {
+              e.stopPropagation();
+              handleClose();
+            }}
+            activeOpacity={0.6}
+          >
+            <Feather name="x" size={14} color="#71717a" />
+          </TouchableOpacity>
+        </View>
+
+        {/* VÙNG XEM TRƯỚC NỘI DUNG THẺ:
+            ƯU TIÊN 1: Luôn hiển thị ngay tức thì 0ms ảnh snapshot đã chụp của trang web!
+            Các tác vụ tải ngầm diễn ra sau và báo hiệu qua spinner nhỏ trên thanh tiêu đề,
+            người dùng vào màn hình tab lập tức thấy ngay toàn bộ thumbnail các trang. */}
+        {Boolean(tab.snapshotUri && !failedSnapshot && !imageError) ? (
+          <View style={styles.cardSnapshotContainer}>
+            <Image
+              source={{ uri: tab.snapshotUri }}
+              style={styles.cardSnapshotImage}
+              resizeMode="cover"
+              onError={() => {
+                setImageError(true);
+                onSnapshotError(tab.id);
+              }}
+            />
+          </View>
+
+        ) : !tab.url ? (
+          /* Thẻ mới: Hiển thị preview giao diện thu nhỏ Google & lối tắt như Cốc Cốc */
+          <View style={styles.miniHomeContainer}>
+            <View style={styles.miniGoogleBox}>
+              <Text style={styles.miniGoogleG}>G</Text>
+              <Text style={styles.miniGoogleO1}>o</Text>
+              <Text style={styles.miniGoogleO2}>o</Text>
+              <Text style={styles.miniGoogleG2}>g</Text>
+              <Text style={styles.miniGoogleL}>l</Text>
+              <Text style={styles.miniGoogleE}>e</Text>
+            </View>
+            <View style={styles.miniSearchInput}>
+              <Feather name="search" size={9} color="#9ca3af" style={{ marginRight: 4 }} />
+              <Text style={styles.miniSearchPlaceholder} numberOfLines={1}>
+                Tìm trên Google...
+              </Text>
+            </View>
+            <View style={styles.miniShortcutsRow}>
+              <View style={[styles.miniShortcutTile, { backgroundColor: '#10b981' }]}>
+                <Feather name="film" size={9} color="#ffffff" />
+              </View>
+              <View style={[styles.miniShortcutTile, { backgroundColor: '#3b82f6' }]}>
+                <Feather name="globe" size={9} color="#ffffff" />
+              </View>
+              <View style={[styles.miniShortcutTile, { backgroundColor: '#f59e0b' }]}>
+                <Feather name="play" size={9} color="#ffffff" />
+              </View>
+              <View style={[styles.miniShortcutTile, { backgroundColor: '#ef4444' }]}>
+                <Feather name="video" size={9} color="#ffffff" />
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.cardPreviewBody}>
+            <View style={styles.cardEmptyIconCircle}>
+              <Feather name="globe" size={24} color="#007aff" />
+            </View>
+            <Text style={styles.previewDomainText} numberOfLines={2}>
+              {tab.url.replace('https://', '').replace('http://', '').split('/')[0]}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.failedSnapshot === nextProps.failedSnapshot &&
+    prevProps.tab.id === nextProps.tab.id &&
+    prevProps.tab.url === nextProps.tab.url &&
+    prevProps.tab.title === nextProps.tab.title &&
+    prevProps.tab.isLoading === nextProps.tab.isLoading &&
+    prevProps.tab.isSleeping === nextProps.tab.isSleeping &&
+    prevProps.tab.snapshotUri === nextProps.tab.snapshotUri
+  );
+});
 
 export const TabSheet: React.FC<TabSheetProps> = ({
   visible,
@@ -83,6 +277,7 @@ export const TabSheet: React.FC<TabSheetProps> = ({
   useEffect(() => {
     if (visible && !prevVisibleRef.current) {
       setActiveMode(isIncognito ? 'incognito' : 'normal');
+      setFailedSnapshotIds({});
       shouldScrollToEndRef.current = true;
       // Tự động cuộn đến tab cuối cùng ngay khi mở màn hình danh sách tab
       const t1 = setTimeout(() => {
@@ -148,60 +343,73 @@ export const TabSheet: React.FC<TabSheetProps> = ({
   };
 
   const handleCardPress = (tab: BrowserTab) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {}
+
     if (tab.isIncognito && incognitoPin && !isIncognitoUnlocked) {
       pendingUnlockActionRef.current = () => {
         onSelectTab(tab.id);
-        onClose();
       };
       setIsPinUnlocking(true);
     } else {
       onSelectTab(tab.id);
-      onClose();
     }
   };
 
   const handleCreateIncognitoTab = () => {
     if (incognitoPin && !isIncognitoUnlocked) {
       pendingUnlockActionRef.current = () => {
-        onNewTab(true);
         onClose();
+        onNewTab(true);
       };
       setIsPinUnlocking(true);
     } else {
-      onNewTab(true);
       onClose();
+      onNewTab(true);
     }
   };
 
   const handleAddTabPress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {}
     if (activeMode === 'incognito') {
       handleCreateIncognitoTab();
     } else {
-      onNewTab(false);
       onClose();
+      onNewTab(false);
     }
   };
 
+  const handleBackPress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {}
+    onClose();
+  };
+
   const handleDonePress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {}
+    onClose();
+
     const currentTab = tabs.find((t) => t.id === activeTabId);
     if (activeMode === 'normal') {
       // Đang ở chế độ tab thường: luôn đóng về tab thường, không bao giờ để nhảy sang tab ẩn danh
       if (currentTab && !currentTab.isIncognito) {
-        onClose();
         return;
       }
       if (normalTabs.length > 0) {
         const target = normalTabs.slice().sort((a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0))[0] || normalTabs[0];
         onSelectTab(target.id);
-        onClose();
       } else {
         onNewTab(false);
-        onClose();
       }
     } else {
       // Đang ở chế độ tab ẩn danh:
       if (currentTab && currentTab.isIncognito) {
-        onClose();
         return;
       }
       if (incognitoTabs.length > 0) {
@@ -216,10 +424,10 @@ export const TabSheet: React.FC<TabSheetProps> = ({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="none"
       transparent={true}
       presentationStyle="overFullScreen"
-      onRequestClose={handleDonePress}
+      onRequestClose={handleBackPress}
     >
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
@@ -232,7 +440,7 @@ export const TabSheet: React.FC<TabSheetProps> = ({
           {/* Nút đóng / quay lại bên trái */}
           <TouchableOpacity
             style={styles.circleBtn}
-            onPress={handleDonePress}
+            onPress={handleBackPress}
             activeOpacity={0.7}
           >
             <Feather name="arrow-left" size={20} color="#09090b" />
@@ -254,12 +462,12 @@ export const TabSheet: React.FC<TabSheetProps> = ({
                 size={17}
                 color={activeMode === 'incognito' ? '#ffffff' : '#71717a'}
               />
-              {/* Khi ĐÃ NHẤN QUA tab ẩn danh: Hiển thị rõ số lượng tab ẩn danh */}
-              {activeMode === 'incognito' && (
+              {/* CHỈ hiển thị số lượng tab ẩn danh khi đang ở chế độ ẩn danh (bảo mật riêng tư khi ở tab thường) */}
+              {activeMode === 'incognito' && incognitoTabs.length > 0 && (
                 <Text
                   style={[
                     styles.segmentBtnText,
-                    { color: '#ffffff', marginLeft: 5, fontSize: 13, fontWeight: '700' },
+                    { color: '#ffffff', marginLeft: 4, fontSize: 13, fontWeight: '700' },
                   ]}
                 >
                   {incognitoTabs.length}
@@ -332,111 +540,19 @@ export const TabSheet: React.FC<TabSheetProps> = ({
             }}
           >
             <View style={styles.gridRow}>
-              {currentDisplayedTabs.map((tab) => {
-                const isActive = tab.id === activeTabId;
-                const faviconUrl = tab.url
-                  ? `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(tab.url)}`
-                  : null;
-
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
-                    style={[styles.tabCard, isActive && styles.activeTabCard]}
-                    onPress={() => handleCardPress(tab)}
-                    activeOpacity={0.8}
-                  >
-                    {/* Header của từng thẻ Tab */}
-                    <View style={styles.cardTopHeader}>
-                      <View style={styles.cardTitleArea}>
-                        {faviconUrl ? (
-                          <Image source={{ uri: faviconUrl }} style={styles.tabFavicon} />
-                        ) : (
-                          <Feather name="globe" size={13} color="#09090b" />
-                        )}
-                        <Text style={styles.tabCardTitle} numberOfLines={1}>
-                          {tab.title || 'Thẻ mới'}
-                        </Text>
-                      </View>
-
-                      {/* Huy hiệu đánh dấu thẻ đang kích hoạt hoặc đang ngủ */}
-                      {isActive ? (
-                        <View style={styles.activeDot} />
-                      ) : tab.isSleeping ? (
-                        <View style={styles.sleepingBadge}>
-                          <Feather name="moon" size={11} color="#0284c7" />
-                        </View>
-                      ) : null}
-
-                      <TouchableOpacity
-                        style={styles.cardCloseBtn}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          onCloseTab(tab.id);
-                        }}
-                        activeOpacity={0.6}
-                      >
-                        <Feather name="x" size={14} color="#71717a" />
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Vùng xem trước nội dung thẻ: Luôn hiển thị ảnh chụp của lần truy cập sau cùng mới nhất */}
-                    {Boolean(tab.snapshotUri && !failedSnapshotIds[tab.id]) ? (
-                      <View style={styles.cardSnapshotContainer}>
-                        <Image
-                          source={{ uri: tab.snapshotUri }}
-                          style={styles.cardSnapshotImage}
-                          resizeMode="cover"
-                          onError={() => {
-                            setFailedSnapshotIds((prev) => ({ ...prev, [tab.id]: true }));
-                          }}
-                        />
-                      </View>
-                    ) : !tab.url ? (
-                      /* Thẻ mới: Hiển thị preview giao diện thu nhỏ Google & lối tắt như Cốc Cốc */
-                      <View style={styles.miniHomeContainer}>
-                        <View style={styles.miniGoogleBox}>
-                          <Text style={styles.miniGoogleG}>G</Text>
-                          <Text style={styles.miniGoogleO1}>o</Text>
-                          <Text style={styles.miniGoogleO2}>o</Text>
-                          <Text style={styles.miniGoogleG2}>g</Text>
-                          <Text style={styles.miniGoogleL}>l</Text>
-                          <Text style={styles.miniGoogleE}>e</Text>
-                        </View>
-                        <View style={styles.miniSearchInput}>
-                          <Feather name="search" size={9} color="#9ca3af" style={{ marginRight: 4 }} />
-                          <Text style={styles.miniSearchPlaceholder} numberOfLines={1}>
-                            Tìm trên Google...
-                          </Text>
-                        </View>
-                        <View style={styles.miniShortcutsRow}>
-                          <View style={[styles.miniShortcutTile, { backgroundColor: '#10b981' }]}>
-                            <Feather name="film" size={9} color="#ffffff" />
-                          </View>
-                          <View style={[styles.miniShortcutTile, { backgroundColor: '#3b82f6' }]}>
-                            <Feather name="globe" size={9} color="#ffffff" />
-                          </View>
-                          <View style={[styles.miniShortcutTile, { backgroundColor: '#f59e0b' }]}>
-                            <Feather name="play" size={9} color="#ffffff" />
-                          </View>
-                          <View style={[styles.miniShortcutTile, { backgroundColor: '#ef4444' }]}>
-                            <Feather name="video" size={9} color="#ffffff" />
-                          </View>
-                        </View>
-                      </View>
-                    ) : (
-                      <View style={styles.cardPreviewBody}>
-                        <View style={styles.cardEmptyIconCircle}>
-                          <Feather name="globe" size={24} color="#007aff" />
-                        </View>
-                        <Text style={styles.previewDomainText} numberOfLines={2}>
-                          {tab.url.replace('https://', '').replace('http://', '').split('/')[0]}
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
+              {currentDisplayedTabs.map((tab) => (
+                <TabCardItem
+                  key={tab.id}
+                  tab={tab}
+                  isActive={tab.id === activeTabId}
+                  onPress={() => handleCardPress(tab)}
+                  onClose={onCloseTab}
+                  failedSnapshot={Boolean(failedSnapshotIds[tab.id])}
+                  onSnapshotError={(id) => {
+                    setFailedSnapshotIds((prev) => ({ ...prev, [id]: true }));
+                  }}
+                />
+              ))}
             </View>
           </ScrollView>
         )}
@@ -757,9 +873,13 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
   },
-  tabCard: {
+  tabCardWrapper: {
     width: '48%',
     height: 224,
+  },
+  tabCard: {
+    width: '100%',
+    height: '100%',
     backgroundColor: '#ffffff',
     borderRadius: 20,
     overflow: 'hidden',
@@ -949,8 +1069,8 @@ const styles = StyleSheet.create({
   },
   menuSheet: {
     backgroundColor: theme.colors.sheetBackground,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     paddingHorizontal: 20,
     paddingTop: 10,
     shadowColor: '#000',
@@ -975,7 +1095,7 @@ const styles = StyleSheet.create({
   },
   menuTitle: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#09090b',
   },
   menuCloseBtn: {
@@ -988,7 +1108,7 @@ const styles = StyleSheet.create({
   },
   actionFrame: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 24,
     overflow: 'hidden',
     marginBottom: 14,
   },
@@ -996,26 +1116,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 16.5,
+    paddingHorizontal: 18,
   },
   actionTextCol: {
     flex: 1,
     marginRight: 12,
   },
   actionRowTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 15.5,
+    fontWeight: '400',
     color: '#09090b',
     marginBottom: 2,
   },
   actionRowSub: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#71717a',
   },
   actionDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: '#e4e4e7',
-    marginLeft: 16,
+    marginLeft: 18,
   },
 });

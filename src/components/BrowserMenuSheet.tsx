@@ -12,6 +12,7 @@ import {
   Switch,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SEARCH_ENGINES } from '../constants/searchEngines';
 import { theme } from '../constants/theme';
@@ -52,6 +53,9 @@ interface BrowserMenuSheetProps {
   onOpenRegionSheet?: () => void;
   currentRegionText?: string;
   isRegionActive?: boolean;
+  onOpenSitePermissions?: () => void;
+  isTranslated?: boolean;
+  onToggleTranslate?: () => void;
 }
  
 export const triggerNativeShare = async (url: string, title?: string | null) => {
@@ -123,6 +127,9 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
   onOpenRegionSheet,
   currentRegionText,
   isRegionActive,
+  onOpenSitePermissions,
+  isTranslated = false,
+  onToggleTranslate,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
@@ -243,11 +250,19 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               activeOpacity={0.7}
             >
               <View style={[styles.quickActionIconBox, isBookmarked && { backgroundColor: '#007aff' }]}>
-                <Feather
-                  name="bookmark"
-                  size={18}
-                  color={isBookmarked ? '#ffffff' : '#09090b'}
-                />
+                {isBookmarked ? (
+                  <Ionicons
+                    name="bookmark"
+                    size={18}
+                    color="#ffffff"
+                  />
+                ) : (
+                  <Ionicons
+                    name="bookmark-outline"
+                    size={18}
+                    color="#09090b"
+                  />
+                )}
               </View>
               <Text style={[styles.quickActionLabel, isBookmarked && { color: '#007aff' }]}>
                 {isBookmarked ? 'Đã lưu' : 'Dấu trang'}
@@ -313,6 +328,30 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
                       </View>
                       <Feather name="download" size={19} color="#007aff" />
                     </View>
+                  </TouchableOpacity>
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
+
+              {/* DỊCH TRANG WEB */}
+              {currentUrl && !currentUrl.startsWith('about:') && !currentUrl.startsWith('kite://') && onToggleTranslate && (
+                <>
+                  <TouchableOpacity
+                    style={styles.menuRow}
+                    onPress={() => {
+                      onClose();
+                      onToggleTranslate();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.menuTitle, isTranslated && { color: '#007aff', fontWeight: '600' }]}>
+                      {isTranslated ? 'Quay lại ngôn ngữ gốc' : 'Dịch trang web'}
+                    </Text>
+                    <Ionicons
+                      name="language"
+                      size={20}
+                      color={isTranslated ? '#007aff' : '#27272a'}
+                    />
                   </TouchableOpacity>
                   <View style={styles.horizontalDivider} />
                 </>
@@ -432,6 +471,25 @@ export const BrowserMenuSheet: React.FC<BrowserMenuSheetProps> = ({
               </TouchableOpacity>
 
               <View style={styles.horizontalDivider} />
+
+              {/* QUYỀN TRANG WEB (SITE PERMISSIONS) */}
+              {currentUrl && onOpenSitePermissions && (
+                <>
+                  <TouchableOpacity
+                    style={styles.menuRow}
+                    onPress={() => {
+                      onClose();
+                      if (onOpenSitePermissions) onOpenSitePermissions();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.menuTitle}>Quyền trang web</Text>
+                    <Feather name="sliders" size={20} color="#27272a" />
+                  </TouchableOpacity>
+
+                  <View style={styles.horizontalDivider} />
+                </>
+              )}
 
               {/* 8. DẤU TRANG */}
               <TouchableOpacity
@@ -651,8 +709,8 @@ const styles = StyleSheet.create({
   },
   sheetContainer: {
     backgroundColor: theme.colors.sheetBackground,
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     maxHeight: '86%',
     paddingHorizontal: 16,
     paddingTop: 10,
@@ -676,8 +734,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   siteTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#09090b',
     textAlign: 'center',
   },
@@ -690,7 +748,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 24,
     paddingVertical: 10,
     paddingHorizontal: 6,
     marginBottom: 14,
@@ -726,31 +784,53 @@ const styles = StyleSheet.create({
   },
   menuGroupCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 24,
     overflow: 'hidden',
   },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingVertical: 16.5,
+    paddingHorizontal: 18,
   },
   menuTitle: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '400',
     color: '#18181b',
   },
   horizontalDivider: {
     height: theme.divider.height,
     backgroundColor: theme.divider.backgroundColor,
-    marginHorizontal: 16,
+    marginHorizontal: 18,
   },
   menuRowActionRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  menuRowLeftCol: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  menuSubTitle: {
+    fontSize: 12.5,
+    color: '#71717a',
+    marginTop: 2,
+  },
+  translateActiveBadge: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 7,
+    paddingVertical: 1.5,
+    borderRadius: 8,
+  },
+  translateActiveBadgeText: {
+    color: '#007aff',
+    fontSize: 11,
+    fontWeight: '700',
   },
   mediaCountBadge: {
     backgroundColor: '#007aff',
@@ -796,7 +876,7 @@ const styles = StyleSheet.create({
   },
   engineCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 24,
     width: '100%',
     maxWidth: 340,
     padding: 20,
@@ -807,8 +887,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   engineModalTitle: {
-    fontSize: 16.5,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '600',
     color: '#18181b',
     marginBottom: 16,
     textAlign: 'center',
@@ -817,7 +897,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: '#f4f4f5',
     borderWidth: 1,
     borderColor: '#e4e4e7',
@@ -833,12 +913,12 @@ const styles = StyleSheet.create({
   },
   engineChoiceName: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: '500',
     color: '#18181b',
   },
   engineChoiceNameActive: {
     color: '#007aff',
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

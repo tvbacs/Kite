@@ -8,6 +8,7 @@ export interface TabFrozenState {
 export interface BrowserTab {
   id: string;
   url: string;
+  initialUrl?: string;
   title: string;
   isIncognito?: boolean;
   isDesktop?: boolean;
@@ -16,6 +17,12 @@ export interface BrowserTab {
   frozenState?: TabFrozenState;
   snapshotUri?: string;
   isReaderMode?: boolean;
+  originalUrlBeforeTranslate?: string;
+  isTranslated?: boolean;
+  isLoading?: boolean;
+  isOffline?: boolean;
+  offlineUrl?: string;
+  isNavigatingFromHome?: boolean;
 }
 
 export interface Bookmark {
@@ -59,7 +66,7 @@ export interface DetectedMedia {
   id: string;
   url: string;
   title: string;
-  format: 'mp4' | 'm3u8' | 'webm' | 'mov' | 'm4v' | 'audio' | 'video';
+  format: 'mp4' | 'm3u8' | 'webm' | 'mov' | 'm4v' | 'mkv' | 'audio' | 'video';
   sizeBytes?: number;
   quality?: string;
   tabId?: string;

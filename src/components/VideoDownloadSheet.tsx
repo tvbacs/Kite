@@ -33,12 +33,14 @@ export const VideoDownloadSheet: React.FC<VideoDownloadSheetProps> = ({
 
   const getFormatBadge = (format: string) => {
     switch (format.toLowerCase()) {
-      case 'm3u8':
-        return { label: 'HLS STREAM', bg: '#fef3c7', color: '#d97706', isRecommended: false };
       case 'webm':
-        return { label: 'WEBM', bg: '#f3e8ff', color: '#7c3aed', isRecommended: false };
+        return { label: 'WEBM VIDEO', bg: '#f3e8ff', color: '#7c3aed', isRecommended: false };
       case 'audio':
         return { label: 'AUDIO MP3', bg: '#fdf2f8', color: '#db2777', isRecommended: false };
+      case 'mov':
+        return { label: 'QUICKTIME MOV', bg: '#e0f2fe', color: '#0284c7', isRecommended: false };
+      case 'mkv':
+        return { label: 'MKV VIDEO', bg: '#fef3c7', color: '#d97706', isRecommended: false };
       default:
         return { label: 'MP4 VIDEO', bg: '#dcfce7', color: '#16a34a', isRecommended: true };
     }
@@ -84,7 +86,7 @@ export const VideoDownloadSheet: React.FC<VideoDownloadSheetProps> = ({
             <View style={styles.headerLeft}>
               <Text style={styles.sheetTitle}>Tải video xuống</Text>
               <Text style={styles.sheetSubtitle}>
-                Phát hiện {mediaList.length} luồng media sẵn sàng tải về
+                Phát hiện {mediaList.length} video sẵn sàng tải về
               </Text>
             </View>
             <TouchableOpacity

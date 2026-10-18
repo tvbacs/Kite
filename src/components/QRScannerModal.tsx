@@ -7,9 +7,13 @@ import {
   TouchableOpacity,
   Platform,
   Vibration,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Feather from '@expo/vector-icons/Feather';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface QRScannerModalProps {
@@ -18,6 +22,9 @@ interface QRScannerModalProps {
   onScanUrl: (url: string) => void;
 }
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const RETICLE_SIZE = Math.min(Math.round(SCREEN_WIDTH * 0.68), 260);
+
 export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   visible,
   onClose,
@@ -25,6 +32,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
+  const topInset = Math.max(insets.top, Platform.OS === 'ios' ? 44 : 24);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [torchEnabled, setTorchEnabled] = useState<boolean>(false);
@@ -40,13 +48,24 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
   }, [visible]);
 
+  const toggleTorch = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (e) {}
+    setTorchEnabled((prev) => !prev);
+  };
+
   const handleBarcodeScanned = ({ data }: { data: string }) => {
     if (hasScanned || !data) return;
     setHasScanned(true);
 
     try {
-      Vibration.vibrate(100);
-    } catch (e) {}
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      try {
+        Vibration.vibrate(100);
+      } catch (err) {}
+    }
 
     let cleanUrl = data.trim();
     if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
@@ -64,219 +83,124 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   return (
     <Modal
       visible={visible}
-      transparent
+      transparent={false}
       animationType="slide"
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      >
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+        {/* Nút đóng tròn mờ chuẩn Apple ở góc trên bên phải */}
         <TouchableOpacity
-          activeOpacity={1}
-          style={[styles.sheet, { paddingBottom: bottomInset + 8 }]}
-          onPress={(e) => e.stopPropagation()}
+          style={[styles.floatingCloseBtn, { top: topInset + 12 }]}
+          onPress={onClose}
+          activeOpacity={0.7}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          {/* Thanh tay cầm kéo vuốt iOS */}
-          <View style={styles.sheetDragHandle} />
+          <Feather name="x" size={22} color="#ffffff" />
+        </TouchableOpacity>
 
-          {/* Tiêu đề & Các nút điều khiển */}
-          <View style={styles.header}>
-            <View style={styles.headerTitleRow}>
-              <View style={styles.qrIconBadge}>
-                <Feather name="maximize" size={17} color="#007aff" />
-              </View>
-              <Text style={styles.headerTitle}>Quét mã QR</Text>
+        {/* Nếu chưa cấp quyền Camera */}
+        {!permission?.granted ? (
+          <View style={[styles.permissionContainer, { paddingTop: topInset + 60, paddingBottom: bottomInset + 30 }]}>
+            <View style={styles.permIconCircle}>
+              <Feather name="camera-off" size={36} color="#94a3b8" />
             </View>
-
-            <View style={styles.headerActions}>
-              {permission?.granted && (
-                <TouchableOpacity
-                  style={[styles.actionBtn, torchEnabled && styles.actionBtnActive]}
-                  onPress={() => setTorchEnabled((prev) => !prev)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Feather
-                    name={torchEnabled ? 'zap' : 'zap-off'}
-                    size={17}
-                    color={torchEnabled ? '#f59e0b' : '#a1a1aa'}
-                  />
-                </TouchableOpacity>
-              )}
-
-              {/* Nút đóng X ở góc trên bên phải - tách biệt hoàn toàn khỏi Camera để nhận chạm 100% */}
-              <TouchableOpacity
-                style={styles.closeBtn}
-                onPress={onClose}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Feather name="x" size={18} color="#a1a1aa" />
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.permTitle}>Cần quyền sử dụng Camera</Text>
+            <Text style={styles.permSub}>
+              Kite cần quyền truy cập camera để quét mã QR và mở liên kết trang web ngay lập tức.
+            </Text>
+            <TouchableOpacity
+              style={styles.grantBtn}
+              onPress={requestPermission}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.grantBtnText}>Cấp quyền Camera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.dismissBtn}
+              onPress={onClose}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.dismissBtnText}>Đóng</Text>
+            </TouchableOpacity>
           </View>
+        ) : (
+          /* Khi đã có quyền: Hiển thị Camera toàn màn hình chuẩn Apple Code Scanner */
+          <View style={StyleSheet.absoluteFill}>
+            <CameraView
+              style={StyleSheet.absoluteFill}
+              facing="back"
+              enableTorch={torchEnabled}
+              barcodeScannerSettings={{
+                barcodeTypes: ['qr'],
+              }}
+              onBarcodeScanned={hasScanned ? undefined : handleBarcodeScanned}
+            />
 
-          {/* Khung Camera hoặc Yêu cầu cấp quyền */}
-          {!permission?.granted ? (
-            <View style={styles.permissionBox}>
-              <View style={styles.iconCircle}>
-                <Feather name="camera-off" size={32} color="#71717a" />
-              </View>
-              <Text style={styles.permTitle}>Cần quyền sử dụng Camera</Text>
-              <Text style={styles.permSub}>
-                Kite cần quyền truy cập máy ảnh để quét mã QR và mở liên kết trang web nhanh chóng.
-              </Text>
-              <TouchableOpacity
-                style={styles.grantBtn}
-                onPress={requestPermission}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.grantBtnText}>Cấp quyền Camera</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.dismissBtn}
-                onPress={onClose}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.dismissBtnText}>Đóng</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.cameraWrapper}>
-              {/* Khung ngắm Camera bo góc tinh tế */}
-              <View style={styles.cameraFrame}>
-                <CameraView
-                  style={StyleSheet.absoluteFill}
-                  facing="back"
-                  enableTorch={torchEnabled}
-                  barcodeScannerSettings={{
-                    barcodeTypes: ['qr'],
-                  }}
-                  onBarcodeScanned={hasScanned ? undefined : handleBarcodeScanned}
-                />
-
-                {/* Khung mục tiêu QR 4 góc (pointerEvents="none") */}
-                <View style={styles.viewfinderOverlay} pointerEvents="none">
-                  <View style={styles.viewfinderBox}>
-                    <View style={[styles.corner, styles.cornerTL]} />
-                    <View style={[styles.corner, styles.cornerTR]} />
-                    <View style={[styles.corner, styles.cornerBL]} />
-                    <View style={[styles.corner, styles.cornerBR]} />
-                  </View>
-                </View>
+            {/* Khung ngắm 4 góc bo cong dày màu trắng chuẩn Apple (Reticle) */}
+            <View style={styles.viewfinderCenter} pointerEvents="none">
+              <View style={[styles.reticleBox, { width: RETICLE_SIZE, height: RETICLE_SIZE }]}>
+                <View style={[styles.corner, styles.cornerTL]} />
+                <View style={[styles.corner, styles.cornerTR]} />
+                <View style={[styles.corner, styles.cornerBL]} />
+                <View style={[styles.corner, styles.cornerBR]} />
               </View>
 
               <Text style={styles.hintText}>
-                Hướng camera vào mã QR để tự động nhận diện và mở trang web
+                Hướng camera vào mã QR
               </Text>
+            </View>
 
-              {/* Nút Đóng tiện lợi ở dưới đáy */}
+            {/* Nút đèn pin nổi lơ lửng ở đáy chuẩn Apple */}
+            <View style={[styles.bottomBar, { paddingBottom: bottomInset + 28 }]} pointerEvents="box-none">
               <TouchableOpacity
-                style={styles.bottomCloseBtn}
-                onPress={onClose}
-                activeOpacity={0.7}
+                style={[
+                  styles.torchBtn,
+                  torchEnabled ? styles.torchBtnOn : styles.torchBtnOff,
+                ]}
+                onPress={toggleTorch}
+                activeOpacity={0.75}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
-                <Text style={styles.bottomCloseText}>Đóng</Text>
+                <Ionicons
+                  name={torchEnabled ? 'flashlight' : 'flashlight-outline'}
+                  size={24}
+                  color={torchEnabled ? '#000000' : '#ffffff'}
+                />
               </TouchableOpacity>
             </View>
-          )}
-        </TouchableOpacity>
-      </TouchableOpacity>
+          </View>
+        )}
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
+  container: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: '#18181b',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 10,
-    paddingHorizontal: 18,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  sheetDragHandle: {
-    width: 36,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#3f3f46',
-    alignSelf: 'center',
-    marginBottom: 14,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  qrIconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(0, 122, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  actionBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#27272a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionBtnActive: {
-    backgroundColor: 'rgba(245, 158, 11, 0.25)',
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#27272a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cameraWrapper: {
-    alignItems: 'center',
-  },
-  cameraFrame: {
-    width: '100%',
-    height: 320,
-    borderRadius: 22,
-    overflow: 'hidden',
     backgroundColor: '#000000',
     position: 'relative',
+  },
+  floatingCloseBtn: {
+    position: 'absolute',
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(30, 30, 30, 0.65)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 30,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    elevation: 6,
   },
-  viewfinderOverlay: {
+  viewfinderCenter: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -284,111 +208,134 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
   },
-  viewfinderBox: {
-    width: 200,
-    height: 200,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
+  reticleBox: {
     position: 'relative',
   },
   corner: {
     position: 'absolute',
-    width: 22,
-    height: 22,
-    borderColor: '#007aff',
+    width: 52,
+    height: 52,
+    borderColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.45,
+    shadowRadius: 5,
+    elevation: 6,
   },
   cornerTL: {
-    top: -2,
-    left: -2,
-    borderTopWidth: 3.5,
-    borderLeftWidth: 3.5,
-    borderTopLeftRadius: 12,
+    top: 0,
+    left: 0,
+    borderTopWidth: 5,
+    borderLeftWidth: 5,
+    borderTopLeftRadius: 28,
   },
   cornerTR: {
-    top: -2,
-    right: -2,
-    borderTopWidth: 3.5,
-    borderRightWidth: 3.5,
-    borderTopRightRadius: 12,
+    top: 0,
+    right: 0,
+    borderTopWidth: 5,
+    borderRightWidth: 5,
+    borderTopRightRadius: 28,
   },
   cornerBL: {
-    bottom: -2,
-    left: -2,
-    borderBottomWidth: 3.5,
-    borderLeftWidth: 3.5,
-    borderBottomLeftRadius: 12,
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 5,
+    borderLeftWidth: 5,
+    borderBottomLeftRadius: 28,
   },
   cornerBR: {
-    bottom: -2,
-    right: -2,
-    borderBottomWidth: 3.5,
-    borderRightWidth: 3.5,
-    borderBottomRightRadius: 12,
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 5,
+    borderRightWidth: 5,
+    borderBottomRightRadius: 28,
   },
   hintText: {
-    color: '#a1a1aa',
-    fontSize: 13,
-    marginTop: 14,
-    marginBottom: 16,
+    color: 'rgba(255, 255, 255, 0.88)',
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 26,
     textAlign: 'center',
-    lineHeight: 18,
-    paddingHorizontal: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
-  bottomCloseBtn: {
-    width: '100%',
-    paddingVertical: 13,
-    borderRadius: 14,
-    backgroundColor: '#27272a',
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 20,
+  },
+  torchBtn: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 7,
   },
-  bottomCloseText: {
-    color: '#e4e4e7',
-    fontSize: 15,
-    fontWeight: '600',
+  torchBtnOff: {
+    backgroundColor: 'rgba(30, 30, 30, 0.65)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
   },
-  permissionBox: {
-    paddingVertical: 32,
-    paddingHorizontal: 20,
-    alignItems: 'center',
+  torchBtnOn: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#ffffff',
   },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#27272a',
+  permissionContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingHorizontal: 28,
+    backgroundColor: '#000000',
+  },
+  permIconCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#1c1c1e',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   permTitle: {
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: '700',
     color: '#ffffff',
-    marginBottom: 8,
+    marginBottom: 10,
     textAlign: 'center',
   },
   permSub: {
     fontSize: 14,
-    color: '#a1a1aa',
+    color: '#94a3b8',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 21,
+    marginBottom: 28,
+    paddingHorizontal: 12,
   },
   grantBtn: {
     backgroundColor: '#007aff',
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 14,
-    marginBottom: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 16,
     width: '100%',
     alignItems: 'center',
+    marginBottom: 14,
   },
   grantBtnText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
   },
   dismissBtn: {
