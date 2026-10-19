@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, memo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -34,6 +34,91 @@ const MOBILE_USER_AGENT =
     ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
     : 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36';
 
+/**
+ * Script phát hiện trang Passkey/Biometric của Google và tự động chuyển sang "Thử cách khác"
+ * Được inject tự động để khắc phục lỗi không thể kích hoạt vân tay/Passkey trong WebView
+ */
+const PASSKEY_BYPASS_SCRIPT = `
+(function() {
+  if (window.__kitePasskeyWatcher) return;
+  window.__kitePasskeyWatcher = true;
+
+  function tryBypassPasskey() {
+    try {
+      var body = document.body;
+      if (!body) return;
+      var text = (body.innerText || body.textContent || '').toLowerCase();
+
+      // Kiểm tra xem có phải màn hình khoá đăng nhập / Passkey / Biometrics không
+      var isPasskey =
+        text.includes('kho\u00E1 \u0111\u0103ng nh\u1EADp') ||
+        text.includes('kh\u00F3a \u0111\u0103ng nh\u1EADp') ||
+        text.includes('s\u1EED d\u1EE5ng kho\u00E1') ||
+        text.includes('s\u1EED d\u1EE5ng kh\u00F3a') ||
+        text.includes('passkey') ||
+        text.includes('use your passkey') ||
+        text.includes('kho\u00E1 truy c\u1EADp') ||
+        text.includes('kh\u00F3a truy c\u1EADp') ||
+        document.querySelector('[data-challengetype="63"]') !== null ||
+        document.querySelector('[data-challengetype="62"]') !== null ||
+        document.querySelector('[data-challengetype="60"]') !== null;
+
+      if (isPasskey) {
+        // Tìm các phần tử có chứa "Thử cách khác" hoặc "Try another way"
+        var candidates = Array.from(document.querySelectorAll('a, button, [role="button"], [role="link"], span, div'));
+        var tryAnotherBtn = candidates.find(function(el) {
+          var t = (el.innerText || el.textContent || '').toLowerCase().trim();
+          return t === 'th\u1EED c\u00E1ch kh\u00E1c' ||
+                 t === 'th\u1EED ph\u01B0\u01A1ng th\u1EE9c kh\u00E1c' ||
+                 t.includes('c\u00E1ch kh\u00E1c') ||
+                 t.includes('ph\u01B0\u01A1ng th\u1EE9c kh\u00E1c') ||
+                 t.includes('try another') ||
+                 t.includes('another way');
+        });
+
+        if (tryAnotherBtn) {
+          tryAnotherBtn.click();
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'PASSKEY_BYPASS_CLICKED' }));
+          }
+        } else {
+          if (window.ReactNativeWebView) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'PASSKEY_PAGE_DETECTED' }));
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  // Chạy ngay lập tức
+  tryBypassPasskey();
+
+  // Bắt sự kiện khi Google gọi WebAuthn navigator.credentials.get
+  try {
+    if (navigator.credentials && navigator.credentials.get) {
+      var origGet = navigator.credentials.get;
+      navigator.credentials.get = function(options) {
+        tryBypassPasskey();
+        return origGet.apply(navigator.credentials, arguments);
+      };
+    }
+  } catch(e) {}
+
+  // Lặp kiểm tra định kỳ trong 15s để xử lý Single Page Application transitions
+  var poll = setInterval(tryBypassPasskey, 600);
+  setTimeout(function() { clearInterval(poll); }, 15000);
+
+  // MutationObserver để bắt kịp ngay khi DOM thay đổi
+  try {
+    var obs = new MutationObserver(function() {
+      tryBypassPasskey();
+    });
+    obs.observe(document.documentElement || document.body, { childList: true, subtree: true });
+  } catch(e) {}
+  true;
+})();
+`;
+
 interface GoogleAuthSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -54,6 +139,7 @@ export const GoogleAuthSheet = memo<GoogleAuthSheetProps>(
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [canGoBack, setCanGoBack] = useState<boolean>(false);
     const [displayHost, setDisplayHost] = useState<string>('accounts.google.com');
+    const [isPasskeyScreen, setIsPasskeyScreen] = useState<boolean>(false);
     const handledCallbackRef = useRef<boolean>(false);
 
     // Chuẩn bị URL OAuth mới khi mở Sheet
@@ -62,6 +148,7 @@ export const GoogleAuthSheet = memo<GoogleAuthSheetProps>(
         handledCallbackRef.current = false;
         setIsLoading(true);
         setDisplayHost('accounts.google.com');
+        setIsPasskeyScreen(false);
 
         getGoogleOAuthUrl().then((url) => {
           if (url) {
@@ -203,10 +290,12 @@ export const GoogleAuthSheet = memo<GoogleAuthSheetProps>(
                 sharedCookiesEnabled={true}
                 thirdPartyCookiesEnabled={true}
                 originWhitelist={['*']}
+                injectedJavaScript={PASSKEY_BYPASS_SCRIPT}
                 onLoadStart={() => setIsLoading(true)}
-                onLoadEnd={() => setIsLoading(false)}
                 onNavigationStateChange={(navState) => {
                   setCanGoBack(navState.canGoBack);
+                  // Reset passkey indicator khi điều hướng sang trang mới
+                  setIsPasskeyScreen(false);
                   try {
                     if (navState.url) {
                       const lower = navState.url.toLowerCase();
@@ -224,6 +313,26 @@ export const GoogleAuthSheet = memo<GoogleAuthSheetProps>(
                   if (navState.url && isOAuthCallback(navState.url)) {
                     handleOAuthCallback(navState.url);
                   }
+                }}
+                onLoadEnd={() => {
+                  setIsLoading(false);
+                  // Inject passkey bypass script mỗi khi trang tải xong
+                  try {
+                    webViewRef.current?.injectJavaScript(PASSKEY_BYPASS_SCRIPT);
+                  } catch (e) {}
+                }}
+                onMessage={(event) => {
+                  try {
+                    const data = JSON.parse(event.nativeEvent.data);
+                    if (data.type === 'PASSKEY_PAGE_DETECTED') {
+                      // Trang passkey phát hiện nhưng chưa tìm thấy nút "Thử cách khác" tự động
+                      // → hiện overlay button để người dùng biết
+                      setIsPasskeyScreen(true);
+                    } else if (data.type === 'PASSKEY_BYPASS_CLICKED') {
+                      // Đã auto-click thành công, ẩn overlay
+                      setIsPasskeyScreen(false);
+                    }
+                  } catch (e) {}
                 }}
                 onShouldStartLoadWithRequest={(request) => {
                   const reqUrl = request.url || '';
@@ -287,6 +396,44 @@ export const GoogleAuthSheet = memo<GoogleAuthSheetProps>(
                 }}
                 style={styles.webview}
               />
+
+              {/* Overlay nút "Thử cách khác" khi phát hiện màn hình Passkey/Biometric */}
+              {isPasskeyScreen && (
+                <View style={styles.passkeyOverlay}>
+                  <View style={styles.passkeyCard}>
+                    <Text style={styles.passkeyTitle}>🔐 Đăng nhập bằng khoá</Text>
+                    <Text style={styles.passkeyDesc}>
+                      Trình duyệt Kite không hỗ trợ xác thực sinh trắc học qua WebView.{'\n'}
+                      Nhấn nút bên dưới để chọn phương thức đăng nhập khác.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.tryAnotherBtn}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        setIsPasskeyScreen(false);
+                        try {
+                          // Thử inject lại và tìm nút "Thử cách khác"
+                          const manualScript = `
+                            (function() {
+                              var allEls = Array.from(document.querySelectorAll('a, button, [role="link"], [role="button"]'));
+                              var btn = allEls.find(function(el) {
+                                var txt = (el.textContent || el.innerText || '').toLowerCase().trim();
+                                return txt.includes('c\u00E1ch kh\u00E1c') || txt.includes('try another') || txt.includes('another way');
+                              });
+                              if (btn) { btn.click(); }
+                              else { history.back(); }
+                              true;
+                            })();
+                          `;
+                          webViewRef.current?.injectJavaScript(manualScript);
+                        } catch (e) {}
+                      }}
+                    >
+                      <Text style={styles.tryAnotherBtnText}>Thử cách khác</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Thanh điều hướng dưới cùng chuẩn Chrome: Nút quay lại '<' và nút làm mới */}
@@ -425,5 +572,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1a73e8',
+  },
+  passkeyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+  },
+  passkeyCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 24,
+    marginHorizontal: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 16,
+  },
+  passkeyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#202124',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  passkeyDesc: {
+    fontSize: 13.5,
+    color: '#5f6368',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  tryAnotherBtn: {
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: '#1a73e8',
+  },
+  tryAnotherBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 });

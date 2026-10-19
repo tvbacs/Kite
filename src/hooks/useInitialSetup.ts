@@ -233,10 +233,7 @@ export function useInitialSetup({
         AsyncStorage.getItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY),
       ]);
 
-      if (!tabsData && tabsKey !== STORAGE_PERSISTED_TABS_KEY) {
-        tabsData = await AsyncStorage.getItem(STORAGE_PERSISTED_TABS_KEY);
-        savedActiveId = await AsyncStorage.getItem(STORAGE_ACTIVE_TAB_ID_KEY);
-      }
+      // Không bao giờ nạp tab dùng chung STORAGE_PERSISTED_TABS_KEY vào tài khoản cá nhân khi không bật đồng bộ
 
       let parsedSavedTabs: BrowserTab[] = [];
       if (tabsData) {

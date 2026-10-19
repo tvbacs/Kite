@@ -225,8 +225,8 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
       let list: SavedCredential[] = stored ? JSON.parse(stored) : [];
       if (!Array.isArray(list)) list = [];
 
-      // Kiểm tra và hợp nhất mật khẩu từ khóa dùng chung STORAGE_PASSWORDS_KEY để không thất lạc
-      if (pwdKey !== STORAGE_PASSWORDS_KEY) {
+      // Chỉ hợp nhất mật khẩu từ khóa dùng chung STORAGE_PASSWORDS_KEY khi người dùng bật đồng bộ toàn bộ tài khoản
+      if (syncAllAccounts && pwdKey !== STORAGE_PASSWORDS_KEY) {
         try {
           const sharedStored = await AsyncStorage.getItem(STORAGE_PASSWORDS_KEY);
           if (sharedStored) {

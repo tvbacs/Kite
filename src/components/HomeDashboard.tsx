@@ -1276,8 +1276,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         } catch {}
       }
 
-      // Luôn kiểm tra khóa dùng chung STORAGE_SHORTCUTS_KEY làm fallback nếu khóa riêng chưa có dữ liệu
-      if (!loadedShortcuts || loadedShortcuts.length === 0) {
+      // Chỉ kiểm tra khóa dùng chung STORAGE_SHORTCUTS_KEY làm fallback nếu đang bật đồng bộ hoặc chưa đăng nhập
+      if ((isSyncOn || !activeEmail) && (!loadedShortcuts || loadedShortcuts.length === 0)) {
         try {
           const fallback = await AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY);
           if (fallback) {
@@ -1320,7 +1320,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               if (cloudBm && cloudBm.length > 0) {
                 loadedShortcuts = cloudBm;
                 await AsyncStorage.setItem(shortcutsKey, JSON.stringify(cloudBm)).catch(() => {});
-                await AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(cloudBm)).catch(() => {});
+                if (isSyncOn) {
+                  await AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(cloudBm)).catch(() => {});
+                }
               }
             } catch (eC) {}
           }
@@ -3050,8 +3052,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         visible={googleAuthSheetVisible}
         onClose={() => setGoogleAuthSheetVisible(false)}
         onSuccess={async (newProfile) => {
+          const previousProfile = userProfile;
           setUserProfile(newProfile);
-          onUpdateProfile?.(newProfile);
+          if (onSwitchAccount) {
+            onSwitchAccount(newProfile, previousProfile);
+          } else if (onUpdateProfile) {
+            onUpdateProfile(newProfile);
+          }
           await loadSavedData();
         }}
         showToast={onShowToast || (() => {})}

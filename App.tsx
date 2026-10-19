@@ -62,7 +62,7 @@ import { useShieldAndExtensions } from './src/hooks/useShieldAndExtensions';
 import { useBookmarksAndHistory } from './src/hooks/useBookmarksAndHistory';
 import { useInitialSetup } from './src/hooks/useInitialSetup';
 import { useWebViewRequest } from './src/hooks/useWebViewRequest';
-import { saveCloudSettings } from './src/services/supabase';
+import { saveCloudSettings, syncUserCloudData } from './src/services/supabase';
 import { isLegitimateAuthUrl } from './src/constants/blocklist';
 
 import { styles } from './src/styles/App.styles';
@@ -473,10 +473,26 @@ function BrowserMain() {
       await persistTabsState(tabs, activeTabId, previousProfile.email);
     }
 
+    // Tạm dừng và khóa media của tất cả các WebView của tài khoản trước
+    Object.values(webViewRefs.current).forEach((ref: any) => {
+      try {
+        ref?.stopLoading?.();
+        ref?.injectJavaScript?.(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+      } catch {}
+    });
+
     auth.setUserProfile(newProfile);
     auth.userProfileRef.current = newProfile;
     if (newProfile.isLoggedIn && newProfile.email) {
       await AsyncStorage.setItem('@kite_user_profile', JSON.stringify(newProfile));
+      // Tải và đồng bộ dữ liệu đám mây của tài khoản mới
+      syncUserCloudData(newProfile, {
+        onSettingsLoaded: (settings: any) => {
+          if (settings.searchEngineId && (SEARCH_ENGINES as any)[settings.searchEngineId]) {
+            setCurrentEngineId(settings.searchEngineId as any);
+          }
+        },
+      }).catch(() => {});
     } else {
       await AsyncStorage.removeItem('@kite_user_profile');
     }
@@ -529,6 +545,7 @@ function BrowserMain() {
       setActiveTabId(defaultTab.id);
       setInputUrl('');
       setIsIncognito(false);
+      persistTabsState([defaultTab], defaultTab.id, newEmail);
     } else {
       const defaultTab: BrowserTab = {
         id: `tab-${Date.now()}`,
@@ -541,6 +558,7 @@ function BrowserMain() {
       setActiveTabId(defaultTab.id);
       setInputUrl('');
       setIsIncognito(false);
+      persistTabsState([defaultTab], defaultTab.id);
     }
   };
   handleSwitchAccountRef.current = handleSwitchAccount;

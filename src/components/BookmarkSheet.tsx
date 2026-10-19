@@ -86,27 +86,30 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
           if (cloudBm && cloudBm.length > 0) {
             setBookmarks(cloudBm);
             await AsyncStorage.setItem(key, JSON.stringify(cloudBm));
-            await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(cloudBm));
             return;
           }
         } catch (eCloud) {}
       }
 
-      // Luôn kiểm tra khóa dùng chung STORAGE_BOOKMARKS_KEY làm fallback để không mất dấu trang
-      const shared = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
-      if (shared) {
-        try {
-          const parsed = JSON.parse(shared);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setBookmarks(parsed);
-            await AsyncStorage.setItem(key, JSON.stringify(parsed));
-            return;
-          }
-        } catch (e) {}
+      // Chỉ kiểm tra khóa dùng chung STORAGE_BOOKMARKS_KEY làm fallback cho người dùng chưa đăng nhập
+      if (!userEmail) {
+        const shared = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
+        if (shared) {
+          try {
+            const parsed = JSON.parse(shared);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setBookmarks(parsed);
+              return;
+            }
+          } catch (e) {}
+        }
       }
+
       setBookmarks(DEFAULT_BOOKMARKS);
       await AsyncStorage.setItem(key, JSON.stringify(DEFAULT_BOOKMARKS));
-      await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(DEFAULT_BOOKMARKS));
+      if (!userEmail) {
+        await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(DEFAULT_BOOKMARKS));
+      }
     } catch (e) {
       console.log('Error loading bookmarks:', e);
     }
@@ -116,7 +119,9 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
     setBookmarks(newList);
     try {
       await AsyncStorage.setItem(getStorageKey(), JSON.stringify(newList));
-      await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(newList));
+      if (!userEmail) {
+        await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(newList));
+      }
       if (userEmail) {
         syncCloudBookmarks(userEmail, newList, userEmail).catch(() => {});
       }
