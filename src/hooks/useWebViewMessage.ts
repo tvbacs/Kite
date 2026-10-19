@@ -5,7 +5,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
 import { BrowserTab, ShieldStats, UserProfile, DetectedMedia, isPersistable } from '../types/browser';
-import { getDomain } from '../utils/tld';
+import { getDomain, getHostname } from '../utils/tld';
 import {
   translateItemsBatch,
 } from '../services/translateService';
@@ -455,11 +455,13 @@ export function useWebViewMessage({
       } else if (data.type === 'PASSWORD_FORM_FOCUSED') {
         const targetTab = tabs.find((t) => t.id === (data.tabId || fromTabId)) || currentTab;
         if (!isPersistable(targetTab) || isIncognito) return;
-        const curUrl = currentTab?.url || '';
-        const currentDomain = (getDomain(curUrl) || data.website || '').toLowerCase().trim();
-        if (!currentDomain) return;
 
-        AsyncStorage.getItem(STORAGE_PASSWORD_SETTINGS_KEY).then((settingsRes) => {
+        // Ưu tiên hostname trực tiếp từ web page đang focus (data.website), fallback đến hostname URL của tab
+        const rawWebsite = (data.website || getHostname(targetTab?.url || '') || '').toLowerCase().trim();
+        const targetDomain = (getDomain(rawWebsite) || rawWebsite).toLowerCase().trim();
+        if (!targetDomain) return;
+
+        AsyncStorage.getItem(STORAGE_PASSWORD_SETTINGS_KEY).then(async (settingsRes) => {
           let autoFillEnabled = true;
           if (settingsRes) {
             try {
@@ -469,29 +471,62 @@ export function useWebViewMessage({
           }
           if (!autoFillEnabled) return;
 
-          AsyncStorage.getItem(STORAGE_PASSWORDS_KEY).then((passRes) => {
-            if (!passRes) return;
+          const email = userProfileRef.current?.email?.toLowerCase();
+          const syncAccountsVal = await AsyncStorage.getItem('@kite_sync_all_accounts');
+          const isSync = syncAccountsVal ? JSON.parse(syncAccountsVal) : false;
+          const userKey = email && !isSync ? `${STORAGE_PASSWORDS_KEY}_${email}` : STORAGE_PASSWORDS_KEY;
+
+          // Nạp đồng thời từ khóa riêng của tài khoản và khóa dùng chung để không bao giờ bị sót mật khẩu đã lưu
+          const [userPassRes, sharedPassRes] = await Promise.all([
+            AsyncStorage.getItem(userKey),
+            userKey !== STORAGE_PASSWORDS_KEY ? AsyncStorage.getItem(STORAGE_PASSWORDS_KEY) : Promise.resolve(null),
+          ]);
+
+          let combinedList: SavedCredential[] = [];
+          if (userPassRes) {
             try {
-              const list: SavedCredential[] = JSON.parse(passRes);
-              if (!Array.isArray(list) || list.length === 0) return;
-
-              const matching = list.filter((c) => {
-                const credWeb = (c.website || '').toLowerCase().trim();
-                return (
-                  credWeb === currentDomain ||
-                  credWeb.includes(currentDomain) ||
-                  currentDomain.includes(credWeb) ||
-                  credWeb.endsWith('.' + currentDomain) ||
-                  currentDomain.endsWith('.' + credWeb)
-                );
-              });
-
-              if (matching.length > 0) {
-                matching.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-                setActiveAutofillCredential(matching[0]);
+              const parsed = JSON.parse(userPassRes);
+              if (Array.isArray(parsed)) combinedList.push(...parsed);
+            } catch (e) {}
+          }
+          if (sharedPassRes) {
+            try {
+              const parsed = JSON.parse(sharedPassRes);
+              if (Array.isArray(parsed)) {
+                parsed.forEach((item) => {
+                  if (
+                    !combinedList.some(
+                      (c) =>
+                        c.id === item.id ||
+                        (c.website.toLowerCase() === item.website.toLowerCase() &&
+                          c.username.toLowerCase() === item.username.toLowerCase())
+                    )
+                  ) {
+                    combinedList.push(item);
+                  }
+                });
               }
             } catch (e) {}
+          }
+
+          if (combinedList.length === 0) return;
+
+          // So khớp chính xác tên miền hoặc tên miền phụ (TUYỆT ĐỐI không dùng .includes() bừa bãi tránh gợi ý chéo!)
+          const matching = combinedList.filter((c) => {
+            const credWeb = (c.website || '').toLowerCase().trim();
+            const credDomain = (getDomain(credWeb) || credWeb).toLowerCase().trim();
+            return (
+              credDomain === targetDomain ||
+              credWeb === rawWebsite ||
+              rawWebsite.endsWith('.' + credWeb) ||
+              credWeb.endsWith('.' + rawWebsite)
+            );
           });
+
+          if (matching.length > 0) {
+            matching.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+            setActiveAutofillCredential(matching[0]);
+          }
         });
       } else if (data.type === 'IMAGE_LONG_PRESS') {
         if (data.src) {
@@ -616,7 +651,18 @@ export function useWebViewMessage({
   const handleConfirmSavePassword = async () => {
     if (!passwordSavePrompt) return;
     const { website, username, passwordSecret } = passwordSavePrompt;
-    const saved = await saveCredentialSecurely(website, username, passwordSecret);
+    const email = userProfileRef.current?.email?.toLowerCase();
+    const syncAccountsVal = await AsyncStorage.getItem('@kite_sync_all_accounts');
+    const isSync = syncAccountsVal ? JSON.parse(syncAccountsVal) : false;
+    const userKey = email && !isSync ? `${STORAGE_PASSWORDS_KEY}_${email}` : STORAGE_PASSWORDS_KEY;
+
+    // Lưu vào khóa tài khoản
+    const saved = await saveCredentialSecurely(website, username, passwordSecret, userKey);
+    // Nếu có khóa tài khoản riêng, lưu thêm một bản sao vào STORAGE_PASSWORDS_KEY để không bao giờ thất lạc
+    if (userKey !== STORAGE_PASSWORDS_KEY) {
+      await saveCredentialSecurely(website, username, passwordSecret, STORAGE_PASSWORDS_KEY);
+    }
+
     if (saved && userProfileRef.current?.isLoggedIn) {
       const email = userProfileRef.current.email;
       const userId = userProfileRef.current.id || email;

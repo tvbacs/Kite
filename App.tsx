@@ -87,7 +87,7 @@ import { BrowserTab, UserProfile } from './src/types/browser';
 
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
-const GOOGLE_AUTH_USER_AGENT =
+const DEFAULT_MOBILE_USER_AGENT =
   Platform.OS === 'ios'
     ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
     : 'Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.122 Mobile Safari/537.36';
@@ -938,6 +938,37 @@ function BrowserMain() {
   const handleTabHttpError = useCallback((tabId: string, e?: any) => {
     const statusCode = e?.nativeEvent?.statusCode;
     const tab = tabsRef.current?.find((t) => t.id === tabId);
+    const failUrl = (e?.nativeEvent?.url || tab?.url || '').toLowerCase();
+
+    // Tự động cứu người dùng khỏi lỗi HTTP 400 Bad Request trên các trang SetSID / xác thực của Google & YouTube
+    if (
+      statusCode === 400 &&
+      failUrl &&
+      (failUrl.includes('/setsid') ||
+        failUrl.includes('accounts.youtube.com') ||
+        failUrl.includes('accounts.google.'))
+    ) {
+      try {
+        const parsed = new URL(failUrl);
+        let continueUrl = parsed.searchParams.get('continue');
+        if (continueUrl) {
+          while (continueUrl && (continueUrl.includes('%3A') || continueUrl.includes('%2F'))) {
+            const decoded = decodeURIComponent(continueUrl);
+            if (decoded === continueUrl) break;
+            continueUrl = decoded;
+          }
+          if (continueUrl.startsWith('http')) {
+            nav.handleNavigate(continueUrl);
+            return;
+          }
+        }
+      } catch (err) {}
+      if (failUrl.includes('youtube')) {
+        nav.handleNavigate('https://m.youtube.com/');
+        return;
+      }
+    }
+
     if (statusCode && statusCode >= 500 && tab?.url) {
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
       setTabs((prev) =>
@@ -1147,9 +1178,7 @@ function BrowserMain() {
                   tab.url?.includes('searchbyimage') ||
                   tab.url?.includes('images.google.com')
                 ? DESKTOP_USER_AGENT
-                : isAuthUrl
-                ? GOOGLE_AUTH_USER_AGENT
-                : undefined;
+                : DEFAULT_MOBILE_USER_AGENT;
 
               const injectedBefore =
                 (baseInjectedBefore + shield.getExtensionsScriptForTab(tab.url, 'document_start')) ||

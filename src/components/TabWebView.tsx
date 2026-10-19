@@ -23,7 +23,7 @@ interface TabWebViewProps {
   onLoadProgress: (tabId: string, event: any) => void;
   onLoadEnd: (tabId: string, event?: any) => void;
   onError: (tabId: string, event: any) => void;
-  onHttpError: (tabId: string) => void;
+  onHttpError: (tabId: string, event?: any) => void;
   onFileDownload?: (event: any) => void;
 }
 
@@ -137,8 +137,8 @@ export const TabWebView = memo<TabWebViewProps>(
       onError(tab.id, event);
     };
 
-    const handleHttpError = () => {
-      onHttpError(tab.id);
+    const handleHttpError = (event: any) => {
+      onHttpError(tab.id, event);
     };
 
     return (

@@ -104,6 +104,9 @@ export function useBookmarksAndHistory({
         showToast('Đã lưu vào dấu trang');
       }
       await AsyncStorage.setItem(bmKey, JSON.stringify(list));
+      if (bmKey !== STORAGE_BOOKMARKS_KEY) {
+        await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(list)).catch(() => {});
+      }
       if (userProfileRef.current.isLoggedIn && (userProfileRef.current.id || userProfileRef.current.email)) {
         syncCloudBookmarks(
           userProfileRef.current.id || userProfileRef.current.email!,

@@ -254,10 +254,13 @@ export function isLegitimateAuthUrl(urlStr: string): boolean {
   if (!urlStr || typeof urlStr !== 'string') return false;
   const lower = urlStr.toLowerCase();
 
-  // 1. Google OAuth & Identity Services
+  // 1. Google & YouTube OAuth, Identity Services & SetSID Handshakes
   if (
     lower.includes('accounts.google.') ||
     lower.includes('myaccount.google.') ||
+    lower.includes('accounts.youtube.') ||
+    lower.includes('/setsid') ||
+    lower.includes('/accounts/setsid') ||
     lower.includes('oauth2.googleapis.com') ||
     lower.includes('identity.google.com') ||
     lower.includes('apis.google.com/js') ||

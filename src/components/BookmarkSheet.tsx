@@ -78,8 +78,21 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
       if (data) {
         setBookmarks(JSON.parse(data));
       } else {
+        // Luôn kiểm tra khóa dùng chung STORAGE_BOOKMARKS_KEY làm fallback để không mất dấu trang
+        const shared = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
+        if (shared) {
+          try {
+            const parsed = JSON.parse(shared);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setBookmarks(parsed);
+              await AsyncStorage.setItem(key, JSON.stringify(parsed));
+              return;
+            }
+          } catch (e) {}
+        }
         setBookmarks(DEFAULT_BOOKMARKS);
         await AsyncStorage.setItem(key, JSON.stringify(DEFAULT_BOOKMARKS));
+        await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(DEFAULT_BOOKMARKS));
       }
     } catch (e) {
       console.log('Error loading bookmarks:', e);
@@ -90,6 +103,7 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
     setBookmarks(newList);
     try {
       await AsyncStorage.setItem(getStorageKey(), JSON.stringify(newList));
+      await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(newList));
       if (userEmail) {
         syncCloudBookmarks(userEmail, newList, userEmail).catch(() => {});
       }

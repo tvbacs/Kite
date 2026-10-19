@@ -56,6 +56,51 @@ export const INJECTED_BEFORE_CONTENT = `
     }
   } catch(eGoogle) {}
 
+  // 0a-1. Tự động phục hồi khi gặp lỗi 400 Bad Request trên các endpoint SetSID (Google / YouTube)
+  try {
+    var _fullHref = (window.location.href || '').toLowerCase();
+    if (_fullHref.indexOf('/setsid') !== -1 || _fullHref.indexOf('/accounts/setsid') !== -1) {
+      var autoRecoverSetSid = function() {
+        var bodyContent = (document.body ? document.body.innerText || '' : '').toLowerCase();
+        if (
+          bodyContent.indexOf('400.') !== -1 ||
+          bodyContent.indexOf('đã xảy ra lỗi') !== -1 ||
+          bodyContent.indexOf('that’s an error') !== -1 ||
+          bodyContent.indexOf('bad request') !== -1
+        ) {
+          try {
+            var urlParams = new URLSearchParams(window.location.search);
+            var continueTarget = urlParams.get('continue');
+            if (continueTarget) {
+              while (continueTarget && (continueTarget.indexOf('%3A') !== -1 || continueTarget.indexOf('%2F') !== -1)) {
+                var decoded = decodeURIComponent(continueTarget);
+                if (decoded === continueTarget) break;
+                continueTarget = decoded;
+              }
+              if (continueTarget && (continueTarget.indexOf('http://') === 0 || continueTarget.indexOf('https://') === 0)) {
+                window.location.replace(continueTarget);
+                return;
+              }
+            }
+          } catch(eParam) {}
+          if (_fullHref.indexOf('youtube') !== -1) {
+            window.location.replace('https://m.youtube.com/');
+          } else {
+            window.location.replace('https://www.google.com/');
+          }
+        }
+      };
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        autoRecoverSetSid();
+      } else {
+        document.addEventListener('DOMContentLoaded', autoRecoverSetSid);
+      }
+      setTimeout(autoRecoverSetSid, 100);
+      setTimeout(autoRecoverSetSid, 300);
+      setTimeout(autoRecoverSetSid, 800);
+    }
+  } catch(eRecover) {}
+
   // 0a-2. Bắt các sự kiện chuyển trang ngầm SPA (pushState, replaceState, popstate, hashchange)
   // để React Native luôn đồng bộ chính xác 100% URL hiện tại của tab,
   // kể cả khi người dùng xem video, livestream, chuyển route trong các trang web động (YouTube, Stripchat, Twitter...)

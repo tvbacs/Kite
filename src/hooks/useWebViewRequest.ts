@@ -103,6 +103,41 @@ export function useWebViewRequest({
       return false;
     }
 
+    // 0a. Tự động bypass lỗi 400 SetSID cross-domain của Google & YouTube trên WebKit iOS
+    if (reqUrl.includes('/setsid') || reqUrl.includes('/accounts/setsid')) {
+      try {
+        const parsed = new URL(request.url);
+        let continueUrl = parsed.searchParams.get('continue');
+        if (continueUrl) {
+          try {
+            while (continueUrl && (continueUrl.includes('%3A') || continueUrl.includes('%2F'))) {
+              const decoded = decodeURIComponent(continueUrl);
+              if (decoded === continueUrl) break;
+              continueUrl = decoded;
+            }
+          } catch (eDec) {}
+
+          if (
+            continueUrl.startsWith('http://') ||
+            continueUrl.startsWith('https://') ||
+            continueUrl.startsWith('kite://')
+          ) {
+            setTimeout(() => {
+              setTabs((prev) => {
+                const updated = prev.map((t) =>
+                  t.id === activeTabId ? { ...t, url: continueUrl! } : t
+                );
+                persistTabsState(updated);
+                return updated;
+              });
+              setInputUrl(continueUrl!);
+            }, 0);
+            return false;
+          }
+        }
+      } catch (e) {}
+    }
+
     // Fast-path 2: Search engines (Google, Bing, DuckDuckGo, Yahoo) luôn cho qua 0ms
     if (
       reqUrl.includes('google.') ||
@@ -124,41 +159,16 @@ export function useWebViewRequest({
       return true;
     }
 
-    // 0. Cho phép toàn bộ các trang OAuth, SSO, Authentication và cổng thanh toán chính thức (Google, Apple, Facebook, Microsoft, Zalo, MoMo, VNPay...)
+    // 0. Cho phép toàn bộ các trang OAuth, SSO, Authentication và cổng thanh toán chính thức (Google, YouTube, Apple, Facebook, Microsoft, Zalo, MoMo, VNPay...)
     if (
       isLegitimateAuthUrl(request.url) ||
-      reqUrl.includes('accounts.google.com') ||
+      reqUrl.includes('accounts.google.') ||
+      reqUrl.includes('accounts.youtube.com') ||
       reqUrl.includes('myaccount.google.com') ||
       reqUrl.includes('oauth2.googleapis.com') ||
       reqUrl.includes('supabase.co/auth/v1/callback') ||
       reqUrl.includes('supabase.co/auth/v1/authorize')
     ) {
-      // 0a. Tự động bypass lỗi 400 SetSID cross-domain của Google trên WebKit
-      if (reqUrl.includes('/setsid') || reqUrl.includes('/accounts/setsid')) {
-        try {
-          const parsed = new URL(request.url);
-          const continueUrl = parsed.searchParams.get('continue');
-          if (
-            continueUrl &&
-            (continueUrl.includes('google.') ||
-              continueUrl.includes('supabase.co') ||
-              continueUrl.startsWith('kite://'))
-          ) {
-            setTimeout(() => {
-              setTabs((prev) => {
-                const updated = prev.map((t) =>
-                  t.id === activeTabId ? { ...t, url: continueUrl } : t
-                );
-                persistTabsState(updated);
-                return updated;
-              });
-              setInputUrl(continueUrl);
-            }, 0);
-            return false;
-          }
-        } catch (e) {}
-      }
-
       // 1. Nếu là Callback xác thực trả về App
       if (isOAuthCallback(request.url)) {
       if (processedOAuthUrlsRef.current.has(request.url)) {
@@ -317,6 +327,41 @@ export function useWebViewRequest({
     const prevCanGoForward = canGoForwardRef.current[tabId];
     canGoBackRef.current[tabId] = navState.canGoBack;
     canGoForwardRef.current[tabId] = navState.canGoForward;
+
+    // Tự động bypass SetSID nếu xuất hiện trong điều hướng trạng thái
+    if (navState.url && navState.url.toLowerCase().includes('/setsid')) {
+      try {
+        const parsed = new URL(navState.url);
+        let continueUrl = parsed.searchParams.get('continue');
+        if (continueUrl) {
+          try {
+            while (continueUrl && (continueUrl.includes('%3A') || continueUrl.includes('%2F'))) {
+              const decoded = decodeURIComponent(continueUrl);
+              if (decoded === continueUrl) break;
+              continueUrl = decoded;
+            }
+          } catch (eDec) {}
+
+          if (
+            continueUrl.startsWith('http://') ||
+            continueUrl.startsWith('https://') ||
+            continueUrl.startsWith('kite://')
+          ) {
+            setTabs((prev) => {
+              const updated = prev.map((t) =>
+                t.id === tabId ? { ...t, url: continueUrl! } : t
+              );
+              persistTabsState(updated);
+              return updated;
+            });
+            if (tabId === activeTabIdRef.current) {
+              setInputUrl(continueUrl!);
+            }
+            return;
+          }
+        }
+      } catch (eSetSid) {}
+    }
 
     if (navState.url && isOAuthCallback(navState.url)) {
       if (processedOAuthUrlsRef.current.has(navState.url)) {

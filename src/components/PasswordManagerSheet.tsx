@@ -225,6 +225,35 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
       let list: SavedCredential[] = stored ? JSON.parse(stored) : [];
       if (!Array.isArray(list)) list = [];
 
+      // Kiểm tra và hợp nhất mật khẩu từ khóa dùng chung STORAGE_PASSWORDS_KEY để không thất lạc
+      if (pwdKey !== STORAGE_PASSWORDS_KEY) {
+        try {
+          const sharedStored = await AsyncStorage.getItem(STORAGE_PASSWORDS_KEY);
+          if (sharedStored) {
+            const sharedList: SavedCredential[] = JSON.parse(sharedStored);
+            if (Array.isArray(sharedList) && sharedList.length > 0) {
+              let hasMerged = false;
+              sharedList.forEach((sp) => {
+                if (
+                  !list.some(
+                    (p) =>
+                      p.id === sp.id ||
+                      (p.website.toLowerCase() === sp.website.toLowerCase() &&
+                        p.username.toLowerCase() === sp.username.toLowerCase())
+                  )
+                ) {
+                  list.push(sp);
+                  hasMerged = true;
+                }
+              });
+              if (hasMerged) {
+                await AsyncStorage.setItem(pwdKey, JSON.stringify(list));
+              }
+            }
+          }
+        } catch (eShared) {}
+      }
+
       // Đồng bộ từ Supabase nếu người dùng đã đăng nhập tài khoản
       if (userProfile?.isLoggedIn && (userProfile?.id || userProfile?.email)) {
         const userId = userProfile.id || userProfile.email!;

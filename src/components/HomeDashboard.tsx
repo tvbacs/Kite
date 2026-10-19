@@ -30,7 +30,8 @@ import { SEARCH_ENGINES } from '../constants/searchEngines';
 import { theme } from '../constants/theme';
 import { VoiceSearchModal } from './VoiceSearchModal';
 import { GoogleAccountSheet } from './GoogleAccountSheet';
-import { getGoogleOAuthUrl, saveCloudSettings, syncUserCloudData } from '../services/supabase';
+import { GoogleAuthSheet } from './GoogleAuthSheet';
+import { getGoogleOAuthUrl, saveCloudSettings, syncUserCloudData, syncCloudBookmarks } from '../services/supabase';
 import { preconnectTarget } from '../services/networkPreconnectService';
 
 const GoogleGIcon = ({ size = 20 }: { size?: number }) => (
@@ -701,6 +702,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const [engineModalVisible, setEngineModalVisible] = useState<boolean>(false);
   const [userModalVisible, setUserModalVisible] = useState<boolean>(false);
   const [googleAccountSheetVisible, setGoogleAccountSheetVisible] = useState<boolean>(false);
+  const [googleAuthSheetVisible, setGoogleAuthSheetVisible] = useState<boolean>(false);
   const [voiceModalVisible, setVoiceModalVisible] = useState<boolean>(false);
   const [currentThemeId, setCurrentThemeId] = useState<string>('light');
 
@@ -1305,22 +1307,30 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         } catch {}
       }
 
-      // NẾU BẬT ĐỒNG BỘ TOÀN BỘ (isSyncOn === true):
-      // Nếu chưa có lối tắt ở key hiện tại, mới tìm fallback ở key dùng chung STORAGE_SHORTCUTS_KEY
-      if (isSyncOn && (!loadedShortcuts || loadedShortcuts.length === 0)) {
+      // Luôn kiểm tra khóa dùng chung STORAGE_SHORTCUTS_KEY làm fallback nếu khóa riêng chưa có dữ liệu
+      if (!loadedShortcuts || loadedShortcuts.length === 0) {
         try {
           const fallback = await AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY);
           if (fallback) {
             const parsed = JSON.parse(fallback);
             if (Array.isArray(parsed) && parsed.length > 0) {
               loadedShortcuts = parsed;
+              await AsyncStorage.setItem(shortcutsKey, JSON.stringify(parsed)).catch(() => {});
             }
           }
         } catch {}
       }
 
+      // Kiểm tra bộ nhớ RAM cache nếu chưa có từ bộ nhớ flash
+      if (!loadedShortcuts || loadedShortcuts.length === 0) {
+        const memCached = cachedShortcutsMap.get(activeEmail || '__shared__');
+        if (memCached && memCached.length > 0) {
+          loadedShortcuts = memCached;
+          await AsyncStorage.setItem(shortcutsKey, JSON.stringify(memCached)).catch(() => {});
+        }
+      }
+
       // Áp dụng lối tắt:
-      // Nếu không bật đồng bộ và tài khoản chưa có lối tắt riêng -> DEFAULT_BOOKMARKS độc lập, không mượn tài khoản khác
       if (loadedShortcuts && loadedShortcuts.length > 0) {
         setShortcuts(loadedShortcuts);
         cachedShortcutsMap.set(activeEmail || '__shared__', loadedShortcuts);
@@ -1328,9 +1338,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         setShortcuts(DEFAULT_BOOKMARKS);
         cachedShortcutsMap.set(activeEmail || '__shared__', DEFAULT_BOOKMARKS);
         AsyncStorage.setItem(shortcutsKey, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
-        if (isSyncOn) {
-          AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
-        }
+        AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
       }
 
       // Hình nền: Phải reset về null nếu tài khoản này không cài hình nền riêng
@@ -1419,8 +1427,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     try {
       const key = syncAllAccounts || !activeEmail ? STORAGE_SHORTCUTS_KEY : `${STORAGE_SHORTCUTS_KEY}_${activeEmail}`;
       await AsyncStorage.setItem(key, JSON.stringify(newList));
-      if (syncAllAccounts) {
-        await AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(newList));
+      // Luôn lưu vào STORAGE_SHORTCUTS_KEY để làm bản sao an toàn
+      await AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(newList));
+
+      // Đồng bộ Cloud nếu đã đăng nhập tài khoản
+      const userId = userProfile.id || activeEmail;
+      if (userProfile.isLoggedIn && userId) {
+        syncCloudBookmarks(userId, newList, activeEmail).catch(() => {});
       }
     } catch (e) {
       console.log('Error saving shortcuts:', e);
@@ -2878,19 +2891,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               {/* Nút Đăng nhập hoặc Thêm tài khoản */}
               <TouchableOpacity
                 style={styles.addAccountRow}
-                onPress={async () => {
+                onPress={() => {
                   setUserModalVisible(false);
                   setIsDeleteMode(false);
-                  try {
-                    const oauthUrl = await getGoogleOAuthUrl();
-                    if (oauthUrl) {
-                      onSelectUrl(oauthUrl);
-                      return;
-                    }
-                  } catch (e) {}
-                  onSelectUrl(
-                    'https://ivwnjrugslrvsxssufco.supabase.co/auth/v1/authorize?provider=google&redirect_to=kite%3A%2F%2Fauth-callback&prompt=select_account'
-                  );
+                  setGoogleAuthSheetVisible(true);
                 }}
                 activeOpacity={0.6}
               >
@@ -3037,6 +3041,18 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         onSelectAccount={handleSelectAccount}
         onOpenUrl={onSelectUrl}
         onPickAvatar={handlePickAvatar}
+      />
+
+      {/* BOTTOM SHEET ĐĂNG NHẬP / THÊM TÀI KHOẢN GOOGLE (CHUẨN CHROME TRÊN IOS) */}
+      <GoogleAuthSheet
+        visible={googleAuthSheetVisible}
+        onClose={() => setGoogleAuthSheetVisible(false)}
+        onSuccess={async (newProfile) => {
+          setUserProfile(newProfile);
+          onUpdateProfile?.(newProfile);
+          await loadSavedData();
+        }}
+        showToast={onShowToast || (() => {})}
       />
 
       {/* 3. BOTTOM SHEET THÊM LỐI TẮT */}
