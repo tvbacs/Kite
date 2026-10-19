@@ -227,11 +227,13 @@ export function useInitialSetup({
           ? `@kite_active_tab_id_${currentEmail.toLowerCase()}`
           : STORAGE_ACTIVE_TAB_ID_KEY;
 
-      let [tabsData, savedActiveId, incognitoData] = await Promise.all([
+      let [tabsData, savedActiveId] = await Promise.all([
         AsyncStorage.getItem(tabsKey),
         AsyncStorage.getItem(activeIdKey),
-        AsyncStorage.getItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY),
       ]);
+
+      // Dọn dẹp triệt để bất kỳ key lưu tab ẩn danh cũ nào trên máy (OTR Profile chuẩn Chrome không ghi đĩa)
+      AsyncStorage.removeItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY).catch(() => {});
 
       if (!tabsData && tabsKey !== STORAGE_PERSISTED_TABS_KEY) {
         tabsData = await AsyncStorage.getItem(STORAGE_PERSISTED_TABS_KEY);
@@ -246,21 +248,9 @@ export function useInitialSetup({
         } catch (e) {}
       }
 
-      let parsedIncognitoTabs: BrowserTab[] = [];
-      if (incognitoData) {
-        try {
-          const parsed = JSON.parse(incognitoData);
-          if (Array.isArray(parsed)) {
-            parsedIncognitoTabs = parsed.map((t) => ({
-              ...t,
-              isIncognito: true,
-              isSleeping: false, // Tab ẩn danh giữ nguyên trạng thái sẵn sàng
-            }));
-          }
-        } catch (e) {}
-      }
-
-      const allTabs = [...parsedSavedTabs, ...parsedIncognitoTabs];
+      // Chuẩn Google Chrome: Tab ẩn danh là OTR (Off-the-record profile) chỉ sống trong RAM,
+      // khi app khởi động lại thì KHÔNG BAO GIỜ nạp lại tab ẩn danh cũ từ đĩa.
+      const allTabs = parsedSavedTabs;
 
       if (allTabs.length > 0) {
         try {
@@ -316,10 +306,10 @@ export function useInitialSetup({
               ...t,
               snapshotUri: effectiveSnapshotUri,
               initialUrl: t.initialUrl || t.url,
-              // Tối ưu chuẩn Google Chrome: Khi mở app, chỉ nạp tab đang xem (targetId).
-              // Các tab nền giữ nguyên ảnh snapshot để vào màn hình tab là thấy ngay tức thì 0ms,
-              // không khởi động nạp mạng đồng loạt làm đơ máy và xoay vòng loading.
-              isSleeping: !t.isIncognito && t.id !== targetId,
+              // Tối ưu chuẩn Google Chrome: Khi mở app, CHỈ nạp tab đang xem (targetId).
+              // TẤT CẢ các tab nền khác (kể cả tab thường và tab ẩn danh) đều ở trạng thái ngủ (isSleeping: true),
+              // triệt tiêu 100% tình trạng tab nền tự phát âm thanh/video hoặc ăn ngầm mạng/RAM khi mở app!
+              isSleeping: t.id !== targetId,
               isLoading: false,
             };
           });

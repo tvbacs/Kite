@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   LogBox,
+  AppState,
 } from 'react-native';
 
 LogBox.ignoreLogs(['Cannot record touch move without a touch start.']);
@@ -70,6 +71,7 @@ import { getActiveRegionNode, getRegionInjectedScript } from './src/services/reg
 import {
   INJECTED_BEFORE_CONTENT,
   INJECTED_AFTER_CONTENT,
+  PAUSE_BACKGROUND_MEDIA_SCRIPT,
 } from './src/services/antiAdScript';
 import { PULL_GESTURE_SCRIPT } from './src/services/pullGestureScript';
 import { PASSWORD_INTERCEPT_SCRIPT } from './src/services/passwordScript';
@@ -116,6 +118,14 @@ function BrowserMain() {
   const [browserMenuVisible, setBrowserMenuVisible] = useState<boolean>(false);
 
   // Refs
+  const [appStateStatus, setAppStateStatus] = useState<string>(AppState.currentState);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      setAppStateStatus(nextState);
+    });
+    return () => sub.remove();
+  }, []);
+
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userInitiatedRef = useRef<boolean>(false);
@@ -531,15 +541,29 @@ function BrowserMain() {
     }
   };
 
-  const handleToggleIncognito = () => {
-    if (!isCurrentIncognito) {
+  const handleToggleIncognito = (forced?: boolean) => {
+    const nextVal = typeof forced === 'boolean' ? forced : !isCurrentIncognito;
+    if (nextVal) {
       auth.requestIncognitoAccess(() => {
         setIsIncognito(true);
+        // Tạm dừng toàn bộ các tab thường đang chạy nền
+        tabs.filter((t) => !t.isIncognito).forEach((t) => {
+          try {
+            webViewRefs.current[t.id]?.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+          } catch (e) {}
+        });
         const incognitoList = tabs.filter((t) => !!t.isIncognito);
         const existingIncognito = incognitoList.sort(
           (a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0)
         )[0];
         if (existingIncognito) {
+          setTabs((prev) =>
+            prev.map((t) =>
+              t.id === existingIncognito.id
+                ? { ...t, isSleeping: false, lastActiveAt: Date.now() }
+                : t
+            )
+          );
           setActiveTabId(existingIncognito.id);
           setInputUrl(existingIncognito.url);
         } else {
@@ -550,14 +574,31 @@ function BrowserMain() {
     } else {
       auth.setIsIncognitoUnlocked(false);
       setIsIncognito(false);
+      // Tạm dừng và cho TẤT CẢ các tab ẩn danh vào giấc ngủ (isSleeping: true) ngay lập tức
+      // để bảo vệ tuyệt đối sự riêng tư và triệt tiêu 100% âm thanh / video / livestream chạy ngầm!
+      tabs.filter((t) => t.isIncognito).forEach((t) => {
+        try {
+          webViewRefs.current[t.id]?.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+        } catch (e) {}
+      });
       const normalList = tabs.filter((t) => !t.isIncognito);
       const existingNormal = normalList.sort(
         (a, b) => (b.lastActiveAt || 0) - (a.lastActiveAt || 0)
       )[0];
       if (existingNormal) {
+        setTabs((prev) =>
+          prev.map((t) => {
+            if (t.isIncognito) return { ...t, isSleeping: true };
+            if (t.id === existingNormal.id) return { ...t, isSleeping: false, lastActiveAt: Date.now() };
+            return t;
+          })
+        );
         setActiveTabId(existingNormal.id);
         setInputUrl(existingNormal.url);
       } else {
+        setTabs((prev) =>
+          prev.map((t) => (t.isIncognito ? { ...t, isSleeping: true } : t))
+        );
         browserTabs.executeNewTab(false);
       }
       showToast('Đã tắt chế độ ẩn danh');
@@ -607,17 +648,24 @@ function BrowserMain() {
   };
 
   // 11. Giới hạn số lượng WebViews nạp đồng thời vào RAM/GPU chuẩn Chrome (tối đa 3 tab nền + active tab)
+  // ĐẶC BIỆT: Tuyệt đối cô lập giữa tab thường và tab ẩn danh - khi đang ở tab thường thì KHÔNG BAO GIỜ nạp tab ẩn danh vào RAM/WebViews
+  const isCurrentIncognito = Boolean(currentTab ? currentTab.isIncognito : isIncognito);
   const MAX_LIVE_TABS = 3;
   const liveTabIds = useMemo(() => {
     const sortedLive = [...tabs]
-      .filter((t) => (t.url || t.initialUrl) && !t.isSleeping)
+      .filter(
+        (t) =>
+          (t.url || t.initialUrl) &&
+          !t.isSleeping &&
+          Boolean(t.isIncognito) === Boolean(isCurrentIncognito)
+      )
       .sort((a, b) => (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0))
       .slice(0, MAX_LIVE_TABS)
       .map((t) => t.id);
     const set = new Set(sortedLive);
-    set.add(activeTabId);
+    if (activeTabId) set.add(activeTabId);
     return set;
-  }, [tabs, activeTabId]);
+  }, [tabs, activeTabId, isCurrentIncognito]);
 
   // Tối ưu hóa chuỗi script inject: gom memo ở ngoài map để không ghép chuỗi lặp lại mỗi render
   const baseInjectedBefore = useMemo(() => {
@@ -873,7 +921,6 @@ function BrowserMain() {
     }
   }, []);
 
-  const isCurrentIncognito = Boolean(currentTab ? currentTab.isIncognito : isIncognito);
   const appBg = isCurrentIncognito ? '#202124' : '#ffffff';
   const viewportBg = activeUrl !== null ? '#ffffff' : appBg;
   const isHomeVisible = activeUrl === null;
@@ -989,8 +1036,41 @@ function BrowserMain() {
           />
         </View>
 
-            {tabs.map((tab) => {
-              if (!tab.url && !tab.initialUrl) return null;
+        {/* Màn hình khóa Tab ẩn danh chuẩn Chrome khi có cài đặt mã PIN bảo vệ */}
+        {isCurrentIncognito && auth.incognitoPin && !auth.isIncognitoUnlocked ? (
+          <View style={styles.incognitoLockOverlay}>
+            <View style={styles.incognitoLockBox}>
+              <View style={styles.incognitoLockIconCircle}>
+                <Feather name="lock" size={32} color="#f43f5e" />
+              </View>
+              <Text style={styles.incognitoLockTitle}>Thẻ ẩn danh đã bị khóa</Text>
+              <Text style={styles.incognitoLockSubtitle}>
+                Để bảo vệ quyền riêng tư của bạn, hãy nhập mã PIN để mở khóa các thẻ ẩn danh.
+              </Text>
+              <TouchableOpacity
+                style={styles.incognitoUnlockBtn}
+                onPress={() => {
+                  auth.setPinModalMode('unlock');
+                  auth.setPinModalVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Feather name="unlock" size={16} color="#ffffff" style={{ marginRight: 8 }} />
+                <Text style={styles.incognitoUnlockBtnText}>Mở khóa thẻ ẩn danh</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.incognitoSwitchToNormalBtn}
+                onPress={() => handleToggleIncognito(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.incognitoSwitchToNormalText}>Chuyển sang các thẻ thường</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
+        {tabs.map((tab) => {
+          if (!tab.url && !tab.initialUrl) return null;
               if (!liveTabIds.has(tab.id)) return null;
 
               const isTabActive = tab.id === activeTabId;
@@ -1592,6 +1672,19 @@ function BrowserMain() {
         topInset={topInset}
         isIncognito={isIncognito}
       />
+
+      {/* Khi chuyển app ra ngoài màn hình đa nhiệm (Recent Apps / Multitasking), che tab ẩn danh để chống lộ dữ liệu */}
+      {appStateStatus !== 'active' && isCurrentIncognito ? (
+        <View style={styles.appSwitcherPrivacyShield} pointerEvents="none">
+          <View style={styles.appSwitcherPrivacyCircle}>
+            <Feather name="eye-off" size={40} color="#f43f5e" />
+          </View>
+          <Text style={styles.appSwitcherPrivacyTitle}>Tab ẩn danh được bảo vệ</Text>
+          <Text style={styles.appSwitcherPrivacySub}>
+            Nội dung duyệt web được bảo mật khi chuyển đổi ứng dụng
+          </Text>
+        </View>
+      ) : null}
 
       {/* Splash Screen */}
       {initialSetup.showSplashOverlay && (

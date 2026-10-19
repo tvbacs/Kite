@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { BookmarkItem, DEFAULT_BOOKMARKS, STORAGE_BOOKMARKS_KEY } from '../components/BookmarkSheet';
 import { HistoryItem, STORAGE_HISTORY_KEY } from '../components/HistorySheet';
-import { BrowserTab, ShieldStats, UserProfile } from '../types/browser';
+import { BrowserTab, ShieldStats, UserProfile, isPersistable } from '../types/browser';
 import { extractSearchQuery, isJunkHistoryItem, STORAGE_SEARCH_QUERIES_KEY } from '../constants/searchEngines';
 import { isGoogleTranslateUrl, getOriginalUrlFromTranslateUrl } from '../services/translateService';
 import { syncCloudBookmarks, addCloudHistoryItem, clearCloudHistory } from '../services/supabase';
@@ -118,7 +118,7 @@ export function useBookmarksAndHistory({
 
   const saveToHistory = async (url: string, title: string, tabId?: string) => {
     const targetTab = tabs.find((t) => t.id === (tabId || activeTabId)) || currentTab;
-    if (!url || isIncognito || targetTab?.isIncognito) return;
+    if (!url || isIncognito || !isPersistable(targetTab)) return;
     if (isJunkHistoryItem(url, title)) return;
 
     try {

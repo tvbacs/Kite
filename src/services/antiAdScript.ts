@@ -249,6 +249,15 @@ export const INJECTED_BEFORE_CONTENT = `
       WrappedAudioCtx.prototype = OrigAudioCtx.prototype;
       window.AudioContext = WrappedAudioCtx;
       if (window.webkitAudioContext) window.webkitAudioContext = WrappedAudioCtx;
+
+      var origResume = OrigAudioCtx.prototype.resume;
+      OrigAudioCtx.prototype.resume = function() {
+        if (window.__kite_tab_is_background) {
+          try { if (this.suspend) this.suspend(); } catch(e) {}
+          return Promise.resolve();
+        }
+        return origResume.apply(this, arguments);
+      };
     }
   } catch(e) {}
 
@@ -273,6 +282,8 @@ export const INJECTED_BEFORE_CONTENT = `
       if (window.__kite_tab_is_background) {
         this.muted = true;
         this.volume = 0;
+        try { this.pause(); } catch(e) {}
+        return Promise.reject(new Error('Kite: Background tab media blocked'));
       }
       return origMediaPlay.apply(this, arguments);
     };
@@ -1097,6 +1108,13 @@ export const PAUSE_BACKGROUND_MEDIA_SCRIPT = `
               m.muted = true;
               m.volume = 0;
               m.pause();
+              if (m.srcObject && typeof m.srcObject.getAudioTracks === 'function') {
+                try {
+                  m.srcObject.getAudioTracks().forEach(function(t) {
+                    t.enabled = false;
+                  });
+                } catch(e) {}
+              }
             } catch(e) {}
           }
 
@@ -1169,6 +1187,13 @@ export const RESUME_ACTIVE_MEDIA_SCRIPT = `
                   m.play().catch(function() {});
                 }
                 delete m.__kite_saved_state;
+              }
+              if (m.srcObject && typeof m.srcObject.getAudioTracks === 'function') {
+                try {
+                  m.srcObject.getAudioTracks().forEach(function(t) {
+                    t.enabled = true;
+                  });
+                } catch(e) {}
               }
             } catch(e) {}
           }

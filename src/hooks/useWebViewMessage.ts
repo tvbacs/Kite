@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
-import { BrowserTab, ShieldStats, UserProfile, DetectedMedia } from '../types/browser';
+import { BrowserTab, ShieldStats, UserProfile, DetectedMedia, isPersistable } from '../types/browser';
 import { getDomain } from '../utils/tld';
 import {
   translateItemsBatch,
@@ -244,7 +244,8 @@ export function useWebViewMessage({
           handleGoBackRef.current();
         }
       } else if (data.type === 'GOOGLE_ACCOUNT_CHOSEN' || data.type === 'GOOGLE_LOGIN_COMPLETED') {
-        if (currentTab?.isIncognito || isIncognito) return;
+        const targetTab = tabs.find((t) => t.id === (data.tabId || fromTabId)) || currentTab;
+        if (!isPersistable(targetTab) || isIncognito) return;
         const activeUrlLower = (currentTab?.url || '').toLowerCase();
         const isLegitGoogle =
           activeUrlLower.includes('accounts.google.com') ||
@@ -281,7 +282,8 @@ export function useWebViewMessage({
           showToast(`Đã chuyển sang: ${chosenProfile.email}`);
         }
       } else if (data.type === 'GOOGLE_USER_PROFILE') {
-        if (currentTab?.isIncognito || isIncognito) return;
+        const targetTab = tabs.find((t) => t.id === (data.tabId || fromTabId)) || currentTab;
+        if (!isPersistable(targetTab) || isIncognito) return;
         const activeUrlLower = (currentTab?.url || '').toLowerCase();
         const isLegitGoogle =
           activeUrlLower.includes('accounts.google.com') ||
@@ -355,7 +357,8 @@ export function useWebViewMessage({
           }
         }
       } else if (data.type === 'DETECTED_LOGIN') {
-        if (currentTab?.isIncognito || isIncognito) return;
+        const targetTab = tabs.find((t) => t.id === (data.tabId || fromTabId)) || currentTab;
+        if (!isPersistable(targetTab) || isIncognito) return;
         if (data.website && data.password && data.username) {
           const rawUser = (data.username || '').trim();
           const rawPwd = (data.password || '').trim();
@@ -424,7 +427,8 @@ export function useWebViewMessage({
           }
         }
       } else if (data.type === 'PASSWORD_FORM_FOCUSED') {
-        if (currentTab?.isIncognito || isIncognito) return;
+        const targetTab = tabs.find((t) => t.id === (data.tabId || fromTabId)) || currentTab;
+        if (!isPersistable(targetTab) || isIncognito) return;
         const curUrl = currentTab?.url || '';
         const currentDomain = (getDomain(curUrl) || data.website || '').toLowerCase().trim();
         if (!currentDomain) return;

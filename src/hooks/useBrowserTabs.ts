@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 import { captureRef } from 'react-native-view-shot';
 import { File, Directory, Paths } from 'expo-file-system';
-import { BrowserTab, UserProfile } from '../types/browser';
+import { BrowserTab, UserProfile, isPersistable } from '../types/browser';
 import { PAUSE_BACKGROUND_MEDIA_SCRIPT, getCaptureTabStateScript } from '../services/antiAdScript';
 import { progressBus } from '../components/WebProgressBar';
 import { runWhenIdle } from '../utils/idle';
@@ -130,17 +130,34 @@ export function useBrowserTabs({
     return () => clearTimeout(timerId);
   }, [persistSig, activeTabId]);
 
-  // Ghi tức thì khi app chuyển sang chạy nền (background / kill)
+  // Ghi tức thì khi app chuyển sang chạy nền (background / kill) và TẠM DỪNG TẤT CẢ ÂM THANH / VIDEO
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active' && isRestoredRef.current) {
-        persistTabsState(tabsRef.current, activeTabIdRef.current);
+      if (nextState !== 'active') {
+        Object.values(webViewRefs.current).forEach((ref) => {
+          try {
+            ref?.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+          } catch (e) {}
+        });
+        if (isRestoredRef.current) {
+          persistTabsState(tabsRef.current, activeTabIdRef.current);
+        }
+      } else {
+        // Khi app quay lại foreground, khóa toàn bộ âm thanh của các tab nền
+        const curActive = activeTabIdRef.current;
+        Object.entries(webViewRefs.current).forEach(([tabId, ref]) => {
+          if (tabId !== curActive && ref) {
+            try {
+              ref.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+            } catch (e) {}
+          }
+        });
       }
     });
     return () => sub.remove();
   }, []);
 
-  // Tạm dừng video & âm thanh trên các tab nền
+  // Tạm dừng video & âm thanh trên các tab nền khi đổi activeTabId
   useEffect(() => {
     Object.entries(webViewRefs.current).forEach(([tabId, ref]) => {
       if (tabId !== activeTabId && ref) {
@@ -209,10 +226,9 @@ export function useBrowserTabs({
     overrideEmail?: string
   ) => {
     try {
-      const normalTabs = tabsList.filter((t) => !t.isIncognito);
-      const incognitoTabs = tabsList.filter((t) => !!t.isIncognito);
+      const normalTabs = tabsList.filter(isPersistable);
 
-      // 1. Lưu các tab thường
+      // 1. Lưu các tab thường (Mô hình phiên chuẩn Chrome: bền vững, khôi phục khi mở lại app)
       if (normalTabs.length > 0) {
         let idToSave = currentActiveId || activeTabIdRef.current;
         if (!normalTabs.some((t) => t.id === idToSave)) {
@@ -252,25 +268,9 @@ export function useBrowserTabs({
         }
       }
 
-      // 2. Lưu các tab ẩn danh vào storage session riêng (tránh bị mất khi app bị kill ngầm hoặc reload)
-      if (incognitoTabs.length > 0) {
-        const incognitoToPersist = incognitoTabs.map((t) => ({
-          id: t.id,
-          url: t.url,
-          title: t.title,
-          isDesktop: t.isDesktop,
-          isIncognito: true,
-          isReaderMode: t.isReaderMode,
-          snapshotUri: undefined, // Tab ẩn danh TUYỆT ĐỐI KHÔNG lưu snapshot ra bộ nhớ
-          frozenState: t.isSleeping ? t.frozenState : undefined,
-          lastActiveAt: t.lastActiveAt,
-        }));
-        const incognitoJson = JSON.stringify(incognitoToPersist);
-        if (lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] !== incognitoJson) {
-          lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] = incognitoJson;
-          await AsyncStorage.setItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY, incognitoJson);
-        }
-      } else {
+      // 2. Tab ẩn danh là OTR (Off-The-Record): Sống 100% trong RAM, TUYỆT ĐỐI KHÔNG lưu xuống đĩa.
+      // Dọn sạch hoàn toàn mọi vết tích cũ nếu có để đảm bảo an toàn riêng tư tối đa.
+      if (lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] !== '') {
         lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] = '';
         await AsyncStorage.removeItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY);
       }
@@ -282,7 +282,7 @@ export function useBrowserTabs({
     try {
       // 0. Tab ẩn danh TUYỆT ĐỐI KHÔNG chụp và KHÔNG lưu snapshot vào bộ nhớ (bảo mật riêng tư)
       const targetTab = tabs.find((t) => t.id === tabId);
-      if (targetTab?.isIncognito) {
+      if (!isPersistable(targetTab)) {
         return null;
       }
 
@@ -418,7 +418,8 @@ export function useBrowserTabs({
       } catch {}
     }, 1000);
 
-    const closingTab = tabs.find((t) => t.id === id);
+    const currentTabs = tabsRef.current.length > 0 ? tabsRef.current : tabs;
+    const closingTab = currentTabs.find((t) => t.id === id);
     const isClosingIncognito = Boolean(closingTab?.isIncognito);
 
     if (closingTab && closingTab.url && !closingTab.isIncognito) {
@@ -428,7 +429,7 @@ export function useBrowserTabs({
       }
     }
 
-    const remaining = tabs.filter((t) => t.id !== id);
+    const remaining = currentTabs.filter((t) => t.id !== id);
     const remainingSameMode = remaining.filter(
       (t) => Boolean(t.isIncognito) === isClosingIncognito
     );
@@ -438,10 +439,13 @@ export function useBrowserTabs({
         const remainingNormal = remaining.filter((t) => !t.isIncognito);
         if (remainingNormal.length > 0) {
           const nextActive = remainingNormal[remainingNormal.length - 1];
+          tabsRef.current = remaining;
           setTabs(remaining);
+          activeTabIdRef.current = nextActive.id;
           setActiveTabId(nextActive.id);
           setInputUrl(nextActive.url);
           setIsIncognito(false);
+          persistTabsState(remaining, nextActive.id);
         } else {
           const newNormalId = `tab-${Date.now()}`;
           const newTabObj: BrowserTab = {
@@ -452,10 +456,13 @@ export function useBrowserTabs({
             isSleeping: false,
             isIncognito: false,
           };
+          tabsRef.current = [newTabObj];
           setTabs([newTabObj]);
+          activeTabIdRef.current = newNormalId;
           setActiveTabId(newNormalId);
           setInputUrl('');
           setIsIncognito(false);
+          persistTabsState([newTabObj], newNormalId);
         }
       } else {
         const newNormalId = `tab-${Date.now()}`;
@@ -468,15 +475,18 @@ export function useBrowserTabs({
           isIncognito: false,
         };
         const updatedTabs = [...remaining, newTabObj];
+        tabsRef.current = updatedTabs;
         setTabs(updatedTabs);
+        activeTabIdRef.current = newNormalId;
         setActiveTabId(newNormalId);
         setInputUrl('');
         setIsIncognito(false);
+        persistTabsState(updatedTabs, newNormalId);
       }
       return;
     }
 
-    const currentModeTabs = tabs.filter(
+    const currentModeTabs = currentTabs.filter(
       (t) => Boolean(t.isIncognito) === isClosingIncognito
     );
     const closedIndex = currentModeTabs.findIndex((t) => t.id === id);
@@ -490,6 +500,7 @@ export function useBrowserTabs({
         remainingSameMode[0];
       if (nextActive) {
         nextActiveId = nextActive.id;
+        activeTabIdRef.current = nextActive.id;
         setActiveTabId(nextActive.id);
         setInputUrl(nextActive.url || '');
         setIsIncognito(isClosingIncognito);
@@ -504,7 +515,9 @@ export function useBrowserTabs({
       }
     }
 
+    tabsRef.current = remaining;
     setTabs(remaining);
+    persistTabsState(remaining, nextActiveId);
     if (!tabSheetVisible) {
       scheduleProcessPooling(nextActiveId);
     }
@@ -776,7 +789,7 @@ export function useBrowserTabs({
       } catch (e) {}
     }
 
-    // 2. Kích hoạt ngay lập tức tab mới
+    // 2. Kích hoạt ngay lập tức tab mới, và nếu chuyển từ tab ẩn danh sang tab thường thì đưa tab ẩn danh vào giấc ngủ
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id === id) {
@@ -785,6 +798,12 @@ export function useBrowserTabs({
             isSleeping: false,
             isLoading: t.isSleeping ? true : t.isLoading,
             lastActiveAt: now,
+          };
+        }
+        if (previousTab?.isIncognito && !target?.isIncognito && t.id === previousId) {
+          return {
+            ...t,
+            isSleeping: true,
           };
         }
         return t;

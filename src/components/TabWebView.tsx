@@ -74,11 +74,30 @@ export const TabWebView = memo<TabWebViewProps>(
       try {
         if (!isTabActive) {
           localRef.current.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+          const t1 = setTimeout(() => {
+            localRef.current?.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+          }, 500);
+          const t2 = setTimeout(() => {
+            localRef.current?.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+          }, 1500);
+          return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+          };
         } else {
           localRef.current.injectJavaScript(RESUME_ACTIVE_MEDIA_SCRIPT);
         }
       } catch (e) {}
     }, [isTabActive]);
+
+    const activeStateBeforeScript = useMemo(
+      () => `window.__kite_tab_is_background = ${!isTabActive}; true;\n`,
+      [isTabActive]
+    );
+    const combinedInjectedBefore = useMemo(
+      () => activeStateBeforeScript + (injectedBefore || ''),
+      [activeStateBeforeScript, injectedBefore]
+    );
 
     const handleMessage = (event: any) => {
       onMessage(event, tab.id);
@@ -103,6 +122,13 @@ export const TabWebView = memo<TabWebViewProps>(
       if (tab.frozenState && localRef.current) {
         try {
           localRef.current.injectJavaScript(getRestoreTabStateScript(tab.frozenState));
+        } catch (e) {}
+      }
+
+      // Khóa và dừng toàn bộ âm thanh nếu trang vừa tải xong trong chế độ nền
+      if (!isTabActive && localRef.current) {
+        try {
+          localRef.current.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
         } catch (e) {}
       }
     };
@@ -146,7 +172,7 @@ export const TabWebView = memo<TabWebViewProps>(
           mediaCapturePermissionGrantType="grant"
           injectedJavaScriptBeforeContentLoadedForMainFrameOnly={true}
           injectedJavaScriptForMainFrameOnly={true}
-          injectedJavaScriptBeforeContentLoaded={injectedBefore}
+          injectedJavaScriptBeforeContentLoaded={combinedInjectedBefore}
           injectedJavaScript={injectedAfter}
           onMessage={handleMessage}
           onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
@@ -180,7 +206,7 @@ export const TabWebView = memo<TabWebViewProps>(
           allowsPictureInPictureMediaPlayback
           allowsFullscreenVideo
           fraudulentWebsiteWarningEnabled={false}
-          mediaPlaybackRequiresUserAction={false}
+          mediaPlaybackRequiresUserAction={!isTabActive}
           javaScriptCanOpenWindowsAutomatically={false}
           setSupportMultipleWindows={false}
           sharedCookiesEnabled={true}

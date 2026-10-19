@@ -5,6 +5,14 @@ export interface TabFrozenState {
   capturedAt: number;
 }
 
+/**
+ * Kiểm tra xem tab có được phép lưu trữ bền vững (lịch sử, mật khẩu, khôi phục tab qua session restore) hay không.
+ * Chuẩn Chrome: Tab ẩn danh là OTR (Off-the-record profile), sống tạm trong RAM, KHÔNG BAO GIỜ lưu xuống đĩa.
+ */
+export const isPersistable = (tab?: { isIncognito?: boolean } | null): boolean => {
+  return !tab?.isIncognito;
+};
+
 export interface BrowserTab {
   id: string;
   url: string;

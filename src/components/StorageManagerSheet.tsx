@@ -466,7 +466,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
           <View style={styles.header}>
             <View style={styles.headerTitleGroup}>
               <Text style={styles.headerTitle} numberOfLines={1}>
-                Dung lượng trang web
+                Quản lý bộ nhớ
               </Text>
               <Text style={styles.headerSubtitle} numberOfLines={1}>
                 Xem và xóa dữ liệu lưu trữ theo từng trang
@@ -498,11 +498,9 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
           >
             {/* 1. TỔNG QUAN DUNG LƯỢNG TRANG WEB */}
             <View style={styles.summaryCard}>
-              <View style={styles.summaryTopRow}>
-                <View>
-                  <Text style={styles.summaryLabel}>TỔNG DUNG LƯỢNG LƯU TRỮ</Text>
-                  <Text style={styles.summaryValue}>{formatBytes(totalSiteStorageBytes)}</Text>
-                </View>
+              <Text style={styles.summaryLabel}>TỔNG DUNG LƯỢNG LƯU TRỮ</Text>
+              <View style={styles.summaryValueRow}>
+                <Text style={styles.summaryValue}>{formatBytes(totalSiteStorageBytes)}</Text>
 
                 {siteStorageList.length > 0 && (
                   <TouchableOpacity
@@ -511,7 +509,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
                     disabled={isCleaning}
                     activeOpacity={0.7}
                   >
-                    <Feather name="trash-2" size={13} color="#18181b" style={{ marginRight: 6 }} />
+                    <Feather name="trash-2" size={13} color="#ef4444" style={{ marginRight: 6 }} />
                     <Text style={styles.clearAllBtnText}>Xóa tất cả</Text>
                   </TouchableOpacity>
                 )}
@@ -576,18 +574,11 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
                         <Image source={{ uri: faviconUrl }} style={styles.siteFavicon} />
 
                         <View style={styles.siteInfo}>
-                          <View style={styles.siteDomainRow}>
-                            <Text style={styles.siteDomain} numberOfLines={1}>
-                              {site.domain}
-                            </Text>
-                            {site.hasActiveTab && (
-                              <View style={styles.activeBadge}>
-                                <Text style={styles.activeBadgeText}>Đang mở</Text>
-                              </View>
-                            )}
-                          </View>
+                          <Text style={styles.siteDomain} numberOfLines={1}>
+                            {site.domain}
+                          </Text>
                           <Text style={styles.siteSubtext} numberOfLines={1}>
-                            {site.hasActiveTab ? '1 thẻ đang mở' : 'Đã lưu cache'} • {site.visitCount} lần xem
+                            {site.visitCount > 1 ? `${site.visitCount} lần xem` : 'Dữ liệu bộ nhớ đệm'}
                           </Text>
                         </View>
 
@@ -599,7 +590,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           activeOpacity={0.7}
                         >
-                          <Feather name="trash-2" size={14} color="#71717a" />
+                          <Feather name="trash-2" size={16} color="#ef4444" />
                         </TouchableOpacity>
                       </View>
                       {index < filteredSites.length - 1 && <View style={styles.divider} />}
@@ -661,8 +652,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    maxHeight: '90%',
-    minHeight: 460,
+    height: '84%',
+    maxHeight: '92%',
   },
   dragHandle: {
     width: 36,
@@ -712,22 +703,14 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
   summaryCard: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#f4f4f5',
     borderRadius: 16,
     padding: 16,
     marginTop: 6,
     marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-  },
-  summaryTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
   },
   summaryLabel: {
     fontSize: 11,
@@ -736,11 +719,17 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  summaryValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+    marginBottom: 4,
+  },
   summaryValue: {
     fontSize: 24,
     fontWeight: '700',
     color: '#09090b',
-    marginTop: 2,
   },
   summarySubtext: {
     fontSize: 12,
@@ -751,8 +740,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 10,
@@ -760,7 +747,7 @@ const styles = StyleSheet.create({
   clearAllBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#18181b',
+    color: '#ef4444',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -801,8 +788,6 @@ const styles = StyleSheet.create({
   sitesCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
     overflow: 'hidden',
     marginBottom: 16,
   },
@@ -810,7 +795,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingHorizontal: 4,
   },
   siteFavicon: {
     width: 26,
@@ -862,11 +847,9 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#f4f4f5',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
   },
   divider: {
     height: 1,

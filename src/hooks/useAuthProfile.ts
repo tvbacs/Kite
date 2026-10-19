@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfile, BrowserTab } from '../types/browser';
 import { supabase, handleAuthCallbackUrl, upsertCloudProfile } from '../services/supabase';
@@ -97,6 +98,16 @@ export function useAuthProfile({ showToast }: UseAuthProfileProps) {
         setIncognitoPin(pin);
       }
     });
+  }, []);
+
+  // Tự động khóa bảo mật tab ẩn danh khi rời app (chuẩn Chrome Biometric/PIN lock)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') {
+        setIsIncognitoUnlocked(false);
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   // Yêu cầu xác thực mã PIN trước khi vào Thẻ ẩn danh
