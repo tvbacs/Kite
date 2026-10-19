@@ -133,6 +133,32 @@ export function useWebViewRequest({
       reqUrl.includes('supabase.co/auth/v1/callback') ||
       reqUrl.includes('supabase.co/auth/v1/authorize')
     ) {
+      // 0a. Tự động bypass lỗi 400 SetSID cross-domain của Google trên WebKit
+      if (reqUrl.includes('/setsid') || reqUrl.includes('/accounts/setsid')) {
+        try {
+          const parsed = new URL(request.url);
+          const continueUrl = parsed.searchParams.get('continue');
+          if (
+            continueUrl &&
+            (continueUrl.includes('google.') ||
+              continueUrl.includes('supabase.co') ||
+              continueUrl.startsWith('kite://'))
+          ) {
+            setTimeout(() => {
+              setTabs((prev) => {
+                const updated = prev.map((t) =>
+                  t.id === activeTabId ? { ...t, url: continueUrl } : t
+                );
+                persistTabsState(updated);
+                return updated;
+              });
+              setInputUrl(continueUrl);
+            }, 0);
+            return false;
+          }
+        } catch (e) {}
+      }
+
       // 1. Nếu là Callback xác thực trả về App
       if (isOAuthCallback(request.url)) {
       if (processedOAuthUrlsRef.current.has(request.url)) {

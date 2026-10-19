@@ -248,7 +248,7 @@ export const ImageSearchModal: React.FC<ImageSearchModalProps> = ({
       presentationStyle="fullScreen"
       onRequestClose={capturedImage ? handleRetake : onClose}
     >
-      <StatusBar barStyle="light-content" backgroundColor="#000000" />
+      {visible && <StatusBar barStyle="light-content" backgroundColor="#000000" />}
       <View style={styles.container}>
         {/* NỀN: ẢNH CHỤP TOÀN MÀN HÌNH HOẶC CAMERA TRỰC TIẾP */}
         {capturedImage ? (
@@ -531,24 +531,79 @@ export const ImageSearchModal: React.FC<ImageSearchModalProps> = ({
                   onLoadStart={() => setIsWebLoading(true)}
                   onLoadEnd={() => setIsWebLoading(false)}
                   onShouldStartLoadWithRequest={(request) => {
-                    const { url } = request;
+                    const { url, isTopFrame } = request as any;
                     if (!url) return false;
 
-                    // Giữ các trang tìm kiếm, bộ lọc, thẻ hình ảnh của Google Lens bên trong sheet
+                    // 1. Cho phép các scheme nội bộ (about:, data:, blob:, javascript:)
+                    if (
+                      url.startsWith('about:') ||
+                      url.startsWith('data:') ||
+                      url.startsWith('blob:') ||
+                      url.startsWith('javascript:')
+                    ) {
+                      return true;
+                    }
+
+                    // 2. TUYỆT ĐỐI KHÔNG can thiệp vào các frame phụ / iframe (như player xem trước video YouTube của Google Lens)
+                    // Nếu là subframe (isTopFrame === false) thì luôn cho phép tải bên trong WebView mà không văng ra ngoài
+                    if (isTopFrame === false) {
+                      return true;
+                    }
+
+                    // 3. Nếu là player video nhúng (YouTube embed, nocookie...) hoặc tài nguyên CDN / quảng cáo
+                    // Luôn cho phép hiển thị trong WebView, TUYỆT ĐỐI KHÔNG tự tiện mở ra ngoài tab chính
+                    const isEmbedOrMediaResource =
+                      url.includes('/embed') ||
+                      url.includes('youtube.com/embed') ||
+                      url.includes('youtube-nocookie.com') ||
+                      url.includes('doubleclick.net') ||
+                      url.includes('googleads') ||
+                      url.includes('googlesyndication.com') ||
+                      url.includes('googleapis.com') ||
+                      url.includes('gstatic.com') ||
+                      url.includes('ggpht.com') ||
+                      url.includes('googleusercontent.com');
+
+                    if (isEmbedOrMediaResource) {
+                      return true;
+                    }
+
+                    // 4. Nếu người dùng bấm vào link kết quả chuyển hướng của Google (google.com/url?q=...)
+                    if (url.includes('google.') && (url.includes('/url?') || url.includes('/url#'))) {
+                      try {
+                        const parsed = new URL(url);
+                        const target = parsed.searchParams.get('q') || parsed.searchParams.get('url');
+                        if (
+                          target &&
+                          !target.includes('google.com') &&
+                          !target.includes('lens.google.com') &&
+                          !target.includes('/embed')
+                        ) {
+                          onSearchResult(target);
+                          onClose();
+                          return false;
+                        }
+                      } catch {}
+                      return true;
+                    }
+
+                    // 5. Giữ các trang tìm kiếm, bộ lọc, thẻ hình ảnh của Google Lens bên trong sheet
                     const isInternalLens =
                       url.includes('lens.google.com') ||
                       url.includes('google.com/search') ||
                       url.includes('google.vn/search') ||
+                      url.includes('google.com.vn/search') ||
                       url.includes('google.com/imgres') ||
+                      url.includes('google.vn/imgres') ||
                       url.includes('accounts.google.') ||
-                      url.includes('gstatic.com') ||
-                      url.startsWith('about:');
+                      url.includes('policies.google.com') ||
+                      url.includes('support.google.com');
 
                     if (isInternalLens) {
                       return true;
                     }
 
-                    // Khi người dùng bấm vào một kết quả cụ thể (YouTube, eBay, Alibaba, website...)
+                    // 6. Khi người dùng bấm vào một kết quả cụ thể bên ngoài (YouTube web, Shopee, Wikipedia...)
                     // Tự động mở ngay liên kết đó trong tab trình duyệt Kite chính!
                     onSearchResult(url);
                     onClose();

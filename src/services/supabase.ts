@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Bookmark, UserProfile } from '../types/browser';
+import { Bookmark, UserProfile, SavedCredential } from '../types/browser';
 import { HistoryItem } from '../components/HistorySheet';
 
 export const SUPABASE_URL = 'https://ivwnjrugslrvsxssufco.supabase.co';
@@ -424,7 +424,81 @@ export async function upsertCloudProfile(userId: string, profile: UserProfile, u
 }
 
 /* =========================================================================
- * 6. ĐỒNG BỘ TOÀN DIỆN HAI CHIỀU KHI ĐĂNG NHẬP (TWO-WAY CLOUD HYDRATION)
+ * 6. ĐỒNG BỘ MẬT KHẨU & TÀI KHOẢN (PASSWORDS)
+ * ========================================================================= */
+
+export async function fetchCloudPasswords(userId: string, userEmail?: string): Promise<SavedCredential[] | null> {
+  try {
+    let query = supabase.from('kite_passwords').select('*');
+    if (userEmail && userId && userId !== userEmail) {
+      query = query.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
+    } else {
+      query = query.eq('user_id', userId || userEmail);
+    }
+
+    const { data, error } = await query.order('updated_at', { ascending: false });
+
+    if (error || !data) return null;
+
+    return data.map((row) => ({
+      id: row.id,
+      website: row.website,
+      username: row.username,
+      password: row.password || undefined,
+      notes: row.notes || undefined,
+      updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+    }));
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function syncCloudPasswords(userId: string, localPasswords: any[], userEmail?: string): Promise<boolean> {
+  try {
+    const effectiveUserId = userId || userEmail;
+    if (!effectiveUserId) return false;
+    if (!Array.isArray(localPasswords) || localPasswords.length === 0) return true;
+
+    const rows = localPasswords.map((p) => ({
+      id: p.id,
+      user_id: effectiveUserId,
+      website: p.website,
+      username: p.username,
+      password: p.password || '',
+      notes: p.notes || null,
+      updated_at: new Date(p.updatedAt || Date.now()).toISOString(),
+    }));
+
+    const { error } = await supabase
+      .from('kite_passwords')
+      .upsert(rows, { onConflict: 'id' });
+
+    if (error) {
+      return false;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function deleteCloudPassword(userId: string, passwordId: string, userEmail?: string): Promise<boolean> {
+  try {
+    let query = supabase.from('kite_passwords').delete().eq('id', passwordId);
+    if (userEmail && userId && userId !== userEmail) {
+      query = query.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
+    } else {
+      query = query.eq('user_id', userId || userEmail);
+    }
+    const { error } = await query;
+    return !error;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* =========================================================================
+ * 7. ĐỒNG BỘ TOÀN DIỆN HAI CHIỀU KHI ĐĂNG NHẬP (TWO-WAY CLOUD HYDRATION)
  * ========================================================================= */
 
 export async function syncUserCloudData(
@@ -432,6 +506,7 @@ export async function syncUserCloudData(
   callbacks?: {
     onBookmarksLoaded?: (bookmarks: any[]) => void;
     onSettingsLoaded?: (settings: CloudUserSettings) => void;
+    onPasswordsLoaded?: (passwords: SavedCredential[]) => void;
   }
 ) {
   if (!profile.isLoggedIn || (!profile.id && !profile.email)) return;
@@ -472,12 +547,14 @@ export async function syncUserCloudData(
           }
         });
       }
+      const syncAccountsVal = await AsyncStorage.getItem('@kite_sync_all_accounts');
+      const isSyncOn = syncAccountsVal ? JSON.parse(syncAccountsVal) : false;
+
       const mergedList = Array.from(mergedMap.values());
       await AsyncStorage.setItem(bmKey, JSON.stringify(mergedList));
-      await AsyncStorage.setItem('@kite_user_bookmarks', JSON.stringify(mergedList));
-      const scKey = email ? `@kite_shortcuts_${email.toLowerCase()}` : '@kite_shortcuts';
-      await AsyncStorage.setItem(scKey, JSON.stringify(mergedList));
-      await AsyncStorage.setItem('@kite_shortcuts', JSON.stringify(mergedList));
+      if (isSyncOn) {
+        await AsyncStorage.setItem('@kite_user_bookmarks', JSON.stringify(mergedList));
+      }
       callbacks?.onBookmarksLoaded?.(mergedList);
 
       // Nếu máy có thêm bookmark chưa có trên cloud -> Đẩy lên cloud
@@ -515,7 +592,10 @@ export async function syncUserCloudData(
         .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
         .slice(0, 200);
       await AsyncStorage.setItem(histKey, JSON.stringify(mergedHistList));
-      await AsyncStorage.setItem('@kite_browsing_history', JSON.stringify(mergedHistList));
+      const syncAccountsVal = await AsyncStorage.getItem('@kite_sync_all_accounts');
+      if (syncAccountsVal && JSON.parse(syncAccountsVal)) {
+        await AsyncStorage.setItem('@kite_browsing_history', JSON.stringify(mergedHistList));
+      }
     } else if (Array.isArray(localHist) && localHist.length > 0) {
       // Đẩy lịch sử cục bộ gần nhất lên cloud
       const topItems = localHist.slice(0, 30);
@@ -530,23 +610,31 @@ export async function syncUserCloudData(
   // 4. Đồng bộ Cài đặt (Theme, Search Engine, Wallpaper)
   try {
     const cloudSettings = await fetchCloudSettings(userId, email);
+    const syncAccountsVal = await AsyncStorage.getItem('@kite_sync_all_accounts');
+    const isSyncOn = syncAccountsVal ? JSON.parse(syncAccountsVal) : false;
+
     if (cloudSettings) {
       if (cloudSettings.searchEngineId) {
         await AsyncStorage.setItem('@kite_search_engine', cloudSettings.searchEngineId);
       }
       if (cloudSettings.themeId && email) {
-        await AsyncStorage.setItem(`@kite_theme_${email.toLowerCase()}`, cloudSettings.themeId);
-        await AsyncStorage.setItem('@kite_theme', cloudSettings.themeId);
+        await AsyncStorage.setItem(`@kite_theme_palette_${email.toLowerCase()}`, cloudSettings.themeId);
+        if (isSyncOn) {
+          await AsyncStorage.setItem('@kite_theme_palette', cloudSettings.themeId);
+        }
       }
       if (cloudSettings.bgImageUrl && email) {
-        await AsyncStorage.setItem(`@kite_home_bg_${email.toLowerCase()}`, cloudSettings.bgImageUrl);
+        await AsyncStorage.setItem(`@kite_bg_image_${email.toLowerCase()}`, cloudSettings.bgImageUrl);
+        if (isSyncOn) {
+          await AsyncStorage.setItem('@kite_bg_image', cloudSettings.bgImageUrl);
+        }
       }
       callbacks?.onSettingsLoaded?.(cloudSettings);
     } else {
       // Cloud chưa có settings -> lưu settings hiện tại của máy lên cloud
       const engine = await AsyncStorage.getItem('@kite_search_engine');
-      const theme = email ? await AsyncStorage.getItem(`@kite_theme_${email.toLowerCase()}`) : null;
-      const bg = email ? await AsyncStorage.getItem(`@kite_home_bg_${email.toLowerCase()}`) : null;
+      const theme = email ? await AsyncStorage.getItem(`@kite_theme_palette_${email.toLowerCase()}`) : null;
+      const bg = email ? await AsyncStorage.getItem(`@kite_bg_image_${email.toLowerCase()}`) : null;
       saveCloudSettings(
         userId,
         {
@@ -559,6 +647,45 @@ export async function syncUserCloudData(
     }
   } catch (e) {
     console.warn('Lỗi đồng bộ settings:', e);
+  }
+
+  // 5. Đồng bộ Mật khẩu hai chiều (Two-way Passwords Sync)
+  try {
+    const pwdKey = email ? `@kite_saved_passwords_${email.toLowerCase()}` : '@kite_saved_passwords';
+    const localPwdRaw = await AsyncStorage.getItem(pwdKey);
+    let localPwd: any[] = localPwdRaw ? JSON.parse(localPwdRaw) : [];
+
+    const cloudPwd = await fetchCloudPasswords(userId, email);
+    if (cloudPwd && cloudPwd.length > 0) {
+      const mergedMap = new Map<string, any>();
+      cloudPwd.forEach((p) => {
+        const key = `${(p.website || '').toLowerCase().trim()}|${(p.username || '').toLowerCase().trim()}`;
+        mergedMap.set(key, p);
+      });
+      if (Array.isArray(localPwd)) {
+        localPwd.forEach((p) => {
+          const key = `${(p.website || '').toLowerCase().trim()}|${(p.username || '').toLowerCase().trim()}`;
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, p);
+          }
+        });
+      }
+      const mergedList = Array.from(mergedMap.values());
+      await AsyncStorage.setItem(pwdKey, JSON.stringify(mergedList));
+      const syncAccountsVal = await AsyncStorage.getItem('@kite_sync_all_accounts');
+      if (syncAccountsVal && JSON.parse(syncAccountsVal)) {
+        await AsyncStorage.setItem('@kite_saved_passwords', JSON.stringify(mergedList));
+      }
+      callbacks?.onPasswordsLoaded?.(mergedList);
+
+      if (mergedList.length > cloudPwd.length) {
+        syncCloudPasswords(userId, mergedList, email).catch(() => {});
+      }
+    } else if (Array.isArray(localPwd) && localPwd.length > 0) {
+      syncCloudPasswords(userId, localPwd, email).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('Lỗi đồng bộ passwords:', e);
   }
 }
 

@@ -56,6 +56,52 @@ export const INJECTED_BEFORE_CONTENT = `
     }
   } catch(eGoogle) {}
 
+  // 0a-2. Bắt các sự kiện chuyển trang ngầm SPA (pushState, replaceState, popstate, hashchange)
+  // để React Native luôn đồng bộ chính xác 100% URL hiện tại của tab,
+  // kể cả khi người dùng xem video, livestream, chuyển route trong các trang web động (YouTube, Stripchat, Twitter...)
+  try {
+    var _lastReportedHref = '';
+    var _sendUrlChange = function() {
+      try {
+        var curUrl = window.location.href;
+        var curTitle = document.title;
+        if (window.ReactNativeWebView && curUrl && curUrl.indexOf('http') === 0 && curUrl !== _lastReportedHref) {
+          _lastReportedHref = curUrl;
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'URL_CHANGED',
+            url: curUrl,
+            title: curTitle
+          }));
+        }
+      } catch(eU) {}
+    };
+
+    var _origPushState = history.pushState;
+    if (_origPushState) {
+      history.pushState = function() {
+        var ret = _origPushState.apply(this, arguments);
+        setTimeout(_sendUrlChange, 60);
+        return ret;
+      };
+    }
+
+    var _origReplaceState = history.replaceState;
+    if (_origReplaceState) {
+      history.replaceState = function() {
+        var ret = _origReplaceState.apply(this, arguments);
+        setTimeout(_sendUrlChange, 60);
+        return ret;
+      };
+    }
+
+    window.addEventListener('popstate', function() {
+      setTimeout(_sendUrlChange, 60);
+    });
+    window.addEventListener('hashchange', function() {
+      setTimeout(_sendUrlChange, 60);
+    });
+  } catch(eSpa) {}
+
   // 0b. Kiểm tra phần tử UI hợp lệ (menu 3 gạch, hộp thoại hỏi cookie, dialog, modal, nút bấm...)
   // Tuyệt đối KHÔNG chặn hoặc phá vỡ các tính năng chính thức của trang web
   function isLegitimateUIElement(el) {
@@ -867,15 +913,23 @@ export const INJECTED_AFTER_CONTENT = `
     document.addEventListener('touchend', handleAccountPick, true);
     document.addEventListener('pointerdown', handleAccountPick, true);
 
-    if (host.includes('accounts.google.com')) {
-      return;
-    }
+    // Tự động bypass trang lỗi 400 SetSID của Google nếu bị kẹt
+    try {
+      if (host.includes('google.') && (location.pathname.includes('/setsid') || document.title.includes('400') || (document.body && document.body.innerText.includes('400.')))) {
+        var searchParams = new URLSearchParams(window.location.search);
+        var cont = searchParams.get('continue');
+        if (cont && (cont.includes('google.') || cont.includes('supabase.co') || cont.startsWith('kite://'))) {
+          window.location.replace(cont);
+          return;
+        }
+      }
+    } catch(e) {}
 
     var isMyAccount = host.includes('myaccount.google.com');
+    var isAccountsGoogle = host.includes('accounts.google.');
     var isGoogleSearchOrHome = host.includes('google.') && !host.includes('gemini.') && !host.includes('myaccount.');
-    var isGoogleCompletedLogin = isMyAccount;
 
-    if (isMyAccount || isGoogleSearchOrHome) {
+    if (isMyAccount || isAccountsGoogle || isGoogleSearchOrHome) {
       var lastReportedKey = '';
       var findGoogleProfile = function() {
         var userEmail = '';
@@ -910,16 +964,89 @@ export const INJECTED_AFTER_CONTENT = `
           }
         }
 
-        // 2. Tren trang myaccount.google.com: Tim the email truc tiep
-        if (isMyAccount && !userEmail) {
+        // 2. Tìm qua thuộc tính data-email / data-identifier
+        if (!userEmail) {
           try {
-            var emEl = document.querySelector('[data-email], [aria-label*="@"]');
+            var emEl = document.querySelector('[data-email], [data-identifier], [aria-label*="@"]');
             if (emEl) {
-              var emVal = emEl.getAttribute('data-email') || emEl.getAttribute('aria-label') || '';
+              var emVal = emEl.getAttribute('data-email') || emEl.getAttribute('data-identifier') || emEl.getAttribute('aria-label') || '';
               var mEm = emVal.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
               if (mEm) userEmail = mEm[0];
             }
           } catch(err) {}
+        }
+
+        // 3. Quét toàn bộ nội dung văn bản (đặc biệt cho trang interstitial video selfie như hình 1)
+        if (!userEmail && (isMyAccount || isAccountsGoogle)) {
+          try {
+            var textContent = document.body ? document.body.innerText : '';
+            var mBody = textContent.match(/[a-zA-Z0-9._%+-]+@gmail\.com/);
+            if (!mBody) {
+              mBody = textContent.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            }
+            if (mBody) {
+              var candidate = mBody[0];
+              var lowerCand = candidate.toLowerCase();
+              if (
+                !lowerCand.includes('support') &&
+                !lowerCand.includes('google.com') &&
+                !lowerCand.includes('example') &&
+                !lowerCand.includes('reply')
+              ) {
+                userEmail = candidate;
+              }
+            }
+          } catch(err) {}
+        }
+
+        // 4. Tìm avatar nếu chưa có
+        if (userEmail && !userAvatar) {
+          try {
+            var allImgs = document.querySelectorAll('img');
+            for (var k = 0; k < allImgs.length; k++) {
+              var imgSrc = allImgs[k].src || '';
+              if (
+                imgSrc.includes('googleusercontent.com/a/') ||
+                imgSrc.includes('googleusercontent.com/a-/') ||
+                imgSrc.includes('googleusercontent.com/ogw/')
+              ) {
+                userAvatar = imgSrc.replace(/=s\d+(-[a-z]+)?/i, '=s256-c');
+                break;
+              }
+            }
+          } catch(err) {}
+        }
+
+        // 5. Nếu đang ở trang chọn tài khoản Google (danh sách các nick đã đăng nhập trên máy)
+        if (isAccountsGoogle) {
+          try {
+            var listItems = document.querySelectorAll('[data-identifier], [data-email]');
+            for (var j = 0; j < listItems.length; j++) {
+              var itm = listItems[j];
+              var itmEmail = itm.getAttribute('data-identifier') || itm.getAttribute('data-email') || '';
+              if (itmEmail && itmEmail.includes('@') && itmEmail !== userEmail) {
+                var itmName = '';
+                var lines = (itm.innerText || '').split('\n').map(function(s){ return s.trim(); }).filter(Boolean);
+                for (var l = 0; l < lines.length; l++) {
+                  if (!lines[l].includes('@') && lines[l].length < 40 && !lines[l].toLowerCase().includes('google')) {
+                    itmName = lines[l];
+                    break;
+                  }
+                }
+                var itmImg = itm.querySelector('img');
+                var itmAvatar = '';
+                if (itmImg && itmImg.src && itmImg.src.includes('googleusercontent.com')) {
+                  itmAvatar = itmImg.src.replace(/=s\d+(-[a-z]+)?/i, '=s256-c');
+                }
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'GOOGLE_USER_PROFILE',
+                  email: itmEmail,
+                  name: itmName || itmEmail.split('@')[0],
+                  avatarUrl: itmAvatar
+                }));
+              }
+            }
+          } catch(e) {}
         }
 
         if (userEmail) {
@@ -946,7 +1073,7 @@ export const INJECTED_AFTER_CONTENT = `
         }
       };
 
-      setTimeout(findGoogleProfile, 1500);
+      setTimeout(findGoogleProfile, 1200);
     }
   } catch(e) {}
 

@@ -16,6 +16,7 @@ import {
   Dimensions,
   Switch,
   useWindowDimensions,
+  StatusBar,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
@@ -28,6 +29,7 @@ import { Bookmark, UserProfile } from '../types/browser';
 import { SEARCH_ENGINES } from '../constants/searchEngines';
 import { theme } from '../constants/theme';
 import { VoiceSearchModal } from './VoiceSearchModal';
+import { GoogleAccountSheet } from './GoogleAccountSheet';
 import { getGoogleOAuthUrl, saveCloudSettings, syncUserCloudData } from '../services/supabase';
 import { preconnectTarget } from '../services/networkPreconnectService';
 
@@ -84,7 +86,7 @@ interface HomeDashboardProps {
   refreshTrigger?: number;
 }
 
-let cachedShortcuts: Bookmark[] | null = null;
+const cachedShortcutsMap = new Map<string, Bookmark[]>();
 
 const DEFAULT_BOOKMARKS: Bookmark[] = [
   {
@@ -669,7 +671,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(1)).current;
 
-  const [shortcuts, setShortcuts] = useState<Bookmark[]>(cachedShortcuts || DEFAULT_BOOKMARKS);
+  const [shortcuts, setShortcuts] = useState<Bookmark[]>(() => {
+    const email = propUserProfile?.email?.toLowerCase();
+    return (email && cachedShortcutsMap.get(email)) || cachedShortcutsMap.get('__shared__') || DEFAULT_BOOKMARKS;
+  });
   const [bgImage, setBgImage] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile>(
     propUserProfile || {
@@ -695,8 +700,18 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const [addModalVisible, setAddModalVisible] = useState<boolean>(false);
   const [engineModalVisible, setEngineModalVisible] = useState<boolean>(false);
   const [userModalVisible, setUserModalVisible] = useState<boolean>(false);
+  const [googleAccountSheetVisible, setGoogleAccountSheetVisible] = useState<boolean>(false);
   const [voiceModalVisible, setVoiceModalVisible] = useState<boolean>(false);
   const [currentThemeId, setCurrentThemeId] = useState<string>('light');
+
+  // Đảm bảo thanh trạng thái (giờ, pin, sóng) có màu đen rõ nét trên theme trắng (chuẩn Chrome)
+  useEffect(() => {
+    if (isIncognito || bgImage) {
+      StatusBar.setBarStyle('light-content', true);
+    } else {
+      StatusBar.setBarStyle('dark-content', true);
+    }
+  }, [isIncognito, bgImage, currentThemeId]);
 
   const [newTitle, setNewTitle] = useState<string>('');
   const [newUrl, setNewUrl] = useState<string>('');
@@ -1044,7 +1059,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const handleOpenGoogleAccount = () => {
     setUserModalVisible(false);
     setAccountMenuVisible(false);
-    onSelectUrl('https://myaccount.google.com');
+    // Mở trang quản lý tài khoản Google dạng sheet chuẩn (hình 1)
+    setTimeout(() => {
+      setGoogleAccountSheetVisible(true);
+    }, 150);
   };
 
   const confirmDeleteAccount = (targetAccount: UserProfile) => {
@@ -1143,6 +1161,10 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           : 'Đã tắt: Mỗi tài khoản sẽ có dữ liệu tab & lối tắt riêng biệt'
       );
     }
+    // Tải lại dữ liệu ngay lập tức theo chế độ vừa chuyển
+    setTimeout(() => {
+      loadSavedData();
+    }, 50);
   };
 
   const handleSelectAccount = async (acc: UserProfile) => {
@@ -1152,9 +1174,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       return;
     }
 
-    // Nếu không bật đồng bộ toàn bộ tài khoản: Lưu lại lối tắt & hình nền của tài khoản cũ
-    if (!syncAllAccounts && userProfile.email) {
-      const prevEmail = userProfile.email.toLowerCase();
+    const prevEmail = userProfile.email?.toLowerCase();
+    const newEmail = acc.email?.toLowerCase();
+
+    // 1. Nếu không bật đồng bộ toàn bộ tài khoản: Lưu lại trạng thái của tài khoản cũ
+    if (!syncAllAccounts && prevEmail) {
       await Promise.all([
         AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${prevEmail}`, JSON.stringify(shortcuts)),
         bgImage
@@ -1166,9 +1190,8 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
       ]);
     }
 
-    // Tải lối tắt & hình nền của tài khoản mới
-    if (!syncAllAccounts && acc.email) {
-      const newEmail = acc.email.toLowerCase();
+    // 2. Tải lối tắt & hình nền của tài khoản mới
+    if (!syncAllAccounts && newEmail) {
       const [accShortcuts, accBg, accTheme] = await Promise.all([
         AsyncStorage.getItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`),
         AsyncStorage.getItem(`${STORAGE_BG_KEY}_${newEmail}`),
@@ -1179,21 +1202,50 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         try {
           const parsed = JSON.parse(accShortcuts);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            cachedShortcuts = parsed;
             setShortcuts(parsed);
+            cachedShortcutsMap.set(newEmail, parsed);
+          } else {
+            setShortcuts(DEFAULT_BOOKMARKS);
+            cachedShortcutsMap.set(newEmail, DEFAULT_BOOKMARKS);
           }
-        } catch {}
+        } catch {
+          setShortcuts(DEFAULT_BOOKMARKS);
+          cachedShortcutsMap.set(newEmail, DEFAULT_BOOKMARKS);
+        }
       } else {
-        // Kế thừa toàn bộ lối tắt người dùng đã thêm trên máy thay vì ép về mặc định
-        const inherited = (shortcuts && shortcuts.length > 0) ? shortcuts : (cachedShortcuts && cachedShortcuts.length > 0) ? cachedShortcuts : DEFAULT_BOOKMARKS;
-        cachedShortcuts = inherited;
-        setShortcuts(inherited);
-        AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(inherited)).catch(() => {});
-        AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(inherited)).catch(() => {});
+        // Tài khoản mới chưa có lối tắt riêng -> Khởi tạo danh sách mặc định sạch sẽ (DEFAULT_BOOKMARKS)
+        // Tuyệt đối KHÔNG sao chép hay kế thừa từ tài khoản cũ!
+        setShortcuts(DEFAULT_BOOKMARKS);
+        cachedShortcutsMap.set(newEmail, DEFAULT_BOOKMARKS);
+        AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
       }
+
       setBgImage(accBg || null);
       if (accTheme && THEME_PALETTES[accTheme]) {
         setCurrentThemeId(accTheme);
+      } else {
+        setCurrentThemeId('light');
+      }
+    } else if (syncAllAccounts) {
+      // Khi bật đồng bộ: Dùng chung dữ liệu
+      const [sharedShortcuts, sharedBg, sharedTheme] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY),
+        AsyncStorage.getItem(STORAGE_BG_KEY),
+        AsyncStorage.getItem(STORAGE_THEME_KEY),
+      ]);
+
+      if (sharedShortcuts) {
+        try {
+          const parsed = JSON.parse(sharedShortcuts);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setShortcuts(parsed);
+            cachedShortcutsMap.set('__shared__', parsed);
+          }
+        } catch {}
+      }
+      setBgImage(sharedBg || null);
+      if (sharedTheme && THEME_PALETTES[sharedTheme]) {
+        setCurrentThemeId(sharedTheme);
       } else {
         setCurrentThemeId('light');
       }
@@ -1207,7 +1259,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     };
     setUserProfile(updated);
     await AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(updated));
-    syncUserCloudData(updated).catch(() => {});
 
     if (onSwitchAccount) {
       onSwitchAccount(updated, userProfile);
@@ -1222,20 +1273,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     }
   };
 
-  const isCustomShortcuts = (list: Bookmark[] | null | undefined): boolean => {
-    if (!Array.isArray(list) || list.length === 0) return false;
-    if (list.length !== DEFAULT_BOOKMARKS.length) return true;
-    return list.some(
-      (item) => !DEFAULT_BOOKMARKS.some((d) => d.url === item.url || d.title === item.title)
-    );
-  };
-
   const loadSavedData = async () => {
     try {
       const [savedSyncStr] = await Promise.all([
         AsyncStorage.getItem(STORAGE_SYNC_ACCOUNTS_KEY),
       ]);
-      const isSyncOn = savedSyncStr !== null ? JSON.parse(savedSyncStr) : false;
+      const isSyncOn = savedSyncStr !== null ? JSON.parse(savedSyncStr) : (propSyncAllAccounts ?? false);
       setSyncAllAccounts(isSyncOn);
 
       const activeEmail = (propUserProfile?.email || userProfile.email)?.toLowerCase();
@@ -1262,65 +1305,42 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         } catch {}
       }
 
-      if (!loadedShortcuts || !isCustomShortcuts(loadedShortcuts)) {
+      // NẾU BẬT ĐỒNG BỘ TOÀN BỘ (isSyncOn === true):
+      // Nếu chưa có lối tắt ở key hiện tại, mới tìm fallback ở key dùng chung STORAGE_SHORTCUTS_KEY
+      if (isSyncOn && (!loadedShortcuts || loadedShortcuts.length === 0)) {
         try {
           const fallback = await AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY);
           if (fallback) {
             const parsed = JSON.parse(fallback);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              if (isCustomShortcuts(parsed) || !loadedShortcuts) {
-                loadedShortcuts = parsed;
-              }
+              loadedShortcuts = parsed;
             }
           }
         } catch {}
       }
 
-      // Quét phục hồi tự động: Nếu danh sách đang là mặc định nhưng người dùng đã từng lưu lối tắt ở key khác
-      if (!isCustomShortcuts(loadedShortcuts)) {
-        try {
-          const allKeys = await AsyncStorage.getAllKeys();
-          const candidateKeys = allKeys.filter(
-            (k) =>
-              (k.startsWith(STORAGE_SHORTCUTS_KEY) || k.startsWith('@kite_user_bookmarks')) &&
-              k !== shortcutsKey
-          );
-          for (const k of candidateKeys) {
-            const val = await AsyncStorage.getItem(k);
-            if (val) {
-              try {
-                const parsed = JSON.parse(val);
-                if (isCustomShortcuts(parsed)) {
-                  loadedShortcuts = parsed;
-                  // Đồng bộ cứu dữ liệu vào cả key hiện tại và key dùng chung
-                  await Promise.all([
-                    AsyncStorage.setItem(shortcutsKey, JSON.stringify(parsed)),
-                    AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(parsed)),
-                  ]);
-                  break;
-                }
-              } catch {}
-            }
-          }
-        } catch {}
-      }
-
+      // Áp dụng lối tắt:
+      // Nếu không bật đồng bộ và tài khoản chưa có lối tắt riêng -> DEFAULT_BOOKMARKS độc lập, không mượn tài khoản khác
       if (loadedShortcuts && loadedShortcuts.length > 0) {
-        cachedShortcuts = loadedShortcuts;
         setShortcuts(loadedShortcuts);
+        cachedShortcutsMap.set(activeEmail || '__shared__', loadedShortcuts);
       } else {
-        cachedShortcuts = DEFAULT_BOOKMARKS;
         setShortcuts(DEFAULT_BOOKMARKS);
-        AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
-        if (shortcutsKey !== STORAGE_SHORTCUTS_KEY) {
-          AsyncStorage.setItem(shortcutsKey, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
+        cachedShortcutsMap.set(activeEmail || '__shared__', DEFAULT_BOOKMARKS);
+        AsyncStorage.setItem(shortcutsKey, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
+        if (isSyncOn) {
+          AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
         }
       }
 
-      if (savedBg) setBgImage(savedBg);
+      // Hình nền: Phải reset về null nếu tài khoản này không cài hình nền riêng
+      setBgImage(savedBg || null);
 
+      // Chủ đề: Phải reset về 'light' nếu tài khoản này không cài chủ đề riêng
       if (savedTheme && THEME_PALETTES[savedTheme]) {
         setCurrentThemeId(savedTheme);
+      } else {
+        setCurrentThemeId('light');
       }
 
       // Tải danh sách tài khoản đã lưu (chỉ tài khoản người dùng thực sự đăng nhập trên máy)
@@ -1393,18 +1413,36 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   };
 
   const saveShortcuts = async (newList: Bookmark[]) => {
-    cachedShortcuts = newList;
+    const activeEmail = (userProfile.email || propUserProfile?.email)?.toLowerCase();
+    cachedShortcutsMap.set(activeEmail || '__shared__', newList);
     setShortcuts(newList);
     try {
-      const activeEmail = (userProfile.email || propUserProfile?.email)?.toLowerCase();
       const key = syncAllAccounts || !activeEmail ? STORAGE_SHORTCUTS_KEY : `${STORAGE_SHORTCUTS_KEY}_${activeEmail}`;
       await AsyncStorage.setItem(key, JSON.stringify(newList));
-      if (key !== STORAGE_SHORTCUTS_KEY) {
+      if (syncAllAccounts) {
         await AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(newList));
       }
     } catch (e) {
       console.log('Error saving shortcuts:', e);
     }
+  };
+
+  const handleResetShortcuts = () => {
+    Alert.alert(
+      'Đặt lại lối tắt?',
+      'Khôi phục danh sách lối tắt mặc định ban đầu cho tài khoản này?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đặt lại',
+          style: 'destructive',
+          onPress: () => {
+            saveShortcuts(DEFAULT_BOOKMARKS);
+            if (onShowToast) onShowToast('Đã khôi phục lối tắt mặc định');
+          },
+        },
+      ]
+    );
   };
 
   // Chọn hình nền từ thư viện ảnh và lưu dạng Base64 vĩnh viễn (không bao giờ bị mất khi reload app)
@@ -1861,14 +1899,24 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         )}
         <View style={[styles.chromeCardHeaderRow, { paddingHorizontal: iconInset }]}>
           <Text style={[styles.chromeCardTitle, { color: themeText }]}>Lối tắt</Text>
-          <TouchableOpacity
-            onPress={() => setIsEditMode(!isEditMode)}
-            hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
-          >
-            <Text style={[styles.editToggleText, { color: isEditMode ? '#007aff' : themeSub }]}>
-              {isEditMode ? 'Xong' : 'Sửa'}
-            </Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+            {isEditMode && (
+              <TouchableOpacity
+                onPress={handleResetShortcuts}
+                hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+              >
+                <Text style={[styles.editToggleText, { color: '#ff3b30' }]}>Khôi phục</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => setIsEditMode(!isEditMode)}
+              hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
+            >
+              <Text style={[styles.editToggleText, { color: isEditMode ? '#007aff' : themeSub }]}>
+                {isEditMode ? 'Xong' : 'Sửa'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView
@@ -2713,6 +2761,17 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                   : 'Đăng nhập để đồng bộ lịch sử duyệt web và lối tắt'}
               </Text>
 
+              {/* Nút bấm Quản lý Tài khoản Google dạng pill chuẩn Chrome iOS */}
+              {userProfile.isLoggedIn && !isDeleteMode && (
+                <TouchableOpacity
+                  style={styles.manageGooglePillBtn}
+                  onPress={handleOpenGoogleAccount}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.manageGooglePillText}>Quản lý Tài khoản Google của bạn</Text>
+                </TouchableOpacity>
+              )}
+
               {/* Nút xóa tài khoản chính khi đang ở chế độ xóa */}
               {isDeleteMode && userProfile.isLoggedIn && (
                 <TouchableOpacity
@@ -2890,89 +2949,95 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               </TouchableOpacity>
             )}
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
-      {/* MODAL 3 CHẤM: TÙY CHỌN QUẢN LÝ & XÓA TÀI KHOẢN */}
-      <Modal
-        visible={accountMenuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setAccountMenuVisible(false)}
-      >
-        <TouchableOpacity
-          style={styles.actionMenuBackdrop}
-          activeOpacity={1}
-          onPress={() => setAccountMenuVisible(false)}
-        >
-          <TouchableOpacity
-            style={styles.actionMenuCard}
-            activeOpacity={1}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <View style={styles.actionMenuHeader}>
-              <Text style={styles.actionMenuTitle}>Tùy chọn tài khoản</Text>
-              <Text style={styles.actionMenuSubTitle} numberOfLines={1}>
-                {userProfile.email || 'Quản lý tài khoản Google'}
-              </Text>
-            </View>
-
-            {/* Option 1: Quản lý Tài khoản Google */}
+          {/* OVERLAY TÙY CHỌN 3 CHẤM TRỰC TIẾP TRONG SHEET (KHÔNG DÙNG MODAL THỨ 2 LÀM ĐƠ APP) */}
+          {accountMenuVisible && (
             <TouchableOpacity
-              style={styles.actionMenuItem}
-              onPress={handleOpenGoogleAccount}
-              activeOpacity={0.65}
-            >
-              <View style={[styles.actionMenuIconWrap, { backgroundColor: '#e8f0fe' }]}>
-                <Feather name="external-link" size={17} color="#007aff" />
-              </View>
-              <View style={styles.actionMenuTextCol}>
-                <Text style={styles.actionMenuItemTitle}>Quản lý Tài khoản Google của bạn</Text>
-                <Text style={styles.actionMenuItemSub}>
-                  Mở myaccount.google.com để chỉnh sửa thông tin bảo mật
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={17} color="#c7c7cc" />
-            </TouchableOpacity>
-
-            <View style={styles.actionMenuDivider} />
-
-            {/* Option 2: Xóa tài khoản khỏi thiết bị */}
-            <TouchableOpacity
-              style={styles.actionMenuItem}
-              onPress={() => {
-                setAccountMenuVisible(false);
-                setIsDeleteMode(true);
-              }}
-              activeOpacity={0.65}
-            >
-              <View style={[styles.actionMenuIconWrap, { backgroundColor: '#fee2e2' }]}>
-                <Feather name="trash-2" size={17} color="#ef4444" />
-              </View>
-              <View style={styles.actionMenuTextCol}>
-                <Text style={[styles.actionMenuItemTitle, { color: '#ef4444' }]}>
-                  Xóa tài khoản khỏi thiết bị này
-                </Text>
-                <Text style={styles.actionMenuItemSub}>
-                  Chọn bất kỳ tài khoản nào để gỡ bỏ khỏi Kite
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={17} color="#c7c7cc" />
-            </TouchableOpacity>
-
-            <View style={styles.actionMenuDivider} />
-
-            {/* Nút Đóng */}
-            <TouchableOpacity
-              style={styles.actionMenuCancelBtn}
+              style={styles.actionMenuBackdrop}
+              activeOpacity={1}
               onPress={() => setAccountMenuVisible(false)}
-              activeOpacity={0.7}
             >
-              <Text style={styles.actionMenuCancelText}>Đóng</Text>
+              <TouchableOpacity
+                style={[styles.actionMenuCard, { paddingBottom: Math.max(bottomInset, 16) }]}
+                activeOpacity={1}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <View style={styles.actionMenuHeader}>
+                  <Text style={styles.actionMenuTitle}>Tùy chọn tài khoản</Text>
+                  <Text style={styles.actionMenuSubTitle} numberOfLines={1}>
+                    {userProfile.email || 'Quản lý tài khoản Google'}
+                  </Text>
+                </View>
+
+                {/* Option 1: Quản lý Tài khoản Google */}
+                <TouchableOpacity
+                  style={styles.actionMenuItem}
+                  onPress={handleOpenGoogleAccount}
+                  activeOpacity={0.65}
+                >
+                  <View style={[styles.actionMenuIconWrap, { backgroundColor: '#e8f0fe' }]}>
+                    <Feather name="external-link" size={17} color="#007aff" />
+                  </View>
+                  <View style={styles.actionMenuTextCol}>
+                    <Text style={styles.actionMenuItemTitle}>Quản lý Tài khoản Google của bạn</Text>
+                    <Text style={styles.actionMenuItemSub}>
+                      Mở myaccount.google.com để chỉnh sửa thông tin bảo mật
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={17} color="#c7c7cc" />
+                </TouchableOpacity>
+
+                <View style={styles.actionMenuDivider} />
+
+                {/* Option 2: Quản lý & xóa tài khoản trên thiết bị */}
+                <TouchableOpacity
+                  style={styles.actionMenuItem}
+                  onPress={() => {
+                    setAccountMenuVisible(false);
+                    setIsDeleteMode(true);
+                  }}
+                  activeOpacity={0.65}
+                >
+                  <View style={[styles.actionMenuIconWrap, { backgroundColor: '#fee2e2' }]}>
+                    <Feather name="trash-2" size={17} color="#ef4444" />
+                  </View>
+                  <View style={styles.actionMenuTextCol}>
+                    <Text style={[styles.actionMenuItemTitle, { color: '#ef4444' }]}>
+                      Quản lý & xóa các tài khoản trên thiết bị
+                    </Text>
+                    <Text style={styles.actionMenuItemSub}>
+                      Chọn bất kỳ tài khoản nào để gỡ bỏ khỏi Kite
+                    </Text>
+                  </View>
+                  <Feather name="chevron-right" size={17} color="#c7c7cc" />
+                </TouchableOpacity>
+
+                <View style={styles.actionMenuDivider} />
+
+                {/* Nút Đóng */}
+                <TouchableOpacity
+                  style={styles.actionMenuCancelBtn}
+                  onPress={() => setAccountMenuVisible(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.actionMenuCancelText}>Đóng</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
             </TouchableOpacity>
-          </TouchableOpacity>
+          )}
         </TouchableOpacity>
       </Modal>
+
+      {/* BOTTOM SHEET QUẢN LÝ TÀI KHOẢN GOOGLE CỦA BẠN (CHUẨN HÌNH 1) */}
+      <GoogleAccountSheet
+        visible={googleAccountSheetVisible}
+        onClose={() => setGoogleAccountSheetVisible(false)}
+        userProfile={userProfile}
+        allAccounts={allAccounts}
+        onSelectAccount={handleSelectAccount}
+        onOpenUrl={onSelectUrl}
+        onPickAvatar={handlePickAvatar}
+      />
 
       {/* 3. BOTTOM SHEET THÊM LỐI TẮT */}
       <Modal
@@ -3622,9 +3687,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#e5e5ea',
+    backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
   activeAccountHeader: {
     alignItems: 'center',
@@ -3662,6 +3732,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#636366',
     textAlign: 'center',
+  },
+  manageGooglePillBtn: {
+    marginTop: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#dadce0',
+    backgroundColor: '#ffffff',
+    alignSelf: 'center',
+  },
+  manageGooglePillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3c4043',
   },
   accountListCard: {
     backgroundColor: '#ffffff',
@@ -3826,10 +3911,12 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   actionMenuBackdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
     padding: 16,
+    zIndex: 9999,
+    elevation: 20,
   },
   actionMenuCard: {
     backgroundColor: '#ffffff',

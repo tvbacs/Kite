@@ -20,6 +20,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 import Feather from '@expo/vector-icons/Feather';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BrowserTab } from '../types/browser';
@@ -112,35 +114,48 @@ const TabCardItem: React.FC<TabCardItemProps> = React.memo(({
       ]}
     >
       <TouchableOpacity
-        style={[styles.tabCard, isActive && styles.activeTabCard]}
+        style={[
+          styles.tabCard,
+          tab.isIncognito && styles.tabCardDark,
+          isActive && (tab.isIncognito ? styles.activeTabCardDark : styles.activeTabCard),
+        ]}
         onPress={onPress}
         activeOpacity={0.85}
       >
         {/* Header của từng thẻ Tab */}
-        <View style={styles.cardTopHeader}>
+        <View style={[styles.cardTopHeader, tab.isIncognito && styles.cardTopHeaderDark]}>
           <View style={styles.cardTitleArea}>
             {tab.isLoading && tab.url ? (
               <ActivityIndicator
                 size="small"
-                color="#007aff"
+                color={tab.isIncognito ? "#93c5fd" : "#007aff"}
                 style={{ marginRight: 6, width: 14, height: 14 }}
               />
             ) : faviconUrl ? (
               <Image source={{ uri: faviconUrl }} style={styles.tabFavicon} />
             ) : (
-              <Feather name="globe" size={13} color="#09090b" />
+              <Feather
+                name={tab.isIncognito ? "eye-off" : "globe"}
+                size={13}
+                color={tab.isIncognito ? "#a1a1aa" : "#09090b"}
+              />
             )}
-            <Text style={styles.tabCardTitle} numberOfLines={1}>
-              {tab.isLoading && tab.url ? (tab.title ? `${tab.title}` : 'Đang tải...') : (tab.title || 'Thẻ mới')}
+            <Text
+              style={[styles.tabCardTitle, tab.isIncognito && styles.tabCardTitleDark]}
+              numberOfLines={1}
+            >
+              {tab.isLoading && tab.url
+                ? (tab.title ? `${tab.title}` : 'Đang tải...')
+                : (tab.title || (tab.isIncognito ? 'Thẻ ẩn danh mới' : 'Thẻ mới'))}
             </Text>
           </View>
 
           {/* Huy hiệu đánh dấu thẻ đang kích hoạt hoặc đang ngủ */}
           {isActive ? (
-            <View style={styles.activeDot} />
+            <View style={[styles.activeDot, tab.isIncognito && styles.activeDotDark]} />
           ) : tab.isSleeping ? (
-            <View style={styles.sleepingBadge}>
-              <Feather name="moon" size={11} color="#0284c7" />
+            <View style={[styles.sleepingBadge, tab.isIncognito && styles.sleepingBadgeDark]}>
+              <Feather name="moon" size={11} color={tab.isIncognito ? "#93c5fd" : "#0284c7"} />
             </View>
           ) : null}
 
@@ -153,7 +168,7 @@ const TabCardItem: React.FC<TabCardItemProps> = React.memo(({
             }}
             activeOpacity={0.6}
           >
-            <Feather name="x" size={14} color="#71717a" />
+            <Feather name="x" size={14} color={tab.isIncognito ? "#a1a1aa" : "#71717a"} />
           </TouchableOpacity>
         </View>
 
@@ -162,7 +177,7 @@ const TabCardItem: React.FC<TabCardItemProps> = React.memo(({
             Các tác vụ tải ngầm diễn ra sau và báo hiệu qua spinner nhỏ trên thanh tiêu đề,
             người dùng vào màn hình tab lập tức thấy ngay toàn bộ thumbnail các trang. */}
         {Boolean(tab.snapshotUri && !failedSnapshot && !imageError) ? (
-          <View style={styles.cardSnapshotContainer}>
+          <View style={[styles.cardSnapshotContainer, tab.isIncognito && { backgroundColor: '#18181b' }]}>
             <Image
               source={{ uri: tab.snapshotUri }}
               style={styles.cardSnapshotImage}
@@ -173,41 +188,52 @@ const TabCardItem: React.FC<TabCardItemProps> = React.memo(({
               }}
             />
           </View>
-
         ) : !tab.url ? (
-          /* Thẻ mới: Hiển thị preview giao diện thu nhỏ Google & lối tắt như Cốc Cốc */
-          <View style={styles.miniHomeContainer}>
-            <View style={styles.miniGoogleBox}>
-              <Text style={styles.miniGoogleG}>G</Text>
-              <Text style={styles.miniGoogleO1}>o</Text>
-              <Text style={styles.miniGoogleO2}>o</Text>
-              <Text style={styles.miniGoogleG2}>g</Text>
-              <Text style={styles.miniGoogleL}>l</Text>
-              <Text style={styles.miniGoogleE}>e</Text>
-            </View>
-            <View style={styles.miniSearchInput}>
-              <Feather name="search" size={9} color="#9ca3af" style={{ marginRight: 4 }} />
-              <Text style={styles.miniSearchPlaceholder} numberOfLines={1}>
-                Tìm trên Google...
+          /* Thẻ mới: Hiển thị preview giao diện thu nhỏ Google & lối tắt (tab thường) hoặc giao diện tối ẩn danh */
+          tab.isIncognito ? (
+            <View style={styles.miniIncognitoContainer}>
+              <View style={styles.miniIncognitoIconBox}>
+                <Feather name="eye-off" size={24} color="#e4e4e7" />
+              </View>
+              <Text style={styles.miniIncognitoTitle}>Thẻ ẩn danh mới</Text>
+              <Text style={styles.miniIncognitoSub} numberOfLines={2}>
+                Kite không lưu lịch sử hay dữ liệu duyệt web
               </Text>
             </View>
-            <View style={styles.miniShortcutsRow}>
-              <View style={[styles.miniShortcutTile, { backgroundColor: '#10b981' }]}>
-                <Feather name="film" size={9} color="#ffffff" />
+          ) : (
+            <View style={styles.miniHomeContainer}>
+              <View style={styles.miniGoogleBox}>
+                <Text style={styles.miniGoogleG}>G</Text>
+                <Text style={styles.miniGoogleO1}>o</Text>
+                <Text style={styles.miniGoogleO2}>o</Text>
+                <Text style={styles.miniGoogleG2}>g</Text>
+                <Text style={styles.miniGoogleL}>l</Text>
+                <Text style={styles.miniGoogleE}>e</Text>
               </View>
-              <View style={[styles.miniShortcutTile, { backgroundColor: '#3b82f6' }]}>
-                <Feather name="globe" size={9} color="#ffffff" />
+              <View style={styles.miniSearchInput}>
+                <Feather name="search" size={9} color="#9ca3af" style={{ marginRight: 4 }} />
+                <Text style={styles.miniSearchPlaceholder} numberOfLines={1}>
+                  Tìm trên Google...
+                </Text>
               </View>
-              <View style={[styles.miniShortcutTile, { backgroundColor: '#f59e0b' }]}>
-                <Feather name="play" size={9} color="#ffffff" />
-              </View>
-              <View style={[styles.miniShortcutTile, { backgroundColor: '#ef4444' }]}>
-                <Feather name="video" size={9} color="#ffffff" />
+              <View style={styles.miniShortcutsRow}>
+                <View style={[styles.miniShortcutTile, { backgroundColor: '#10b981' }]}>
+                  <Feather name="film" size={9} color="#ffffff" />
+                </View>
+                <View style={[styles.miniShortcutTile, { backgroundColor: '#3b82f6' }]}>
+                  <Feather name="globe" size={9} color="#ffffff" />
+                </View>
+                <View style={[styles.miniShortcutTile, { backgroundColor: '#f59e0b' }]}>
+                  <Feather name="play" size={9} color="#ffffff" />
+                </View>
+                <View style={[styles.miniShortcutTile, { backgroundColor: '#ef4444' }]}>
+                  <Feather name="video" size={9} color="#ffffff" />
+                </View>
               </View>
             </View>
-          </View>
+          )
         ) : (
-          <View style={styles.cardPreviewBody}>
+          <View style={[styles.cardPreviewBody, tab.isIncognito && styles.cardPreviewBodyDark]}>
             <View style={[styles.cardEmptyIconCircle, tab.isIncognito && { backgroundColor: '#27272a' }]}>
               <Feather
                 name={tab.isIncognito ? "eye-off" : "globe"}
@@ -304,6 +330,10 @@ export const TabSheet: React.FC<TabSheetProps> = ({
   const normalTabs = tabs.filter((t) => !t.isIncognito);
   const incognitoTabs = tabs.filter((t) => !!t.isIncognito);
   const currentDisplayedTabs = activeMode === 'normal' ? normalTabs : incognitoTabs;
+  const showIncognitoPrivacyLock =
+    activeMode === 'incognito' &&
+    incognitoTabs.length > 0 &&
+    !isIncognitoUnlocked;
 
   // Khi chuyển đổi giữa chế độ thường và ẩn danh, tự động cuộn xuống cuối danh sách
   useEffect(() => {
@@ -331,18 +361,54 @@ export const TabSheet: React.FC<TabSheetProps> = ({
 
   const handleSwitchToIncognito = () => {
     if (activeMode === 'incognito') return;
-    if (incognitoPin && !isIncognitoUnlocked) {
-      pendingUnlockActionRef.current = () => {
-        setActiveMode('incognito');
-      };
-      setIsPinUnlocking(true);
-    } else {
-      setActiveMode('incognito');
-    }
+    setActiveMode('incognito');
   };
 
   const handleSwitchToNormal = () => {
     if (activeMode === 'normal') return;
+    setActiveMode('normal');
+  };
+
+  const handleContinueIncognito = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (e) {}
+
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+      if (hasHardware && isEnrolled) {
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Mở khóa các thẻ ẩn danh',
+          fallbackLabel: incognitoPin ? 'Sử dụng mã PIN' : undefined,
+          cancelLabel: 'Hủy',
+        });
+
+        if (result.success) {
+          onUnlockSuccess?.();
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Biometric auth error', err);
+    }
+
+    if (incognitoPin) {
+      pendingUnlockActionRef.current = () => {
+        onUnlockSuccess?.();
+      };
+      setIsPinUnlocking(true);
+    } else {
+      onUnlockSuccess?.();
+    }
+  };
+
+  const handleCloseAllIncognito = () => {
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } catch (e) {}
+    onCloseAllTabs?.(true);
     setActiveMode('normal');
   };
 
@@ -361,14 +427,34 @@ export const TabSheet: React.FC<TabSheetProps> = ({
     }
   };
 
-  const handleCreateIncognitoTab = () => {
+  const handleCreateIncognitoTab = async () => {
     if (incognitoPin && !isIncognitoUnlocked) {
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+        if (hasHardware && isEnrolled) {
+          const result = await LocalAuthentication.authenticateAsync({
+            promptMessage: 'Mở khóa để mở thẻ ẩn danh mới',
+            fallbackLabel: 'Sử dụng mã PIN',
+            cancelLabel: 'Hủy',
+          });
+          if (result.success) {
+            onUnlockSuccess?.();
+            onClose();
+            onNewTab(true);
+            return;
+          }
+        }
+      } catch (e) {}
+
       pendingUnlockActionRef.current = () => {
+        onUnlockSuccess?.();
         onClose();
         onNewTab(true);
       };
       setIsPinUnlocking(true);
     } else {
+      onUnlockSuccess?.();
       onClose();
       onNewTab(true);
     }
@@ -433,98 +519,168 @@ export const TabSheet: React.FC<TabSheetProps> = ({
       presentationStyle="overFullScreen"
       onRequestClose={handleBackPress}
     >
-      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+      {visible && (
+        <StatusBar
+          barStyle={activeMode === 'incognito' ? 'light-content' : 'dark-content'}
+          translucent
+          backgroundColor="transparent"
+        />
+      )}
 
-      {/* Giao diện màu sáng hiện đại, thanh lịch (Light Theme) theo yêu cầu của bạn */}
-      <View style={styles.container}>
-        <BlurView intensity={90} tint="light" style={StyleSheet.absoluteFill} pointerEvents="none" />
+      <View style={[styles.container, activeMode === 'incognito' && styles.containerDark]}>
+        <BlurView
+          intensity={90}
+          tint={activeMode === 'incognito' ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
 
         {/* THANH ĐIỀU HƯỚNG TRÊN CÙNG */}
-        <View style={[styles.topNav, { paddingTop: topInset, height: 54 + topInset }]}>
+        <View
+          style={[
+            styles.topNav,
+            { paddingTop: topInset, height: 54 + topInset },
+            activeMode === 'incognito' && styles.topNavDark,
+          ]}
+        >
           {/* Nút đóng / quay lại bên trái */}
           <TouchableOpacity
-            style={styles.circleBtn}
+            style={[styles.circleBtn, activeMode === 'incognito' && styles.circleBtnDark]}
             onPress={handleBackPress}
             activeOpacity={0.7}
           >
-            <Feather name="arrow-left" size={20} color="#09090b" />
+            <Feather
+              name="arrow-left"
+              size={20}
+              color={activeMode === 'incognito' ? '#f4f4f5' : '#09090b'}
+            />
           </TouchableOpacity>
 
           {/* Phân đoạn giữa: Ẩn danh qua TRÁI, Tab thường qua PHẢI */}
-          <View style={styles.centerSegment}>
-            {/* 1. Nút Thẻ ẩn danh (Con mắt gạch chéo) - Bên TRÁI */}
+          <View
+            style={[
+              styles.centerSegment,
+              activeMode === 'incognito' && styles.centerSegmentDark,
+            ]}
+          >
+            {/* 1. Nút Thẻ ẩn danh (Mũ + Kính Incognito) - Bên TRÁI */}
             <TouchableOpacity
               style={[
                 styles.segmentBtn,
-                activeMode === 'incognito' && styles.segmentBtnActiveDark,
+                activeMode === 'incognito' && styles.segmentBtnActiveIncognito,
               ]}
               onPress={handleSwitchToIncognito}
               activeOpacity={0.7}
             >
-              <Feather
-                name="eye-off"
-                size={17}
-                color={activeMode === 'incognito' ? '#ffffff' : '#71717a'}
+              <MaterialCommunityIcons
+                name="incognito"
+                size={21}
+                color={activeMode === 'incognito' ? '#09090b' : '#a1a1aa'}
               />
-              {/* CHỈ hiển thị số lượng tab ẩn danh khi đang ở chế độ ẩn danh (bảo mật riêng tư khi ở tab thường) */}
-              {activeMode === 'incognito' && incognitoTabs.length > 0 && (
-                <Text
-                  style={[
-                    styles.segmentBtnText,
-                    { color: '#ffffff', marginLeft: 4, fontSize: 13, fontWeight: '700' },
-                  ]}
-                >
-                  {incognitoTabs.length}
-                </Text>
-              )}
             </TouchableOpacity>
 
             {/* 2. Nút Thẻ bình thường - Bên PHẢI */}
             <TouchableOpacity
               style={[
                 styles.segmentBtn,
-                activeMode === 'normal' && styles.segmentBtnActive,
+                activeMode === 'normal' && styles.segmentBtnActiveNormal,
               ]}
               onPress={handleSwitchToNormal}
               activeOpacity={0.7}
             >
-              <Text
+              <View
                 style={[
-                  styles.segmentBtnText,
-                  activeMode === 'normal' && styles.segmentBtnTextActive,
+                  styles.tabCounterBox,
+                  activeMode === 'normal'
+                    ? styles.tabCounterBoxActive
+                    : activeMode === 'incognito'
+                    ? styles.tabCounterBoxDark
+                    : styles.tabCounterBoxInactive,
                 ]}
               >
-                {normalTabs.length}
-              </Text>
+                <Text
+                  style={[
+                    styles.tabCounterText,
+                    activeMode === 'normal'
+                      ? styles.tabCounterTextActive
+                      : activeMode === 'incognito'
+                      ? styles.tabCounterTextDark
+                      : styles.tabCounterTextInactive,
+                  ]}
+                >
+                  {normalTabs.length > 99 ? '99+' : normalTabs.length}
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
 
           {/* Nút 3 chấm mở Menu Tùy chọn thẻ */}
           <TouchableOpacity
-            style={styles.circleBtn}
+            style={[styles.circleBtn, activeMode === 'incognito' && styles.circleBtnDark]}
             onPress={() => setMenuVisible(true)}
             activeOpacity={0.7}
           >
-            <Feather name="more-horizontal" size={20} color="#09090b" />
+            <Feather
+              name="more-horizontal"
+              size={20}
+              color={activeMode === 'incognito' ? '#f4f4f5' : '#09090b'}
+            />
           </TouchableOpacity>
         </View>
 
-        {/* DANH SÁCH THẺ HOẶC TRẠNG THÁI TRỐNG */}
-        {currentDisplayedTabs.length === 0 ? (
+        {/* MÀN HÌNH KHÓA RIÊNG TƯ ẨN DANH HOẶC DANH SÁCH THẺ HOẶC TRẠNG THÁI TRỐNG */}
+        {showIncognitoPrivacyLock ? (
+          <View style={styles.incognitoPrivacyContainer}>
+            <View style={styles.incognitoPrivacyEmblemBox}>
+              <MaterialCommunityIcons name="incognito" size={76} color="#ffffff" />
+            </View>
+
+            <TouchableOpacity
+              style={styles.incognitoPrivacyContinueBtn}
+              onPress={handleContinueIncognito}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.incognitoPrivacyContinueText}>Tiếp tục ở chế độ ẩn danh</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.incognitoPrivacyCloseAllBtn}
+              onPress={handleCloseAllIncognito}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.incognitoPrivacyCloseAllText}>Đóng các thẻ Ẩn danh</Text>
+            </TouchableOpacity>
+          </View>
+        ) : currentDisplayedTabs.length === 0 ? (
           <View style={styles.emptyStateContainer}>
-            <View style={styles.emptyIconBox}>
-              <Feather
-                name={activeMode === 'incognito' ? 'eye-off' : 'layers'}
+            <View
+              style={[
+                styles.emptyIconBox,
+                activeMode === 'incognito' && { backgroundColor: '#27272a' },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={activeMode === 'incognito' ? 'incognito' : 'layers'}
                 size={36}
-                color="#71717a"
+                color={activeMode === 'incognito' ? '#a1a1aa' : '#71717a'}
               />
             </View>
-            <Text style={styles.emptyTitle}>
+            <Text
+              style={[
+                styles.emptyTitle,
+                activeMode === 'incognito' && { color: '#f4f4f5' },
+              ]}
+            >
               {activeMode === 'incognito'
                 ? 'Chế độ duyệt web ẩn danh'
                 : 'Chưa có thẻ nào'}
             </Text>
-            <Text style={styles.emptySub}>
+            <Text
+              style={[
+                styles.emptySub,
+                activeMode === 'incognito' && { color: '#a1a1aa' },
+              ]}
+            >
               {activeMode === 'incognito'
                 ? 'Các thẻ ẩn danh sẽ không lưu lại lịch sử duyệt web, cookie hay dữ liệu trang web của bạn.'
                 : 'Bấm nút [+] bên dưới để mở thẻ mới.'}
@@ -562,21 +718,48 @@ export const TabSheet: React.FC<TabSheetProps> = ({
         )}
 
         {/* THANH ĐIỀU HƯỚNG ĐÁY */}
-        <View style={[styles.bottomNav, { paddingBottom: bottomInset }]}>
+        <View
+          style={[
+            styles.bottomNav,
+            { paddingBottom: bottomInset },
+            activeMode === 'incognito' && styles.bottomNavDark,
+          ]}
+        >
           <View style={styles.bottomPlaceholder} />
 
-          {/* Nút dấu [+] ở giữa */}
+          {/* Nút dấu [+] ở giữa (Trong chế độ ẩn danh: hình tròn trắng với icon đen chuẩn Chrome iOS) */}
           <TouchableOpacity
-            style={styles.addTabCenterBtn}
+            style={[
+              styles.addTabCenterBtn,
+              activeMode === 'incognito' && styles.addTabCenterBtnDark,
+            ]}
             onPress={handleAddTabPress}
             activeOpacity={0.7}
           >
-            <Feather name="plus" size={24} color="#09090b" />
+            <Feather
+              name="plus"
+              size={24}
+              color="#09090b"
+            />
           </TouchableOpacity>
 
           {/* Nút 'Xong' ở bên phải */}
-          <TouchableOpacity style={styles.doneBtn} onPress={handleDonePress} activeOpacity={0.7}>
-            <Text style={styles.doneBtnText}>Xong</Text>
+          <TouchableOpacity
+            style={[
+              styles.doneBtn,
+              activeMode === 'incognito' && styles.doneBtnDark,
+            ]}
+            onPress={handleDonePress}
+            activeOpacity={0.7}
+          >
+            <Text
+              style={[
+                styles.doneBtnText,
+                activeMode === 'incognito' && styles.doneBtnTextDark,
+              ]}
+            >
+              Xong
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -759,6 +942,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f4f4f6',
   },
+  containerDark: {
+    backgroundColor: '#09090b',
+  },
   topNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -770,6 +956,10 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 4,
   },
+  topNavDark: {
+    backgroundColor: 'rgba(18, 18, 20, 0.95)',
+    borderBottomColor: '#27272a',
+  },
   circleBtn: {
     width: 38,
     height: 38,
@@ -778,25 +968,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  circleBtnDark: {
+    backgroundColor: '#27272a',
+  },
+  centerSegmentDark: {
+    backgroundColor: '#27272a',
+  },
   centerSegment: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#e4e4e7',
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 3,
     gap: 4,
   },
   segmentBtn: {
-    height: 30,
-    minWidth: 42,
-    borderRadius: 15,
+    height: 32,
+    minWidth: 46,
+    borderRadius: 16,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    gap: 4,
+    paddingHorizontal: 12,
   },
-  segmentBtnActive: {
+  segmentBtnActiveIncognito: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentBtnActiveNormal: {
     backgroundColor: '#ffffff',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 1 },
@@ -804,35 +1007,79 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
   },
-  segmentBtnActiveDark: {
-    backgroundColor: '#09090b',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  segmentBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#71717a',
-  },
-  segmentBtnTextActive: {
-    color: '#09090b',
-  },
-  incognitoCountBadge: {
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#71717a',
+  tabCounterBox: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: 3,
   },
-  incognitoCountText: {
-    fontSize: 10,
+  tabCounterBoxActive: {
+    borderColor: '#09090b',
+  },
+  tabCounterBoxInactive: {
+    borderColor: '#71717a',
+  },
+  tabCounterBoxDark: {
+    borderColor: '#a1a1aa',
+  },
+  tabCounterText: {
+    fontSize: 11,
     fontWeight: '700',
+  },
+  tabCounterTextActive: {
+    color: '#09090b',
+  },
+  tabCounterTextInactive: {
+    color: '#71717a',
+  },
+  tabCounterTextDark: {
+    color: '#f4f4f5',
+  },
+  incognitoPrivacyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 28,
+  },
+  incognitoPrivacyEmblemBox: {
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 52,
+  },
+  incognitoPrivacyContinueBtn: {
+    width: '100%',
+    maxWidth: 320,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 20,
+  },
+  incognitoPrivacyContinueText: {
     color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  incognitoPrivacyCloseAllBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  incognitoPrivacyCloseAllText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '500',
   },
   emptyStateContainer: {
     flex: 1,
@@ -895,12 +1142,25 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  tabCardDark: {
+    backgroundColor: '#18181b',
+    borderColor: '#27272a',
+  },
   activeTabCard: {
     borderWidth: 2.5,
     borderColor: '#007aff',
     shadowColor: '#007aff',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.22,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  activeTabCardDark: {
+    borderWidth: 2.5,
+    borderColor: '#38bdf8',
+    shadowColor: '#38bdf8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 5,
   },
@@ -911,6 +1171,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#007aff',
     marginRight: 6,
   },
+  activeDotDark: {
+    backgroundColor: '#38bdf8',
+  },
   sleepingBadge: {
     width: 20,
     height: 20,
@@ -919,6 +1182,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 6,
+  },
+  sleepingBadgeDark: {
+    backgroundColor: '#1e293b',
   },
   cardTopHeader: {
     height: 38,
@@ -929,6 +1195,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#dbeafe',
+  },
+  cardTopHeaderDark: {
+    backgroundColor: '#202124',
+    borderBottomColor: '#27272a',
   },
   cardTitleArea: {
     flexDirection: 'row',
@@ -948,6 +1218,9 @@ const styles = StyleSheet.create({
     color: '#09090b',
     flex: 1,
   },
+  tabCardTitleDark: {
+    color: '#f4f4f5',
+  },
   cardCloseBtn: {
     padding: 4,
   },
@@ -957,6 +1230,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     backgroundColor: '#ffffff',
+  },
+  cardPreviewBodyDark: {
+    backgroundColor: '#18181b',
+  },
+  miniIncognitoContainer: {
+    flex: 1,
+    backgroundColor: '#18181b',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  miniIncognitoIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#27272a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  miniIncognitoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#f4f4f5',
+    marginBottom: 4,
+  },
+  miniIncognitoSub: {
+    fontSize: 10,
+    color: '#71717a',
+    textAlign: 'center',
+    lineHeight: 14,
   },
   cardSnapshotContainer: {
     flex: 1,
@@ -1042,6 +1347,10 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 4,
   },
+  bottomNavDark: {
+    backgroundColor: 'rgba(18, 18, 20, 0.95)',
+    borderTopColor: '#27272a',
+  },
   bottomPlaceholder: {
     width: 64,
   },
@@ -1053,6 +1362,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  addTabCenterBtnDark: {
+    backgroundColor: '#ffffff',
+  },
   doneBtn: {
     paddingVertical: 7,
     paddingHorizontal: 16,
@@ -1061,10 +1373,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  doneBtnDark: {
+    backgroundColor: '#27272a',
+  },
   doneBtnText: {
     color: '#09090b',
     fontSize: 14,
     fontWeight: '700',
+  },
+  doneBtnTextDark: {
+    color: '#f4f4f5',
   },
   menuBackdrop: {
     flex: 1,

@@ -170,7 +170,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+      {visible && <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />}
       <View style={[styles.container, { paddingTop: topInset, paddingBottom: bottomInset }]}>
         {/* Header: Xóa bên trái, Xong bên phải */}
         <View style={styles.header}>

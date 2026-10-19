@@ -353,6 +353,8 @@ function BrowserMain() {
   const handleGoBackRef = useRef(nav.handleGoBack);
   handleGoBackRef.current = nav.handleGoBack;
 
+  const handleSwitchAccountRef = useRef<((newProfile: UserProfile, previousProfile: UserProfile) => Promise<void>) | null>(null);
+
   // 8. Hook xử lý handleMessage từ webview
   const webViewMessage = useWebViewMessage({
     activeTabId,
@@ -375,6 +377,7 @@ function BrowserMain() {
     canGoBackRef,
     handleGoBackRef,
     showToast,
+    onSwitchAccount: (newP, oldP) => handleSwitchAccountRef.current?.(newP, oldP),
   });
 
   modalsState.passwordSavePrompt = webViewMessage.passwordSavePrompt;
@@ -540,6 +543,7 @@ function BrowserMain() {
       setIsIncognito(false);
     }
   };
+  handleSwitchAccountRef.current = handleSwitchAccount;
 
   const handleToggleIncognito = (forced?: boolean) => {
     const nextVal = typeof forced === 'boolean' ? forced : !isCurrentIncognito;
@@ -668,8 +672,8 @@ function BrowserMain() {
     }
   };
 
-  // 11. Giới hạn số lượng WebViews nạp đồng thời vào RAM/GPU chuẩn Chrome (tối đa 3 tab nền + active tab)
-  // ĐẶC BIỆT: Tuyệt đối cô lập giữa tab thường và tab ẩn danh - khi đang ở tab thường thì KHÔNG BAO GIỜ nạp tab ẩn danh vào RAM/WebViews
+  // 11. Giới hạn số lượng WebViews nạp đồng thời vào RAM/GPU chuẩn Chrome (tối đa 3 tab cùng chế độ + 1 tab gần nhất của chế độ kia)
+  // Giúp khi chuyển đổi qua lại giữa Tab Thường và Tab Ẩn danh không bị reload lại trang từ đầu hay mất video/stream đang xem
   const isCurrentIncognito = Boolean(currentTab ? currentTab.isIncognito : isIncognito);
   const MAX_LIVE_TABS = 3;
   const liveTabIds = useMemo(() => {
@@ -685,6 +689,22 @@ function BrowserMain() {
       .map((t) => t.id);
     const set = new Set(sortedLive);
     if (activeTabId) set.add(activeTabId);
+
+    // Giữ lại tab đang xem gần nhất của chế độ còn lại (tab ẩn danh hoặc tab thường vừa rời đi)
+    // để không bị unmount native WKWebView/WebView, giữ nguyên trạng thái video/livestream/vị trí đọc
+    const otherModeActive = tabs
+      .filter(
+        (t) =>
+          (t.url || t.initialUrl) &&
+          !t.isSleeping &&
+          Boolean(t.isIncognito) !== Boolean(isCurrentIncognito)
+      )
+      .sort((a, b) => (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0))[0];
+
+    if (otherModeActive) {
+      set.add(otherModeActive.id);
+    }
+
     return set;
   }, [tabs, activeTabId, isCurrentIncognito]);
 
@@ -966,6 +986,14 @@ function BrowserMain() {
   const handleOpenSitePermissionsFromBottomBar = useCallback(() => {
     webViewMessage.setSitePermissionsSheetVisible(true);
   }, [webViewMessage]);
+
+  // Luôn chủ động đồng bộ StatusBar (giờ, pin, sóng màu đen cho nền sáng, màu trắng cho ẩn danh)
+  useEffect(() => {
+    if (!lensModalVisible && !qrModalVisible && !tabSheetVisible) {
+      const style = isCurrentIncognito ? 'light-content' : 'dark-content';
+      StatusBar.setBarStyle(style, true);
+    }
+  }, [isCurrentIncognito, lensModalVisible, qrModalVisible, tabSheetVisible, activeUrl]);
 
   return (
     <View style={[styles.mainContainer, { backgroundColor: appBg }]}>
@@ -1409,28 +1437,32 @@ function BrowserMain() {
         onManualZap={shield.handleForceZap}
       />
 
-      <QRScannerModal
-        visible={qrModalVisible}
-        onClose={() => setQrModalVisible(false)}
-        onScanUrl={(url) => {
-          setQrModalVisible(false);
-          nav.handleNavigate(url);
-        }}
-      />
+      {qrModalVisible && (
+        <QRScannerModal
+          visible={qrModalVisible}
+          onClose={() => setQrModalVisible(false)}
+          onScanUrl={(url) => {
+            setQrModalVisible(false);
+            nav.handleNavigate(url);
+          }}
+        />
+      )}
 
-      <ImageSearchModal
-        visible={lensModalVisible}
-        onClose={() => {
-          setLensModalVisible(false);
-          setLensScreenShotUri(null);
-        }}
-        onSearchResult={(url) => {
-          setLensModalVisible(false);
-          setLensScreenShotUri(null);
-          nav.handleNavigate(url);
-        }}
-        initialImageUri={lensScreenShotUri}
-      />
+      {lensModalVisible && (
+        <ImageSearchModal
+          visible={lensModalVisible}
+          onClose={() => {
+            setLensModalVisible(false);
+            setLensScreenShotUri(null);
+          }}
+          onSearchResult={(url) => {
+            setLensModalVisible(false);
+            setLensScreenShotUri(null);
+            nav.handleNavigate(url);
+          }}
+          initialImageUri={lensScreenShotUri}
+        />
+      )}
 
       <DownloadSheet
         visible={downloads.downloadSheetVisible}
@@ -1462,6 +1494,8 @@ function BrowserMain() {
         onClose={() => setPasswordManagerVisible(false)}
         onSelectUrl={nav.handleNavigate}
         onShowToast={showToast}
+        userProfile={auth.userProfile}
+        syncAllAccounts={auth.syncAllAccounts}
       />
 
 

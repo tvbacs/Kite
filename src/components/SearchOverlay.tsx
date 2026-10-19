@@ -314,6 +314,9 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
   const getSearchQueriesKey = () =>
     userEmail ? `${STORAGE_SEARCH_QUERIES_KEY}_${userEmail.toLowerCase()}` : STORAGE_SEARCH_QUERIES_KEY;
 
+  const getBookmarksStorageKey = () =>
+    userEmail ? `${STORAGE_BOOKMARKS_KEY}_${userEmail.toLowerCase()}` : STORAGE_BOOKMARKS_KEY;
+
   useEffect(() => {
     if (!isIncognito) {
       loadSearchQueries();
@@ -437,7 +440,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
 
   const loadBookmarks = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
+      const stored = await AsyncStorage.getItem(getBookmarksStorageKey());
       const rawList: BookmarkItem[] = stored ? JSON.parse(stored) : DEFAULT_BOOKMARKS;
       const list: FastBookmarkItem[] = rawList.map((bm) => {
         const cleanUrl = bm.url.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, '');

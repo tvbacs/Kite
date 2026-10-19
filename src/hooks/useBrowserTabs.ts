@@ -268,11 +268,29 @@ export function useBrowserTabs({
         }
       }
 
-      // 2. Tab ẩn danh là OTR (Off-The-Record): Sống 100% trong RAM, TUYỆT ĐỐI KHÔNG lưu xuống đĩa.
-      // Dọn sạch hoàn toàn mọi vết tích cũ nếu có để đảm bảo an toàn riêng tư tối đa.
-      if (lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] !== '') {
-        lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] = '';
-        await AsyncStorage.removeItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY);
+      // 2. Lưu các tab ẩn danh (để khi thoát app vào lại không bị mất tab, chuẩn Chrome mobile)
+      const incognitoTabs = tabsList.filter((t) => t.isIncognito);
+      if (incognitoTabs.length > 0) {
+        const toPersistIncognito = incognitoTabs.map((t) => ({
+          id: t.id,
+          url: t.url,
+          initialUrl: t.url || t.initialUrl,
+          title: t.title,
+          isDesktop: t.isDesktop,
+          isIncognito: true,
+          isSleeping: true, // Khi app mới mở lại, cho tab ẩn danh ở trạng thái ngủ để không phát tiếng
+          lastActiveAt: t.lastActiveAt,
+        }));
+        const incognitoJson = JSON.stringify(toPersistIncognito);
+        if (lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] !== incognitoJson) {
+          lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] = incognitoJson;
+          await AsyncStorage.setItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY, incognitoJson);
+        }
+      } else {
+        if (lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] !== '') {
+          lastSavedJsonRef.current[STORAGE_PERSISTED_INCOGNITO_TABS_KEY] = '';
+          await AsyncStorage.removeItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY);
+        }
       }
     } catch (e) {}
   };

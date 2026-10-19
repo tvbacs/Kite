@@ -82,3 +82,13 @@ export interface DetectedMedia {
   detectedAt?: number;
 }
 
+export interface SavedCredential {
+  id: string;
+  website: string;
+  username: string;
+  password?: string;
+  updatedAt: number;
+  notes?: string;
+}
+
+

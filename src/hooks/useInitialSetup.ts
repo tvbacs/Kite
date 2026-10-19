@@ -227,13 +227,11 @@ export function useInitialSetup({
           ? `@kite_active_tab_id_${currentEmail.toLowerCase()}`
           : STORAGE_ACTIVE_TAB_ID_KEY;
 
-      let [tabsData, savedActiveId] = await Promise.all([
+      let [tabsData, savedActiveId, incognitoData] = await Promise.all([
         AsyncStorage.getItem(tabsKey),
         AsyncStorage.getItem(activeIdKey),
+        AsyncStorage.getItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY),
       ]);
-
-      // Dọn dẹp triệt để bất kỳ key lưu tab ẩn danh cũ nào trên máy (OTR Profile chuẩn Chrome không ghi đĩa)
-      AsyncStorage.removeItem(STORAGE_PERSISTED_INCOGNITO_TABS_KEY).catch(() => {});
 
       if (!tabsData && tabsKey !== STORAGE_PERSISTED_TABS_KEY) {
         tabsData = await AsyncStorage.getItem(STORAGE_PERSISTED_TABS_KEY);
@@ -248,9 +246,23 @@ export function useInitialSetup({
         } catch (e) {}
       }
 
-      // Chuẩn Google Chrome: Tab ẩn danh là OTR (Off-the-record profile) chỉ sống trong RAM,
-      // khi app khởi động lại thì KHÔNG BAO GIỜ nạp lại tab ẩn danh cũ từ đĩa.
-      const allTabs = parsedSavedTabs;
+      let parsedIncognitoTabs: BrowserTab[] = [];
+      if (incognitoData) {
+        try {
+          const parsed = JSON.parse(incognitoData);
+          if (Array.isArray(parsed)) {
+            parsedIncognitoTabs = parsed.map((t: BrowserTab) => ({
+              ...t,
+              isIncognito: true,
+              isSleeping: true, // Khi app vừa mở lại, tab ẩn danh luôn ở trạng thái ngủ để không phát tiếng ngầm
+              isLoading: false,
+            }));
+          }
+        } catch (e) {}
+      }
+
+      // Khôi phục đồng thời các tab thường và các tab ẩn danh người dùng đang mở trước đó
+      const allTabs = [...parsedSavedTabs, ...parsedIncognitoTabs];
 
       if (allTabs.length > 0) {
         try {

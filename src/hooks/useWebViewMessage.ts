@@ -32,7 +32,7 @@ import {
   PermissionType,
 } from '../services/sitePermissionsStorage';
 import { STORAGE_SAVED_ACCOUNTS_KEY, STORAGE_USER_PROFILE_KEY } from './useAuthProfile';
-import { syncUserCloudData } from '../services/supabase';
+import { syncUserCloudData, syncCloudPasswords } from '../services/supabase';
 import { STORAGE_HISTORY_KEY, HistoryItem } from '../components/HistorySheet';
 
 interface UseWebViewMessageProps {
@@ -56,6 +56,7 @@ interface UseWebViewMessageProps {
   canGoBackRef: React.MutableRefObject<boolean>;
   handleGoBackRef: React.MutableRefObject<() => void>;
   showToast: (msg: string) => void;
+  onSwitchAccount?: (newProfile: UserProfile, previousProfile: UserProfile) => void;
 }
 
 export function useWebViewMessage({
@@ -79,6 +80,7 @@ export function useWebViewMessage({
   canGoBackRef,
   handleGoBackRef,
   showToast,
+  onSwitchAccount,
 }: UseWebViewMessageProps) {
   const isVideoPlayingRef = useRef<boolean>(false);
 
@@ -161,6 +163,28 @@ export function useWebViewMessage({
                 : t
             )
           );
+        }
+      } else if (data.type === 'URL_CHANGED') {
+        const targetId = data.tabId || fromTabId;
+        const newUrl = data.url;
+        const newTitle = data.title;
+        if (targetId && newUrl && !newUrl.startsWith('about:')) {
+          setTabs((prev) => {
+            const next = prev.map((t) =>
+              t.id === targetId && (t.url !== newUrl || (newTitle && t.title !== newTitle))
+                ? {
+                    ...t,
+                    url: newUrl,
+                    initialUrl: newUrl,
+                    title: newTitle || t.title,
+                  }
+                : t
+            );
+            if (targetId === activeTabId) {
+              persistTabsState(next, activeTabId);
+            }
+            return next;
+          });
         }
       } else if (data.type === 'BLOCKED_POPUP') {
         pendingShieldStatsRef.current.popups += 1;
@@ -321,7 +345,9 @@ export function useWebViewMessage({
               (!currentProfile?.name && profile.name) ||
               (profile.name && currentProfile?.name !== profile.name));
 
-          if (isNewLogin || isAccountSwitch || isAccountDataUpdate) {
+          if (isAccountSwitch && onSwitchAccount) {
+            onSwitchAccount(profile, currentProfile);
+          } else if (isNewLogin || isAccountSwitch || isAccountDataUpdate) {
             userProfileRef.current = profile;
             setUserProfile(profile);
             AsyncStorage.setItem(STORAGE_USER_PROFILE_KEY, JSON.stringify(profile));
@@ -590,7 +616,14 @@ export function useWebViewMessage({
   const handleConfirmSavePassword = async () => {
     if (!passwordSavePrompt) return;
     const { website, username, passwordSecret } = passwordSavePrompt;
-    await saveCredentialSecurely(website, username, passwordSecret);
+    const saved = await saveCredentialSecurely(website, username, passwordSecret);
+    if (saved && userProfileRef.current?.isLoggedIn) {
+      const email = userProfileRef.current.email;
+      const userId = userProfileRef.current.id || email;
+      if (userId) {
+        syncCloudPasswords(userId, [saved], email).catch(() => {});
+      }
+    }
     setPasswordSavePrompt(null);
     showToast(`Đã lưu tài khoản ${website} vào Keychain`);
   };

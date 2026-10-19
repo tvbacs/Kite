@@ -83,8 +83,9 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
   const [siteStorageList, setSiteStorageList] = useState<SiteStorageItem[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Calculate sizes of directories recursively
-  const getDirSize = (dir: Directory): number => {
+  // Calculate sizes of directories asynchronously without freezing the JS thread
+  const getDirSize = async (dir: Directory, depth = 0): Promise<number> => {
+    if (depth > 4) return 0;
     let size = 0;
     try {
       if (!dir.exists) return 0;
@@ -92,7 +93,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
       for (const item of items) {
         try {
           if (item instanceof Directory) {
-            size += getDirSize(item);
+            size += await getDirSize(item, depth + 1);
           } else if (item instanceof File) {
             const info = item.info();
             if (info && typeof info.size === 'number') {
@@ -126,7 +127,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
       let cacheBytes = 0;
       try {
         if (Paths.cache && Paths.cache.exists) {
-          cacheBytes = getDirSize(Paths.cache);
+          cacheBytes = await getDirSize(Paths.cache);
         }
       } catch {}
       setWebCacheSize(cacheBytes);
@@ -136,7 +137,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
       const snapDir = new Directory(Paths.document, 'Kite_Snapshots');
       try {
         if (snapDir.exists) {
-          snapBytes = getDirSize(snapDir);
+          snapBytes = await getDirSize(snapDir);
         }
       } catch {}
       for (const tab of tabs) {
@@ -323,7 +324,12 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
   useEffect(() => {
     if (visible) {
       setSearchQuery('');
-      calculateStorage();
+      setIsLoading(true);
+      // Mở BottomSheet mượt mà ngay lập tức (60 FPS), sau đó mới tính toán dữ liệu
+      const timer = setTimeout(() => {
+        calculateStorage();
+      }, 250);
+      return () => clearTimeout(timer);
     }
   }, [visible, calculateStorage]);
 
@@ -503,7 +509,16 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
             <View style={styles.summaryCard}>
               <Text style={styles.summaryLabel}>TỔNG DUNG LƯỢNG LƯU TRỮ</Text>
               <View style={styles.summaryValueRow}>
-                <Text style={styles.summaryValue}>{formatBytes(totalSiteStorageBytes)}</Text>
+                {isLoading && totalSiteStorageBytes === 0 ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color="#007aff" style={{ marginRight: 8 }} />
+                    <Text style={[styles.summaryValue, { fontSize: 20, color: '#71717a' }]}>
+                      Đang tính toán...
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={styles.summaryValue}>{formatBytes(totalSiteStorageBytes)}</Text>
+                )}
 
                 {siteStorageList.length > 0 && (
                   <TouchableOpacity
@@ -519,7 +534,9 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
               </View>
 
               <Text style={styles.summarySubtext}>
-                {siteStorageList.length > 0
+                {isLoading && totalSiteStorageBytes === 0
+                  ? 'Đang kiểm tra dung lượng cache và dữ liệu trang...'
+                  : siteStorageList.length > 0
                   ? `${siteStorageList.length} trang web đang lưu bộ nhớ đệm và ảnh chụp`
                   : 'Chưa có trang web nào lưu trữ dữ liệu'}
               </Text>
@@ -559,7 +576,12 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
             </View>
 
             <View style={styles.sitesCard}>
-              {filteredSites.length === 0 ? (
+              {isLoading && filteredSites.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <ActivityIndicator size="small" color="#007aff" style={{ marginBottom: 10 }} />
+                  <Text style={styles.emptyText}>Đang quét dữ liệu bộ nhớ các trang web...</Text>
+                </View>
+              ) : filteredSites.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Feather name="globe" size={24} color="#a1a1aa" style={{ marginBottom: 8 }} />
                   <Text style={styles.emptyText}>

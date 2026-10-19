@@ -21,18 +21,17 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as Sharing from 'expo-sharing';
 import { Paths, File } from 'expo-file-system';
 import { theme } from '../constants/theme';
+import { UserProfile, SavedCredential } from '../types/browser';
+import {
+  fetchCloudPasswords,
+  syncCloudPasswords,
+  deleteCloudPassword,
+} from '../services/supabase';
 
 export const STORAGE_PASSWORDS_KEY = '@kite_saved_passwords';
 export const STORAGE_PASSWORD_SETTINGS_KEY = '@kite_pwd_settings';
 
-export interface SavedCredential {
-  id: string;
-  website: string;
-  username: string;
-  password?: string; // Tùy chọn cho tương thích ngược; dữ liệu mật khẩu thực tế lưu mã hóa trong Keychain
-  updatedAt: number;
-  notes?: string;
-}
+export type { SavedCredential };
 
 export interface PasswordSettings {
   autoPromptSave: boolean;
@@ -52,7 +51,8 @@ export const DEFAULT_PASSWORD_SETTINGS: PasswordSettings = {
 export const saveCredentialSecurely = async (
   website: string,
   username: string,
-  passwordSecret: string
+  passwordSecret: string,
+  storageKey: string = STORAGE_PASSWORDS_KEY
 ): Promise<SavedCredential | null> => {
   try {
     const cleanWeb = website.trim().replace(/^https?:\/\//i, '').replace(/\/$/, '');
@@ -72,7 +72,7 @@ export const saveCredentialSecurely = async (
     }
 
     // 2. Lưu thông tin metadata vào danh sách
-    const stored = await AsyncStorage.getItem(STORAGE_PASSWORDS_KEY);
+    const stored = await AsyncStorage.getItem(storageKey);
     const list: SavedCredential[] = stored ? JSON.parse(stored) : [];
     const newCred: SavedCredential = {
       id,
@@ -100,7 +100,7 @@ export const saveCredentialSecurely = async (
       updated = [newCred, ...list];
     }
 
-    await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
+    await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
     return newCred;
   } catch (e) {
     console.log('Error saving credential securely:', e);
@@ -154,6 +154,8 @@ interface PasswordManagerSheetProps {
   onClose: () => void;
   onSelectUrl?: (url: string) => void;
   onShowToast?: (message: string) => void;
+  userProfile?: UserProfile;
+  syncAllAccounts?: boolean;
 }
 
 export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
@@ -161,6 +163,8 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
   onClose,
   onSelectUrl,
   onShowToast,
+  userProfile,
+  syncAllAccounts,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
@@ -169,6 +173,13 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, string>>({});
   const [selectedCred, setSelectedCred] = useState<SavedCredential | null>(null);
+
+  const getPasswordsKey = () => {
+    const email = userProfile?.isLoggedIn ? userProfile?.email?.toLowerCase() : undefined;
+    return !syncAllAccounts && email
+      ? `${STORAGE_PASSWORDS_KEY}_${email}`
+      : STORAGE_PASSWORDS_KEY;
+  };
 
   // Modal Thêm / Chỉnh sửa tài khoản
   const [editModalVisible, setEditModalVisible] = useState<boolean>(false);
@@ -190,7 +201,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
       setRevealedPasswords({});
       setSelectedCred(null);
     }
-  }, [visible]);
+  }, [visible, userProfile?.email, syncAllAccounts]);
 
   const loadSettings = async () => {
     try {
@@ -209,37 +220,63 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
 
   const loadCredentials = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_PASSWORDS_KEY);
-      if (stored) {
-        const parsed: SavedCredential[] = JSON.parse(stored);
-        setCredentials(parsed);
+      const pwdKey = getPasswordsKey();
+      const stored = await AsyncStorage.getItem(pwdKey);
+      let list: SavedCredential[] = stored ? JSON.parse(stored) : [];
+      if (!Array.isArray(list)) list = [];
 
-        // Tự động di chuyển mật khẩu cũ sang Keychain mã hóa nếu có
-        let needSave = false;
-        const cleanedList = await Promise.all(
-          parsed.map(async (c) => {
-            if (c.password) {
-              try {
-                await SecureStore.setItemAsync(`kite_pwd_${c.id}`, c.password, {
-                  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
-                });
-                needSave = true;
-                const { password, ...rest } = c;
-                return rest;
-              } catch (e) {
-                return c;
-              }
+      // Đồng bộ từ Supabase nếu người dùng đã đăng nhập tài khoản
+      if (userProfile?.isLoggedIn && (userProfile?.id || userProfile?.email)) {
+        const userId = userProfile.id || userProfile.email!;
+        const cloudPwd = await fetchCloudPasswords(userId, userProfile.email);
+        if (cloudPwd && cloudPwd.length > 0) {
+          const mergedMap = new Map<string, SavedCredential>();
+          cloudPwd.forEach((p) => {
+            const key = `${(p.website || '').toLowerCase().trim()}|${(p.username || '').toLowerCase().trim()}`;
+            mergedMap.set(key, p);
+          });
+          list.forEach((p) => {
+            const key = `${(p.website || '').toLowerCase().trim()}|${(p.username || '').toLowerCase().trim()}`;
+            if (!mergedMap.has(key)) {
+              mergedMap.set(key, p);
             }
-            return c;
-          })
-        );
-
-        if (needSave) {
-          await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(cleanedList));
-          setCredentials(cleanedList);
+          });
+          list = Array.from(mergedMap.values());
+          await AsyncStorage.setItem(pwdKey, JSON.stringify(list));
+          if (syncAllAccounts) {
+            await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(list));
+          }
         }
-      } else {
-        setCredentials([]);
+      }
+
+      setCredentials(list);
+
+      // Tự động di chuyển mật khẩu cũ sang Keychain mã hóa nếu có
+      let needSave = false;
+      const cleanedList = await Promise.all(
+        list.map(async (c) => {
+          if (c.password) {
+            try {
+              await SecureStore.setItemAsync(`kite_pwd_${c.id}`, c.password, {
+                keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+              });
+              needSave = true;
+              const { password, ...rest } = c;
+              return rest;
+            } catch (e) {
+              return c;
+            }
+          }
+          return c;
+        })
+      );
+
+      if (needSave) {
+        await AsyncStorage.setItem(pwdKey, JSON.stringify(cleanedList));
+        if (syncAllAccounts) {
+          await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(cleanedList));
+        }
+        setCredentials(cleanedList);
       }
     } catch (e) {
       console.log('Error loading passwords:', e);
@@ -353,11 +390,33 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
               }
             : c
         );
+        const pwdKey = getPasswordsKey();
         setCredentials(updated);
-        await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
+        await AsyncStorage.setItem(pwdKey, JSON.stringify(updated));
+        if (syncAllAccounts) {
+          await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
+        }
+        if (userProfile?.isLoggedIn) {
+          const email = userProfile.email;
+          const userId = userProfile.id || email;
+          if (userId) {
+            syncCloudPasswords(userId, updated, email).catch(() => {});
+          }
+        }
       } else {
-        await saveCredentialSecurely(cleanWeb, cleanUser, inputPassword.trim());
+        const pwdKey = getPasswordsKey();
+        const saved = await saveCredentialSecurely(cleanWeb, cleanUser, inputPassword.trim(), pwdKey);
+        if (syncAllAccounts) {
+          await saveCredentialSecurely(cleanWeb, cleanUser, inputPassword.trim(), STORAGE_PASSWORDS_KEY);
+        }
         await loadCredentials();
+        if (saved && userProfile?.isLoggedIn) {
+          const email = userProfile.email;
+          const userId = userProfile.id || email;
+          if (userId) {
+            syncCloudPasswords(userId, [saved], email).catch(() => {});
+          }
+        }
       }
 
       setEditModalVisible(false);
@@ -383,9 +442,20 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
             try {
               await SecureStore.deleteItemAsync(`kite_pwd_${id}`);
             } catch (e) {}
+            const pwdKey = getPasswordsKey();
             const updated = credentials.filter((c) => c.id !== id);
             setCredentials(updated);
-            await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
+            await AsyncStorage.setItem(pwdKey, JSON.stringify(updated));
+            if (syncAllAccounts) {
+              await AsyncStorage.setItem(STORAGE_PASSWORDS_KEY, JSON.stringify(updated));
+            }
+            if (userProfile?.isLoggedIn) {
+              const email = userProfile.email;
+              const userId = userProfile.id || email;
+              if (userId) {
+                deleteCloudPassword(userId, id, email).catch(() => {});
+              }
+            }
             setSelectedCred(null);
             if (onShowToast) onShowToast('Đã xóa mật khẩu');
           },
