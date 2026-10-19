@@ -209,10 +209,17 @@ export const GoogleAuthSheet = memo<GoogleAuthSheetProps>(
                   setCanGoBack(navState.canGoBack);
                   try {
                     if (navState.url) {
-                      const parsed = new URL(navState.url);
-                      setDisplayHost(parsed.hostname || 'accounts.google.com');
+                      const lower = navState.url.toLowerCase();
+                      if (lower.includes('supabase.co') || lower.includes('google')) {
+                        setDisplayHost('accounts.google.com');
+                      } else {
+                        const parsed = new URL(navState.url);
+                        setDisplayHost(parsed.hostname.replace(/^www\./, '') || 'accounts.google.com');
+                      }
                     }
-                  } catch (e) {}
+                  } catch (e) {
+                    setDisplayHost('accounts.google.com');
+                  }
 
                   if (navState.url && isOAuthCallback(navState.url)) {
                     handleOAuthCallback(navState.url);
@@ -344,7 +351,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#e0e0e0',
     backgroundColor: '#ffffff',
@@ -361,16 +368,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   hostContainer: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: 8,
     paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#f1f3f4',
+    borderRadius: 18,
+    overflow: 'hidden',
   },
   hostText: {
-    fontSize: 15,
+    fontSize: 13.5,
     fontWeight: '600',
     color: '#202124',
     letterSpacing: -0.2,
+    textAlign: 'center',
   },
   progressBarContainer: {
     height: 2.5,

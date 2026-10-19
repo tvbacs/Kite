@@ -231,27 +231,58 @@ export async function fetchCloudBookmarks(userId: string, userEmail?: string): P
 
 export async function syncCloudBookmarks(userId: string, localBookmarks: any[], userEmail?: string): Promise<boolean> {
   try {
-    const effectiveUserId = userId || userEmail;
+    const effectiveUserId = userEmail || userId;
     if (!effectiveUserId) return false;
-    if (!Array.isArray(localBookmarks) || localBookmarks.length === 0) return true;
 
-    const rows = localBookmarks.map((b) => ({
-      id: b.id,
-      user_id: effectiveUserId,
-      title: b.title,
-      url: b.url,
-      icon: b.icon || null,
-      updated_at: new Date().toISOString(),
-    }));
+    // 1. Lấy danh sách bookmark hiện có trên cloud của user để dọn dẹp các mục đã bị xóa trên máy
+    try {
+      let bQuery = supabase
+        .from('kite_bookmarks')
+        .select('id')
+        .not('id', 'like', 'pwd_%')
+        .not('id', 'like', 'ext_%');
 
-    const { error } = await supabase
-      .from('kite_bookmarks')
-      .upsert(rows, { onConflict: 'id' });
+      if (userEmail && userId && userId !== userEmail) {
+        bQuery = bQuery.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
+      } else {
+        bQuery = bQuery.eq('user_id', effectiveUserId);
+      }
 
-    if (error) {
-      console.warn('Lỗi upsert bookmarks lên Supabase:', error.message);
-      return false;
+      const { data: currentCloud } = await bQuery;
+      const localIds = new Set((localBookmarks || []).map((b) => b.id));
+
+      if (currentCloud && currentCloud.length > 0) {
+        const toDelete = currentCloud
+          .filter((c) => !localIds.has(c.id))
+          .map((c) => c.id);
+
+        if (toDelete.length > 0) {
+          await supabase.from('kite_bookmarks').delete().in('id', toDelete);
+        }
+      }
+    } catch (eDel) {}
+
+    // 2. Upsert danh sách mới
+    if (Array.isArray(localBookmarks) && localBookmarks.length > 0) {
+      const rows = localBookmarks.map((b) => ({
+        id: b.id,
+        user_id: effectiveUserId,
+        title: b.title,
+        url: b.url,
+        icon: b.icon || null,
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error } = await supabase
+        .from('kite_bookmarks')
+        .upsert(rows, { onConflict: 'id' });
+
+      if (error) {
+        console.warn('Lỗi upsert bookmarks lên Supabase:', error.message);
+        return false;
+      }
     }
+
     return true;
   } catch (e) {
     console.warn('Lỗi đồng bộ bookmarks lên Supabase:', e);
@@ -709,48 +740,22 @@ export async function syncUserCloudData(
 
     const cloudBm = await fetchCloudBookmarks(userId, email);
     if (cloudBm && cloudBm.length > 0) {
-      // Cloud có bookmarks: Hợp nhất vào local
-      const mergedMap = new Map<string, any>();
-      cloudBm.forEach((b) => {
-        if (b.url) {
-          mergedMap.set(b.url.trim().toLowerCase(), {
-            id: b.id,
-            title: b.title,
-            url: b.url,
-            icon: b.icon,
-            timestamp: Date.now(),
-          });
-        }
-      });
-      // Nếu local có bookmark mới mà cloud chưa có thì giữ lại
-      if (Array.isArray(localBm)) {
-        localBm.forEach((b) => {
-          if (b.url && !mergedMap.has(b.url.trim().toLowerCase())) {
-            mergedMap.set(b.url.trim().toLowerCase(), b);
-          }
-        });
-      }
+      // Dữ liệu đám mây Supabase là chuẩn xác nhất của tài khoản này
+      // Tuyệt đối không hợp nhất hoặc đưa lại các dấu trang mặc định vào tài khoản
       const syncAccountsVal = await AsyncStorage.getItem('@kite_sync_all_accounts');
       const isSyncOn = syncAccountsVal ? JSON.parse(syncAccountsVal) : false;
 
-      const mergedList = Array.from(mergedMap.values());
-      // Lưu vào cả Dấu trang VÀ Lối tắt Màn hình chính
-      await AsyncStorage.setItem(bmKey, JSON.stringify(mergedList));
+      await AsyncStorage.setItem(bmKey, JSON.stringify(cloudBm));
       if (email) {
-        await AsyncStorage.setItem(`@kite_shortcuts_${email.toLowerCase()}`, JSON.stringify(mergedList));
+        await AsyncStorage.setItem(`@kite_shortcuts_${email.toLowerCase()}`, JSON.stringify(cloudBm));
       }
-      await AsyncStorage.setItem('@kite_shortcuts', JSON.stringify(mergedList));
+      await AsyncStorage.setItem('@kite_shortcuts', JSON.stringify(cloudBm));
       if (isSyncOn) {
-        await AsyncStorage.setItem('@kite_user_bookmarks', JSON.stringify(mergedList));
+        await AsyncStorage.setItem('@kite_user_bookmarks', JSON.stringify(cloudBm));
       }
-      callbacks?.onBookmarksLoaded?.(mergedList);
-
-      // Nếu máy có thêm bookmark chưa có trên cloud -> Đẩy lên cloud
-      if (mergedList.length > cloudBm.length) {
-        syncCloudBookmarks(userId, mergedList, email).catch(() => {});
-      }
+      callbacks?.onBookmarksLoaded?.(cloudBm);
     } else if (Array.isArray(localBm) && localBm.length > 0) {
-      // Cloud chưa có gì nhưng local có bookmark: Tự động tải lên Supabase để lưu vĩnh viễn!
+      // Cloud chưa có gì nhưng local có bookmark: Tự động tải lên Supabase để lưu
       syncCloudBookmarks(userId, localBm, email).catch(() => {});
     }
   } catch (e) {

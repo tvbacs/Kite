@@ -31,7 +31,7 @@ import { theme } from '../constants/theme';
 import { VoiceSearchModal } from './VoiceSearchModal';
 import { GoogleAccountSheet } from './GoogleAccountSheet';
 import { GoogleAuthSheet } from './GoogleAuthSheet';
-import { getGoogleOAuthUrl, saveCloudSettings, syncUserCloudData, syncCloudBookmarks, fetchCloudBookmarks } from '../services/supabase';
+import { getGoogleOAuthUrl, saveCloudSettings, syncUserCloudData, syncCloudBookmarks, fetchCloudBookmarks, deleteCloudBookmark } from '../services/supabase';
 import { preconnectTarget } from '../services/networkPreconnectService';
 
 const GoogleGIcon = ({ size = 20 }: { size?: number }) => (
@@ -89,48 +89,7 @@ interface HomeDashboardProps {
 
 const cachedShortcutsMap = new Map<string, Bookmark[]>();
 
-const DEFAULT_BOOKMARKS: Bookmark[] = [
-  {
-    id: 'google',
-    title: 'Google',
-    url: 'https://www.google.com',
-  },
-  {
-    id: 'youtube',
-    title: 'YouTube',
-    url: 'https://m.youtube.com',
-  },
-  {
-    id: 'facebook',
-    title: 'Facebook',
-    url: 'https://m.facebook.com',
-  },
-  {
-    id: 'vnexpress',
-    title: 'VnExpress',
-    url: 'https://vnexpress.net',
-  },
-  {
-    id: 'dantri',
-    title: 'Dân Trí',
-    url: 'https://dantri.com.vn',
-  },
-  {
-    id: 'chatgpt',
-    title: 'ChatGPT',
-    url: 'https://chatgpt.com',
-  },
-  {
-    id: 'tiktok',
-    title: 'TikTok',
-    url: 'https://www.tiktok.com',
-  },
-  {
-    id: 'shopee',
-    title: 'Shopee',
-    url: 'https://shopee.vn',
-  },
-];
+const DEFAULT_BOOKMARKS: Bookmark[] = [];
 
 const getFaviconSources = (rawUrl: string, customIcon?: string): string[] => {
   const sources: string[] = [];
@@ -1599,6 +1558,11 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   const handleDeleteShortcut = async (id: string) => {
     const updated = shortcuts.filter((item) => item.id !== id);
     await saveShortcuts(updated);
+    const activeEmail = (userProfile.email || propUserProfile?.email)?.toLowerCase();
+    const userId = userProfile.id || activeEmail;
+    if (userProfile.isLoggedIn && userId) {
+      deleteCloudBookmark(userId, id, activeEmail).catch(() => {});
+    }
   };
 
   const handleSaveUser = async () => {

@@ -15,7 +15,7 @@ import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../constants/theme';
-import { syncCloudBookmarks, fetchCloudBookmarks } from '../services/supabase';
+import { syncCloudBookmarks, fetchCloudBookmarks, deleteCloudBookmark } from '../services/supabase';
 
 export interface BookmarkItem {
   id: string;
@@ -26,13 +26,7 @@ export interface BookmarkItem {
 
 export const STORAGE_BOOKMARKS_KEY = '@kite_user_bookmarks';
 
-export const DEFAULT_BOOKMARKS: BookmarkItem[] = [
-  { id: 'bm-1', title: 'Google', url: 'https://www.google.com' },
-  { id: 'bm-2', title: 'YouTube', url: 'https://m.youtube.com' },
-  { id: 'bm-3', title: 'ChatGPT', url: 'https://chatgpt.com' },
-  { id: 'bm-4', title: 'Gemini', url: 'https://gemini.google.com' },
-  { id: 'bm-5', title: 'Facebook', url: 'https://www.facebook.com' },
-];
+export const DEFAULT_BOOKMARKS: BookmarkItem[] = [];
 
 interface BookmarkSheetProps {
   visible: boolean;
@@ -132,6 +126,9 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
   const handleDeleteItem = async (id: string) => {
     const updated = bookmarks.filter((item) => item.id !== id);
     await saveBookmarks(updated);
+    if (userEmail) {
+      deleteCloudBookmark(userEmail, id, userEmail).catch(() => {});
+    }
   };
 
   const handleAddNewBookmark = async () => {
