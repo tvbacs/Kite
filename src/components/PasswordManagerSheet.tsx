@@ -18,6 +18,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as Sharing from 'expo-sharing';
+import { Paths, File } from 'expo-file-system';
 import { theme } from '../constants/theme';
 
 export const STORAGE_PASSWORDS_KEY = '@kite_saved_passwords';
@@ -400,6 +402,72 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
     }
     onClose();
     onSelectUrl(url);
+  };
+
+  // Xuất mật khẩu ra tệp CSV (chuẩn Chrome) có bảo vệ bằng Face ID / Sinh trắc học
+  const handleExportCSV = async () => {
+    if (credentials.length === 0) {
+      if (onShowToast) onShowToast('Chưa có mật khẩu nào được lưu để xuất');
+      return;
+    }
+
+    Alert.alert(
+      'Xuất mật khẩu ra tệp CSV?',
+      'Tệp CSV xuất ra là văn bản thuần không mã hóa. Bất kỳ ai có tệp này đều có thể đọc được mật khẩu của bạn.\n\nHãy lưu trữ tệp cẩn thận và xóa ngay sau khi sử dụng xong.',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xác thực & Xuất',
+          onPress: async () => {
+            try {
+              // 1. Yêu cầu xác thực Face ID / Sinh trắc học
+              const hasHardware = await LocalAuthentication.hasHardwareAsync();
+              const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+              if (hasHardware && isEnrolled) {
+                const auth = await LocalAuthentication.authenticateAsync({
+                  promptMessage: 'Xác thực Face ID / Vân tay để xuất mật khẩu',
+                  cancelLabel: 'Hủy',
+                  fallbackLabel: 'Sử dụng mật mã máy',
+                });
+                if (!auth.success) {
+                  if (onShowToast) onShowToast('Xác thực thất bại, đã hủy xuất mật khẩu');
+                  return;
+                }
+              }
+
+              // 2. Tạo nội dung CSV chuẩn (name,url,username,password)
+              let csv = 'name,url,username,password\n';
+              for (const c of credentials) {
+                const pwd = (await SecureStore.getItemAsync(`kite_pwd_${c.id}`)) || '';
+                const cleanName = (c.website || '').replace(/"/g, '""');
+                const cleanUrl = `https://${c.website}`;
+                const cleanUser = (c.username || '').replace(/"/g, '""');
+                const cleanPass = pwd.replace(/"/g, '""');
+                csv += `"${cleanName}","${cleanUrl}","${cleanUser}","${cleanPass}"\n`;
+              }
+
+              // 3. Ghi vào thư mục cache tạm thời và mở Share Sheet hệ thống
+              const tempFile = new File(Paths.cache, `kite_passwords_${Date.now()}.csv`);
+              await tempFile.write(csv);
+
+              const isAvailable = await Sharing.isAvailableAsync();
+              if (isAvailable) {
+                await Sharing.shareAsync(tempFile.uri, {
+                  mimeType: 'text/csv',
+                  dialogTitle: 'Xuất mật khẩu Kite (CSV)',
+                  UTI: 'public.comma-separated-values-text',
+                });
+                if (onShowToast) onShowToast('Đã xuất mật khẩu CSV');
+              } else {
+                if (onShowToast) onShowToast('Thiết bị không hỗ trợ chia sẻ tệp');
+              }
+            } catch (e) {
+              if (onShowToast) onShowToast('Lỗi khi xuất tệp mật khẩu');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const filteredCredentials = credentials.filter(
@@ -838,6 +906,33 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
                     thumbColor="#ffffff"
                   />
                 </View>
+
+                <View style={{ height: 1, backgroundColor: '#f4f4f5', marginVertical: 8 }} />
+
+                {/* Tùy chọn Xuất mật khẩu CSV */}
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                  }}
+                  onPress={() => {
+                    setSettingsModalVisible(false);
+                    setTimeout(() => {
+                      handleExportCSV();
+                    }, 350);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <Text style={styles.settingItemTitle}>Xuất mật khẩu (CSV)</Text>
+                    <Text style={styles.settingItemSub}>
+                      Xuất tệp sao lưu mật khẩu văn bản chuẩn Chrome (yêu cầu Face ID)
+                    </Text>
+                  </View>
+                  <Feather name="share" size={17} color="#18181b" />
+                </TouchableOpacity>
 
                 <View style={styles.dialogActionsRow}>
                   <TouchableOpacity

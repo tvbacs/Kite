@@ -35,6 +35,8 @@ import { DownloadPromptModal } from './src/components/DownloadPromptModal';
 import { VideoDownloadSheet } from './src/components/VideoDownloadSheet';
 import { PasswordManagerSheet } from './src/components/PasswordManagerSheet';
 import { PasswordSavePromptModal } from './src/components/PasswordSavePromptModal';
+import { PasswordAutofillBar } from './src/components/PasswordAutofillBar';
+import { ImageContextMenuSheet } from './src/components/ImageContextMenuSheet';
 import { BrowserMenuSheet, triggerNativeShare } from './src/components/BrowserMenuSheet';
 import { StorageManagerSheet } from './src/components/StorageManagerSheet';
 import { RegionSheet } from './src/components/RegionSheet';
@@ -59,6 +61,8 @@ import { useShieldAndExtensions } from './src/hooks/useShieldAndExtensions';
 import { useBookmarksAndHistory } from './src/hooks/useBookmarksAndHistory';
 import { useInitialSetup } from './src/hooks/useInitialSetup';
 import { useWebViewRequest } from './src/hooks/useWebViewRequest';
+import { saveCloudSettings } from './src/services/supabase';
+import { isLegitimateAuthUrl } from './src/constants/blocklist';
 
 import { styles } from './src/styles/App.styles';
 import { SEARCH_ENGINES, isJunkHistoryItem } from './src/constants/searchEngines';
@@ -69,6 +73,7 @@ import {
 } from './src/services/antiAdScript';
 import { PULL_GESTURE_SCRIPT } from './src/services/pullGestureScript';
 import { PASSWORD_INTERCEPT_SCRIPT } from './src/services/passwordScript';
+import { IMAGE_CONTEXT_SCRIPT } from './src/services/imageContextScript';
 import { SITE_PERMISSIONS_INJECT_SCRIPT } from './src/services/sitePermissionsScript';
 import {
   LIGHT_MODE_START_SCRIPT,
@@ -566,6 +571,13 @@ function BrowserMain() {
     setCurrentEngineId(engineId);
     AsyncStorage.setItem('@kite_search_engine', engineId);
     showToast(`Đã chọn: ${SEARCH_ENGINES[engineId]?.name || engineId}`);
+    if (auth.userProfileRef.current.isLoggedIn) {
+      saveCloudSettings(
+        auth.userProfileRef.current.id || auth.userProfileRef.current.email!,
+        { searchEngineId: engineId },
+        auth.userProfileRef.current.email
+      ).catch(() => {});
+    }
   };
 
   const handleOpenStorageManager = () => {
@@ -622,6 +634,7 @@ function BrowserMain() {
       PULL_GESTURE_SCRIPT +
       SITE_PERMISSIONS_INJECT_SCRIPT +
       PASSWORD_INTERCEPT_SCRIPT +
+      IMAGE_CONTEXT_SCRIPT +
       (shield.extensions.some((e) => e.id === 'ext-dark-mode' && e.enabled)
         ? DARK_MODE_INJECT_SCRIPT
         : DARK_MODE_REMOVE_SCRIPT)
@@ -947,16 +960,23 @@ function BrowserMain() {
                 return null;
               }
 
+              const isAuthUrl = Boolean(
+                tab.url && (
+                  isLegitimateAuthUrl(tab.url) ||
+                  tab.url.includes('accounts.google.com') ||
+                  tab.url.includes('myaccount.google.com') ||
+                  tab.url.includes('oauth2.googleapis.com') ||
+                  tab.url.includes('supabase.co/auth')
+                )
+              );
+
               const userAgent = tab.isDesktop
                 ? DESKTOP_USER_AGENT
                 : tab.url?.includes('lens.google.com') ||
                   tab.url?.includes('searchbyimage') ||
                   tab.url?.includes('images.google.com')
                 ? DESKTOP_USER_AGENT
-                : tab.url?.includes('accounts.google.com') ||
-                  tab.url?.includes('myaccount.google.com') ||
-                  tab.url?.includes('oauth2.googleapis.com') ||
-                  tab.url?.includes('supabase.co/auth')
+                : isAuthUrl
                 ? GOOGLE_AUTH_USER_AGENT
                 : undefined;
 
@@ -1305,10 +1325,40 @@ function BrowserMain() {
           visible={webViewMessage.passwordSavePrompt.visible}
           website={webViewMessage.passwordSavePrompt.website}
           username={webViewMessage.passwordSavePrompt.username}
+          isUpdate={webViewMessage.passwordSavePrompt.isUpdate}
           onSave={webViewMessage.handleConfirmSavePassword}
           onDismiss={() => webViewMessage.setPasswordSavePrompt(null)}
         />
       )}
+
+      <PasswordAutofillBar
+        credential={webViewMessage.activeAutofillCredential}
+        onFill={webViewMessage.handlePerformAutofill}
+        onDismiss={webViewMessage.handleDismissAutofill}
+        bottomOffset={Platform.OS === 'ios' ? 70 : 60}
+      />
+
+      <ImageContextMenuSheet
+        visible={!!webViewMessage.imageContextMenuData}
+        data={webViewMessage.imageContextMenuData}
+        onClose={() => webViewMessage.setImageContextMenuData(null)}
+        onSearchWithLens={(imageUrl) => {
+          webViewMessage.setImageContextMenuData(null);
+          if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
+            setLensScreenShotUri(imageUrl);
+            setLensModalVisible(true);
+          } else {
+            const lensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
+            browserTabs.handleNewTab(isIncognito, lensUrl);
+            showToast('Đang tìm kiếm với Google Lens...');
+          }
+        }}
+        onOpenInNewTab={(imageUrl) => {
+          webViewMessage.setImageContextMenuData(null);
+          browserTabs.handleNewTab(isIncognito, imageUrl);
+        }}
+        onShowToast={showToast}
+      />
 
       <BrowserMenuSheet
         visible={browserMenuVisible}

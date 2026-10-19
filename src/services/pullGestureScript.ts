@@ -22,8 +22,11 @@ export const PULL_GESTURE_SCRIPT = `
       swipeStartY = clientY;
       isSwipeTracking = true;
 
+      var screenWidth = window.innerWidth || (document.documentElement && document.documentElement.clientWidth) || 375;
+      var isEdgeTouch = clientX <= 45 || clientX >= (screenWidth - 45);
+
       var scrollY = window.pageYOffset || window.scrollY || (document.documentElement && document.documentElement.scrollTop) || (document.body && document.body.scrollTop) || 0;
-      if (scrollY <= 15) {
+      if (scrollY <= 15 && !isEdgeTouch) {
         pullTouchStartY = clientY;
         pullTouchStartX = clientX;
         isPullTracking = true;

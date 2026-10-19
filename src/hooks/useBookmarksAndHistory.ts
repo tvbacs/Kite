@@ -6,6 +6,7 @@ import { HistoryItem, STORAGE_HISTORY_KEY } from '../components/HistorySheet';
 import { BrowserTab, ShieldStats, UserProfile } from '../types/browser';
 import { extractSearchQuery, isJunkHistoryItem, STORAGE_SEARCH_QUERIES_KEY } from '../constants/searchEngines';
 import { isGoogleTranslateUrl, getOriginalUrlFromTranslateUrl } from '../services/translateService';
+import { syncCloudBookmarks, addCloudHistoryItem, clearCloudHistory } from '../services/supabase';
 
 interface UseBookmarksAndHistoryProps {
   activeUrl: string | null;
@@ -103,6 +104,13 @@ export function useBookmarksAndHistory({
         showToast('Đã lưu vào dấu trang');
       }
       await AsyncStorage.setItem(bmKey, JSON.stringify(list));
+      if (userProfileRef.current.isLoggedIn && (userProfileRef.current.id || userProfileRef.current.email)) {
+        syncCloudBookmarks(
+          userProfileRef.current.id || userProfileRef.current.email!,
+          list,
+          userProfileRef.current.email
+        ).catch(() => {});
+      }
     } catch (e) {
       showToast('Lỗi khi lưu dấu trang');
     }
@@ -207,6 +215,13 @@ export function useBookmarksAndHistory({
 
       const updated = [newItem, ...filtered.slice(0, 199)];
       await AsyncStorage.setItem(historyKey, JSON.stringify(updated));
+      if (userProfileRef.current.isLoggedIn && (userProfileRef.current.id || userProfileRef.current.email)) {
+        addCloudHistoryItem(
+          userProfileRef.current.id || userProfileRef.current.email!,
+          newItem,
+          userProfileRef.current.email
+        ).catch(() => {});
+      }
     } catch (e) {}
   };
 
@@ -228,6 +243,13 @@ export function useBookmarksAndHistory({
       await AsyncStorage.removeItem(STORAGE_HISTORY_KEY);
       await AsyncStorage.removeItem(qKey);
       await AsyncStorage.removeItem(STORAGE_SEARCH_QUERIES_KEY);
+
+      if (userProfileRef.current.isLoggedIn && (userProfileRef.current.id || userProfileRef.current.email)) {
+        clearCloudHistory(
+          userProfileRef.current.id || userProfileRef.current.email!,
+          userProfileRef.current.email
+        ).catch(() => {});
+      }
 
       setStats((prev) => ({
         ...prev,

@@ -3,7 +3,7 @@ import { Keyboard, View, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 import { captureRef } from 'react-native-view-shot';
-import { File, Paths } from 'expo-file-system';
+import { File, Directory, Paths } from 'expo-file-system';
 import { BrowserTab, UserProfile } from '../types/browser';
 import { PAUSE_BACKGROUND_MEDIA_SCRIPT, getCaptureTabStateScript } from '../services/antiAdScript';
 import { progressBus } from '../components/WebProgressBar';
@@ -13,6 +13,17 @@ export const STORAGE_PERSISTED_TABS_KEY = '@kite_persisted_tabs_state';
 export const STORAGE_ACTIVE_TAB_ID_KEY = '@kite_active_tab_id';
 export const STORAGE_PERSISTED_INCOGNITO_TABS_KEY = '@kite_persisted_incognito_tabs_state';
 export const MAX_ACTIVE_BACKGROUND_TABS = 2;
+
+// Thư mục lưu trữ snapshot của các thẻ duyệt web thường (tách biệt gọn gàng, không để ngoài thư mục gốc)
+export const getSnapshotDirectory = (): Directory => {
+  const dir = new Directory(Paths.document, 'Kite_Snapshots');
+  if (!dir.exists) {
+    try {
+      dir.create();
+    } catch {}
+  }
+  return dir;
+};
 
 interface UseBrowserTabsProps {
   userProfileRef: React.MutableRefObject<UserProfile>;
@@ -250,7 +261,7 @@ export function useBrowserTabs({
           isDesktop: t.isDesktop,
           isIncognito: true,
           isReaderMode: t.isReaderMode,
-          snapshotUri: t.snapshotUri,
+          snapshotUri: undefined, // Tab ẩn danh TUYỆT ĐỐI KHÔNG lưu snapshot ra bộ nhớ
           frozenState: t.isSleeping ? t.frozenState : undefined,
           lastActiveAt: t.lastActiveAt,
         }));
@@ -266,14 +277,19 @@ export function useBrowserTabs({
     } catch (e) {}
   };
 
-  // Chụp ảnh màn hình tab đang mở (CHỈ chụp khi tab đang hiển thị thực tế trên màn hình)
+  // Chụp ảnh màn hình tab đang mở (CHỈ chụp khi tab thường đang hiển thị thực tế trên màn hình)
   const captureActiveSnapshot = async (tabId: string): Promise<string | null> => {
     try {
+      // 0. Tab ẩn danh TUYỆT ĐỐI KHÔNG chụp và KHÔNG lưu snapshot vào bộ nhớ (bảo mật riêng tư)
+      const targetTab = tabs.find((t) => t.id === tabId);
+      if (targetTab?.isIncognito) {
+        return null;
+      }
+
       // 1. Tuyệt đối không chụp tab nền vì tab nền bị ẩn (opacity: 0, translateX: 999999).
       // Chụp tab nền sẽ tạo file hỏng/trắng và làm mất thumbnail cũ!
       if (tabId !== activeTabIdRef.current) {
-        const existingTab = tabs.find((t) => t.id === tabId);
-        return existingTab?.snapshotUri || null;
+        return targetTab?.snapshotUri || null;
       }
 
       const view = webViewContainerRefs.current[tabId];
@@ -289,15 +305,23 @@ export function useBrowserTabs({
         const tmp = new File(tmpUri);
         // Kiểm tra file tạm phải tồn tại và có kích thước > 0
         if (!tmp.exists || (tmp.size !== undefined && tmp.size <= 0)) {
-          const existingTab = tabs.find((t) => t.id === tabId);
-          return existingTab?.snapshotUri || null;
+          return targetTab?.snapshotUri || null;
         }
 
-        const destFile = new File(Paths.document, `tab_snapshot_${tabId}.jpg`);
+        // Lưu vào thư mục Kite_Snapshots chuyên dụng (không để rải rác ngoài thư mục gốc)
+        const snapshotDir = getSnapshotDirectory();
+        const destFile = new File(snapshotDir, `tab_snapshot_${tabId}.jpg`);
         if (destFile.exists) {
           try { destFile.delete(); } catch {}
         }
         tmp.copy(destFile);
+
+        // Dọn dẹp file cũ ở thư mục gốc Paths.document nếu còn sót lại
+        try {
+          const oldRootFile = new File(Paths.document, `tab_snapshot_${tabId}.jpg`);
+          if (oldRootFile.exists) oldRootFile.delete();
+        } catch {}
+
         return destFile.uri;
       } catch (e) {
         return null;
@@ -316,45 +340,56 @@ export function useBrowserTabs({
         if (f.exists) f.delete();
       } catch {}
     }
+    try {
+      const snapInSub = new File(getSnapshotDirectory(), `tab_snapshot_${tabId}.jpg`);
+      if (snapInSub.exists) snapInSub.delete();
+      const snapInRoot = new File(Paths.document, `tab_snapshot_${tabId}.jpg`);
+      if (snapInRoot.exists) snapInRoot.delete();
+    } catch {}
   };
 
   // Tạo tab mới
-  const handleNewTab = (isIncognitoMode?: boolean) => {
+  const handleNewTab = (isIncognitoMode?: boolean, initialUrl?: string) => {
     const effectiveIncognito =
       isIncognitoMode !== undefined ? isIncognitoMode : Boolean(currentTab?.isIncognito);
     if (effectiveIncognito) {
       requestIncognitoAccess(() => {
-        executeNewTab(true);
+        executeNewTab(true, initialUrl);
       });
     } else {
-      executeNewTab(false);
+      executeNewTab(false, initialUrl);
     }
   };
 
-  const executeNewTab = async (isIncognitoMode: boolean) => {
+  const executeNewTab = async (isIncognitoMode: boolean, initialUrl?: string) => {
     Keyboard.dismiss();
     if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
     setIsLoading(false);
-    progressBus.set(1);
+    const prevActiveId = activeTabIdRef.current;
+    if (prevActiveId && webViewRefs.current[prevActiveId]) {
+      try {
+        webViewRefs.current[prevActiveId]?.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+      } catch (e) {}
+    }
 
     const newId = `tab-${Date.now()}`;
     const newTabObj: BrowserTab = {
       id: newId,
-      url: '',
-      initialUrl: '',
-      title: 'Trang mới',
+      url: initialUrl || '',
+      initialUrl: initialUrl || '',
+      title: initialUrl ? 'Đang tải...' : 'Trang mới',
       isIncognito: isIncognitoMode,
       lastActiveAt: Date.now(),
       isSleeping: false,
-      isLoading: false,
+      isLoading: Boolean(initialUrl),
     };
     activeTabIdRef.current = newId;
     setTabs((prev) => prev.concat(newTabObj));
     setActiveTabId(newId);
-    setInputUrl('');
+    setInputUrl(initialUrl || '');
     setIsIncognito(isIncognitoMode);
     setIsEditing(false);
-    setIsLoading(false);
+    setIsLoading(Boolean(initialUrl));
     resetShieldStatsForTab?.();
     showToast(isIncognitoMode ? 'Đã tạo thẻ ẩn danh mới' : 'Đã tạo thẻ mới');
     scheduleProcessPooling(newId);
@@ -376,6 +411,8 @@ export function useBrowserTabs({
 
     setTimeout(() => {
       try {
+        const snapInSub = new File(getSnapshotDirectory(), `tab_snapshot_${id}.jpg`);
+        if (snapInSub.exists) snapInSub.delete();
         const snapFile = new File(Paths.document, `tab_snapshot_${id}.jpg`);
         if (snapFile.exists) snapFile.delete();
       } catch {}
@@ -682,7 +719,7 @@ export function useBrowserTabs({
     setTabSheetVisible(true);
     const id = activeTabIdRef.current;
     const t = tabsRef.current.find((x) => x.id === id);
-    if (!t?.url || t.isLoading) return;
+    if (!t?.url || t.isLoading || t.isIncognito) return; // Tab ẩn danh TUYỆT ĐỐI KHÔNG chụp ảnh snapshot
 
     requestAnimationFrame(() => {
       runWhenIdle(async () => {
@@ -733,7 +770,7 @@ export function useBrowserTabs({
     }
 
     // 1. Tạm dừng media của tab cũ khi chuyển sang tab khác
-    if (previousTab?.url) {
+    if (previousId && webViewRefs.current[previousId]) {
       try {
         webViewRefs.current[previousId]?.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
       } catch (e) {}
@@ -786,13 +823,26 @@ export function useBrowserTabs({
   // Xóa toàn bộ snapshots
   const handleClearTabSnapshots = async () => {
     try {
+      const snapDir = getSnapshotDirectory();
+      if (snapDir.exists) {
+        const items = snapDir.list();
+        for (const item of items) {
+          try {
+            if (item instanceof File) item.delete();
+          } catch {}
+        }
+      }
       tabs.forEach((t) => {
-        if (t.snapshotUri && t.id !== activeTabId) {
+        if (t.snapshotUri) {
           try {
             const f = new File(t.snapshotUri);
             if (f.exists) f.delete();
           } catch {}
         }
+        try {
+          const fRoot = new File(Paths.document, `tab_snapshot_${t.id}.jpg`);
+          if (fRoot.exists) fRoot.delete();
+        } catch {}
       });
       setTabs((prev) => {
         const updated = prev.map((t) => (t.id !== activeTabId ? { ...t, snapshotUri: undefined } : t));

@@ -15,6 +15,7 @@ import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../constants/theme';
+import { syncCloudBookmarks } from '../services/supabase';
 
 export interface BookmarkItem {
   id: string;
@@ -89,6 +90,9 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
     setBookmarks(newList);
     try {
       await AsyncStorage.setItem(getStorageKey(), JSON.stringify(newList));
+      if (userEmail) {
+        syncCloudBookmarks(userEmail, newList, userEmail).catch(() => {});
+      }
     } catch (e) {}
   };
 
@@ -137,7 +141,7 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
   );
 
   const getFaviconUrl = (url: string) => {
-    return `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(url)}`;
+    return `https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(url)}`;
   };
 
   const getCleanDomain = (url: string) => {

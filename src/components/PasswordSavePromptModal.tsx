@@ -12,6 +12,7 @@ interface PasswordSavePromptModalProps {
   visible: boolean;
   website: string;
   username: string;
+  isUpdate?: boolean;
   onSave: () => void;
   onDismiss: () => void;
 }
@@ -20,6 +21,7 @@ export const PasswordSavePromptModal: React.FC<PasswordSavePromptModalProps> = (
   visible,
   website,
   username,
+  isUpdate = false,
   onSave,
   onDismiss,
 }) => {
@@ -42,12 +44,16 @@ export const PasswordSavePromptModal: React.FC<PasswordSavePromptModalProps> = (
         >
           {/* Header với Icon Google Key */}
           <View style={styles.headerRow}>
-            <View style={styles.keyIconBox}>
-              <Feather name="key" size={18} color="#1a73e8" />
+            <View style={[styles.keyIconBox, isUpdate && { backgroundColor: '#fef3c7' }]}>
+              <Feather name="key" size={18} color={isUpdate ? '#d97706' : '#1a73e8'} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.title}>Lưu mật khẩu vào Kite?</Text>
-              <Text style={styles.subTitle}>Được bảo vệ bằng Apple Keychain</Text>
+              <Text style={styles.title}>
+                {isUpdate ? 'Cập nhật mật khẩu vào Kite?' : 'Lưu mật khẩu vào Kite?'}
+              </Text>
+              <Text style={styles.subTitle}>
+                {isUpdate ? 'Mật khẩu mới sẽ được bảo vệ trong Apple Keychain' : 'Được bảo vệ bằng Apple Keychain'}
+              </Text>
             </View>
           </View>
 
@@ -74,11 +80,11 @@ export const PasswordSavePromptModal: React.FC<PasswordSavePromptModalProps> = (
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.saveBtn}
+              style={[styles.saveBtn, isUpdate && { backgroundColor: '#d97706' }]}
               onPress={onSave}
               activeOpacity={0.8}
             >
-              <Text style={styles.saveBtnText}>Lưu</Text>
+              <Text style={styles.saveBtnText}>{isUpdate ? 'Cập nhật' : 'Lưu'}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>

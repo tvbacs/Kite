@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   Modal,
   TouchableOpacity,
   ScrollView,
+  TextInput,
   Platform,
   ActivityIndicator,
   Alert,
@@ -15,7 +16,6 @@ import Feather from '@expo/vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Paths, Directory, File } from 'expo-file-system';
-import { theme } from '../constants/theme';
 import { STORAGE_DOWNLOADS_KEY, DownloadedItem } from './DownloadSheet';
 import { STORAGE_HISTORY_KEY } from './HistorySheet';
 
@@ -80,7 +80,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
   const [freeDiskSpace, setFreeDiskSpace] = useState<number>(0);
   const [totalDiskSpace, setTotalDiskSpace] = useState<number>(0);
   const [siteStorageList, setSiteStorageList] = useState<SiteStorageItem[]>([]);
-  const [showAllSites, setShowAllSites] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Calculate sizes of directories recursively
   const getDirSize = (dir: Directory): number => {
@@ -130,10 +130,16 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
       } catch {}
       setWebCacheSize(cacheBytes);
 
-      // 3. Tab Snapshots size
+      // 3. Tab Snapshots size (Kite_Snapshots)
       let snapBytes = 0;
+      const snapDir = new Directory(Paths.document, 'Kite_Snapshots');
+      try {
+        if (snapDir.exists) {
+          snapBytes = getDirSize(snapDir);
+        }
+      } catch {}
       for (const tab of tabs) {
-        if (tab.snapshotUri && tab.snapshotUri.startsWith('file://')) {
+        if (tab.snapshotUri && tab.snapshotUri.startsWith('file://') && !tab.snapshotUri.includes('Kite_Snapshots')) {
           try {
             const file = new File(tab.snapshotUri);
             if (file.exists) {
@@ -174,7 +180,7 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
       } catch {}
       setDownloadsSize(dlBytes);
 
-      // 5. AsyncStorage (Browsing history, session, settings)
+      // 5. AsyncStorage
       let storageBytes = 0;
       try {
         const keys = await AsyncStorage.getAllKeys();
@@ -186,7 +192,8 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
         }
       } catch {}
       setHistoryAndStorageSize(storageBytes);
-      // 6. Tính toán dung lượng lưu trữ theo từng trang web (Website Data)
+
+      // 6. Tính toán chi tiết dung lượng lưu trữ theo từng trang web (Website Data)
       try {
         const domainMap: Record<
           string,
@@ -207,7 +214,13 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
             const domain = match ? match[1].toLowerCase() : '';
             if (domain) {
               let snapSize = 0;
-              if (tab.snapshotUri && tab.snapshotUri.startsWith('file://')) {
+              try {
+                const sFile = new File(snapDir, `tab_snapshot_${tab.id}.jpg`);
+                if (sFile.exists && typeof sFile.info()?.size === 'number') {
+                  snapSize = sFile.info()!.size!;
+                }
+              } catch {}
+              if (snapSize === 0 && tab.snapshotUri && tab.snapshotUri.startsWith('file://')) {
                 try {
                   const f = new File(tab.snapshotUri);
                   if (f.exists && typeof f.info()?.size === 'number') {
@@ -276,14 +289,14 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
         const domainEntries = Object.values(domainMap);
         let totalWeight = 0;
         for (const d of domainEntries) {
-          const weight = d.visitCount * (d.hasActiveTab ? 4 : 1.5);
+          const weight = (d.hasActiveTab ? 3 : 1) * Math.min(d.visitCount, 20);
           totalWeight += weight;
         }
 
         const sites: SiteStorageItem[] = domainEntries.map((d) => {
-          const weight = d.visitCount * (d.hasActiveTab ? 4 : 1.5);
+          const weight = (d.hasActiveTab ? 3 : 1) * Math.min(d.visitCount, 20);
           const cacheShare = totalWeight > 0 ? (weight / totalWeight) * cacheBytes : 0;
-          const totalSiteBytes = Math.round(cacheShare + d.snapshotBytes + 128 * 1024);
+          const totalSiteBytes = Math.round(cacheShare + d.snapshotBytes + 48 * 1024);
           return {
             domain: d.domain,
             url: d.url,
@@ -308,37 +321,53 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
 
   useEffect(() => {
     if (visible) {
+      setSearchQuery('');
       calculateStorage();
     }
   }, [visible, calculateStorage]);
 
-  const totalKiteUsage = webCacheSize + snapshotsSize + downloadsSize + historyAndStorageSize;
+  // Tổng dung lượng các trang web
+  const totalSiteStorageBytes = useMemo(() => {
+    const listSum = siteStorageList.reduce((acc, s) => acc + s.sizeBytes, 0);
+    return Math.max(listSum, webCacheSize + snapshotsSize);
+  }, [siteStorageList, webCacheSize, snapshotsSize]);
 
-  // 1. Dọn dẹp nhanh (One-tap Quick Clean) kèm xác nhận và giải thích rõ ràng
-  const handleSmartOptimizeConfirm = () => {
-    const spaceToFree = webCacheSize + snapshotsSize;
-    if (spaceToFree === 0) {
-      if (onShowToast) onShowToast('Bộ nhớ Kite hiện tại đã tối ưu, không có dữ liệu tạm');
+  // Lọc danh sách theo từ khóa tìm kiếm
+  const filteredSites = useMemo(() => {
+    if (!searchQuery.trim()) return siteStorageList;
+    const q = searchQuery.toLowerCase().trim();
+    return siteStorageList.filter(
+      (s) => s.domain.toLowerCase().includes(q) || s.url.toLowerCase().includes(q)
+    );
+  }, [siteStorageList, searchQuery]);
+
+  // Xóa toàn bộ dữ liệu trang web
+  const handleClearAllSitesConfirm = () => {
+    if (totalSiteStorageBytes === 0 && siteStorageList.length === 0) {
+      if (onShowToast) onShowToast('Không có dữ liệu trang web để xóa');
       return;
     }
     Alert.alert(
-      'Dọn dẹp nhanh dung lượng?',
-      `Hành động này sẽ giải phóng bộ nhớ đệm web tạm thời và ảnh chụp thẻ (${formatBytes(spaceToFree)}).\n\nDấu trang, lịch sử và mật khẩu đã lưu của bạn hoàn toàn không bị ảnh hưởng.`,
+      'Xóa tất cả dữ liệu trang web?',
+      `Hành động này sẽ giải phóng bộ nhớ đệm, ảnh chụp thẻ và lịch sử của tất cả các trang web (${formatBytes(totalSiteStorageBytes)}).\n\nDấu trang và mật khẩu đã lưu của bạn vẫn được giữ nguyên.`,
       [
         { text: 'Hủy', style: 'cancel' },
         {
-          text: 'Dọn dẹp ngay',
+          text: 'Xóa tất cả',
+          style: 'destructive',
           onPress: async () => {
             setIsCleaning(true);
             try {
               await onClearWebCache();
               await onClearTabSnapshots();
+              if (onClearHistory) await onClearHistory();
+              setSiteStorageList([]);
               await calculateStorage();
               if (onShowToast) {
-                onShowToast(`Đã dọn dẹp và giải phóng ${formatBytes(spaceToFree)}!`);
+                onShowToast(`Đã xóa toàn bộ dữ liệu các trang web (${formatBytes(totalSiteStorageBytes)})`);
               }
             } catch {
-              if (onShowToast) onShowToast('Có lỗi xảy ra khi dọn dẹp');
+              if (onShowToast) onShowToast('Có lỗi xảy ra khi xóa dữ liệu');
             } finally {
               setIsCleaning(false);
             }
@@ -352,15 +381,34 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
   const handleDeleteSiteData = (site: SiteStorageItem) => {
     Alert.alert(
       `Xóa dữ liệu ${site.domain}?`,
-      `Thao tác này sẽ xóa bộ nhớ đệm và dữ liệu đã lưu của trang ${site.domain} (${formatBytes(site.sizeBytes)}).`,
+      `Thao tác này sẽ xóa bộ nhớ đệm, ảnh chụp và dữ liệu đã lưu của trang ${site.domain} (${formatBytes(site.sizeBytes)}).`,
       [
         { text: 'Hủy', style: 'cancel' },
         {
-          text: 'Xóa dữ liệu',
+          text: 'Xóa',
           style: 'destructive',
           onPress: async () => {
             setIsCleaning(true);
             try {
+              // 1. Xóa ảnh chụp snapshot của các tab thuộc domain này
+              const snapDir = new Directory(Paths.document, 'Kite_Snapshots');
+              for (const tab of tabs) {
+                if (tab.url && tab.url.toLowerCase().includes(site.domain.toLowerCase())) {
+                  try {
+                    const snapFile = new File(snapDir, `tab_snapshot_${tab.id}.jpg`);
+                    if (snapFile.exists) snapFile.delete();
+                  } catch {}
+                  if (tab.snapshotUri && tab.snapshotUri.startsWith('file://')) {
+                    try {
+                      const f = new File(tab.snapshotUri);
+                      if (f.exists) f.delete();
+                    } catch {}
+                  }
+                  tab.snapshotUri = null;
+                }
+              }
+
+              // 2. Xóa lịch sử duyệt web liên quan tới domain
               const allKeys = await AsyncStorage.getAllKeys();
               const histKeys = allKeys.filter((k) => k.startsWith('@kite_browsing_history'));
               if (!histKeys.includes(STORAGE_HISTORY_KEY)) histKeys.push(STORAGE_HISTORY_KEY);
@@ -371,13 +419,21 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
                   if (stored) {
                     const list = JSON.parse(stored);
                     if (Array.isArray(list)) {
-                      const filtered = list.filter((item: any) => !item.url?.includes(site.domain));
+                      const filtered = list.filter(
+                        (item: any) => !item.url?.toLowerCase().includes(site.domain.toLowerCase())
+                      );
                       await AsyncStorage.setItem(k, JSON.stringify(filtered));
                     }
                   }
                 } catch {}
               }
 
+              // 3. Xóa các quyền trang web nếu có
+              try {
+                await AsyncStorage.removeItem(`@kite_site_perm_${site.domain}`);
+              } catch {}
+
+              // 4. Cập nhật state
               setSiteStorageList((prev) => prev.filter((s) => s.domain !== site.domain));
               setWebCacheSize((prev) => Math.max(0, prev - site.sizeBytes));
 
@@ -395,87 +451,6 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
     );
   };
 
-  // 2. Clear Web Cache Only
-  const handleClearCacheConfirm = () => {
-    Alert.alert(
-      'Xóa bộ nhớ đệm web?',
-      'Trang web có thể tải chậm hơn một chút ở lần mở tiếp theo khi nạp lại dữ liệu.',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa bộ nhớ đệm',
-          style: 'destructive',
-          onPress: async () => {
-            setIsCleaning(true);
-            try {
-              await onClearWebCache();
-              await calculateStorage();
-              if (onShowToast) onShowToast('Đã dọn dẹp toàn bộ bộ nhớ đệm web');
-            } catch {
-              if (onShowToast) onShowToast('Không thể xóa bộ nhớ đệm');
-            } finally {
-              setIsCleaning(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // 3. Clear Tab Snapshots Only
-  const handleClearSnapshotsConfirm = () => {
-    Alert.alert(
-      'Giải phóng ảnh chụp thẻ?',
-      'Xóa bộ nhớ tạm ảnh xem trước các thẻ đang không hoạt động. Thẻ của bạn vẫn được giữ nguyên vẹn.',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Giải phóng',
-          onPress: async () => {
-            setIsCleaning(true);
-            try {
-              await onClearTabSnapshots();
-              await calculateStorage();
-              if (onShowToast) onShowToast('Đã giải phóng bộ nhớ ảnh chụp thẻ');
-            } catch {
-              if (onShowToast) onShowToast('Không thể giải phóng ảnh chụp thẻ');
-            } finally {
-              setIsCleaning(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  // 4. Clear Browsing Data
-  const handleClearHistoryConfirm = () => {
-    if (!onClearHistory) return;
-    Alert.alert(
-      'Xóa lịch sử duyệt web?',
-      'Toàn bộ lịch sử các trang đã xem sẽ bị xóa. Dấu trang và mật khẩu của bạn không bị ảnh hưởng.',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa lịch sử',
-          style: 'destructive',
-          onPress: async () => {
-            setIsCleaning(true);
-            try {
-              await onClearHistory();
-              await calculateStorage();
-              if (onShowToast) onShowToast('Đã xóa toàn bộ lịch sử duyệt web');
-            } catch {
-              if (onShowToast) onShowToast('Không thể xóa lịch sử');
-            } finally {
-              setIsCleaning(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={onClose}>
@@ -484,17 +459,17 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
           activeOpacity={1}
           onPress={(e) => e.stopPropagation()}
         >
-          {/* Drag Handle */}
+          {/* Thanh gạt trên cùng */}
           <View style={styles.dragHandle} />
 
-          {/* Header */}
+          {/* Header tối giản */}
           <View style={styles.header}>
             <View style={styles.headerTitleGroup}>
               <Text style={styles.headerTitle} numberOfLines={1}>
-                Bộ nhớ & Bộ nhớ đệm
+                Dung lượng trang web
               </Text>
               <Text style={styles.headerSubtitle} numberOfLines={1}>
-                Tối ưu tốc độ tải trang & Dung lượng lưu trữ
+                Xem và xóa dữ liệu lưu trữ theo từng trang
               </Text>
             </View>
             <View style={styles.headerActions}>
@@ -505,13 +480,13 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
                 activeOpacity={0.7}
               >
                 {isLoading ? (
-                  <ActivityIndicator size="small" color={theme.colors.black} />
+                  <ActivityIndicator size="small" color="#18181b" />
                 ) : (
-                  <Feather name="refresh-cw" size={18} color={theme.colors.textPrimary} />
+                  <Feather name="refresh-cw" size={17} color="#18181b" />
                 )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.iconBtn} onPress={onClose} activeOpacity={0.7}>
-                <Feather name="x" size={20} color={theme.colors.textPrimary} />
+                <Feather name="x" size={19} color="#18181b" />
               </TouchableOpacity>
             </View>
           </View>
@@ -521,259 +496,153 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* 1. TỔNG QUAN DUNG LƯỢNG */}
+            {/* 1. TỔNG QUAN DUNG LƯỢNG TRANG WEB */}
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Dung lượng Kite đang dùng</Text>
+              <View style={styles.summaryTopRow}>
+                <View>
+                  <Text style={styles.summaryLabel}>TỔNG DUNG LƯỢNG LƯU TRỮ</Text>
+                  <Text style={styles.summaryValue}>{formatBytes(totalSiteStorageBytes)}</Text>
+                </View>
 
-              <View style={styles.summaryValueRow}>
-                <Text style={styles.summaryValue}>{formatBytes(totalKiteUsage)}</Text>
-                <TouchableOpacity
-                  style={[styles.optimizeBtn, (isLoading || isCleaning) && styles.btnDisabled]}
-                  onPress={handleSmartOptimizeConfirm}
-                  disabled={isLoading || isCleaning}
-                  activeOpacity={0.8}
-                >
-                  {isCleaning ? (
-                    <ActivityIndicator size="small" color={theme.colors.white} />
-                  ) : (
-                    <Text style={styles.optimizeBtnText}>Dọn dẹp nhanh</Text>
-                  )}
-                </TouchableOpacity>
+                {siteStorageList.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.clearAllBtn}
+                    onPress={handleClearAllSitesConfirm}
+                    disabled={isCleaning}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="trash-2" size={13} color="#18181b" style={{ marginRight: 6 }} />
+                    <Text style={styles.clearAllBtnText}>Xóa tất cả</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              <Text style={styles.summarySubtext}>
+                {siteStorageList.length > 0
+                  ? `${siteStorageList.length} trang web đang lưu bộ nhớ đệm và ảnh chụp`
+                  : 'Chưa có trang web nào lưu trữ dữ liệu'}
+              </Text>
+            </View>
+
+            {/* Ô tìm kiếm trang web (nếu có từ 3 trang trở lên) */}
+            {siteStorageList.length > 2 && (
+              <View style={styles.searchContainer}>
+                <Feather name="search" size={15} color="#71717a" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Tìm kiếm trang web..."
+                  placeholderTextColor="#a1a1aa"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  clearButtonMode="while-editing"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setSearchQuery('')}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Feather name="x" size={15} color="#71717a" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* 2. DANH SÁCH CHI TIẾT CÁC TRANG WEB ĐANG LƯU */}
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>CÁC TRANG WEB ĐANG LƯU</Text>
+              {siteStorageList.length > 0 && (
+                <Text style={styles.sectionBadgeText}>{filteredSites.length} trang</Text>
+              )}
+            </View>
+
+            <View style={styles.sitesCard}>
+              {filteredSites.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Feather name="globe" size={24} color="#a1a1aa" style={{ marginBottom: 8 }} />
+                  <Text style={styles.emptyText}>
+                    {searchQuery
+                      ? 'Không tìm thấy trang web phù hợp'
+                      : 'Chưa có dữ liệu trang web nào được lưu'}
+                  </Text>
+                </View>
+              ) : (
+                filteredSites.map((site, index) => {
+                  const faviconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=https://${site.domain}`;
+                  return (
+                    <View key={site.domain}>
+                      <View style={styles.siteRow}>
+                        <Image source={{ uri: faviconUrl }} style={styles.siteFavicon} />
+
+                        <View style={styles.siteInfo}>
+                          <View style={styles.siteDomainRow}>
+                            <Text style={styles.siteDomain} numberOfLines={1}>
+                              {site.domain}
+                            </Text>
+                            {site.hasActiveTab && (
+                              <View style={styles.activeBadge}>
+                                <Text style={styles.activeBadgeText}>Đang mở</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.siteSubtext} numberOfLines={1}>
+                            {site.hasActiveTab ? '1 thẻ đang mở' : 'Đã lưu cache'} • {site.visitCount} lần xem
+                          </Text>
+                        </View>
+
+                        <Text style={styles.siteSize}>{formatBytes(site.sizeBytes)}</Text>
+
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          onPress={() => handleDeleteSiteData(site)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          activeOpacity={0.7}
+                        >
+                          <Feather name="trash-2" size={14} color="#71717a" />
+                        </TouchableOpacity>
+                      </View>
+                      {index < filteredSites.length - 1 && <View style={styles.divider} />}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+
+            {/* 3. DUNG LƯỢNG KHÁC (TỆP TẢI VỀ & BỘ NHỚ MÁY) */}
+            <View style={styles.otherStorageCard}>
+              <View style={styles.otherRow}>
+                <View style={styles.otherInfo}>
+                  <Text style={styles.otherTitle}>Tệp đã tải xuống</Text>
+                  <Text style={styles.otherSubtext}>
+                    {formatBytes(downloadsSize)} • Trong thư mục Kite_Downloads
+                  </Text>
+                </View>
+                {onOpenDownloads && (
+                  <TouchableOpacity
+                    style={styles.otherActionBtn}
+                    onPress={() => {
+                      onClose();
+                      onOpenDownloads();
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.otherActionText}>Quản lý tệp</Text>
+                  </TouchableOpacity>
+                )}
               </View>
 
               {freeDiskSpace > 0 && (
-                <View style={styles.diskSpaceRow}>
-                  <Feather name="hard-drive" size={14} color={theme.colors.textSecondary} />
-                  <Text style={styles.diskSpaceText}>
-                    Còn trống {formatBytes(freeDiskSpace)} trên bộ nhớ thiết bị
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* 2. CHI TIẾT SỬ DỤNG TỪNG PHẦN */}
-            <Text style={styles.sectionTitle}>Chi tiết phân bổ dung lượng</Text>
-
-            <View style={styles.breakdownCard}>
-              {/* Row 1: Web Cache */}
-              <View style={styles.itemRow}>
-                <View style={styles.itemIconContainer}>
-                  <Feather name="globe" size={18} color={theme.colors.grayDark} />
-                </View>
-                <View style={styles.itemInfo}>
-                  <View style={styles.itemHeaderLine}>
-                    <Text style={styles.itemTitle}>Bộ nhớ đệm web (Kite Cache)</Text>
-                    <Text style={styles.itemSize}>{formatBytes(webCacheSize)}</Text>
-                  </View>
-                  <Text style={styles.itemDesc}>
-                    Hình ảnh, file nén JS, CSS và tài nguyên trang web giúp mở tức thì.
-                  </Text>
-                  <View style={styles.itemActionLine}>
-                    <TouchableOpacity
-                      style={styles.actionBtnOutline}
-                      onPress={handleClearCacheConfirm}
-                      disabled={isCleaning || webCacheSize === 0}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.actionBtnText,
-                          webCacheSize === 0 && styles.actionBtnTextDisabled,
-                        ]}
-                      >
-                        Xóa bộ nhớ đệm
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.horizontalDivider} />
-
-              {/* Row 2: Tab Snapshots */}
-              <View style={styles.itemRow}>
-                <View style={styles.itemIconContainer}>
-                  <Feather name="layers" size={18} color={theme.colors.grayDark} />
-                </View>
-                <View style={styles.itemInfo}>
-                  <View style={styles.itemHeaderLine}>
-                    <Text style={styles.itemTitle}>Ảnh chụp thẻ duyệt web</Text>
-                    <Text style={styles.itemSize}>{formatBytes(snapshotsSize)}</Text>
-                  </View>
-                  <Text style={styles.itemDesc}>
-                    Ảnh xem trước tĩnh của {tabs.length} thẻ đang mở trong trình quản lý thẻ.
-                  </Text>
-                  <View style={styles.itemActionLine}>
-                    <TouchableOpacity
-                      style={styles.actionBtnOutline}
-                      onPress={handleClearSnapshotsConfirm}
-                      disabled={isCleaning || snapshotsSize === 0}
-                      activeOpacity={0.7}
-                    >
-                      <Text
-                        style={[
-                          styles.actionBtnText,
-                          snapshotsSize === 0 && styles.actionBtnTextDisabled,
-                        ]}
-                      >
-                        Giải phóng ảnh chụp
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.horizontalDivider} />
-
-              {/* Row 3: Downloads */}
-              <View style={styles.itemRow}>
-                <View style={styles.itemIconContainer}>
-                  <Feather name="download" size={18} color={theme.colors.grayDark} />
-                </View>
-                <View style={styles.itemInfo}>
-                  <View style={styles.itemHeaderLine}>
-                    <Text style={styles.itemTitle}>Tệp đã tải xuống</Text>
-                    <Text style={styles.itemSize}>{formatBytes(downloadsSize)}</Text>
-                  </View>
-                  <Text style={styles.itemDesc}>
-                    Tệp PDF, tài liệu, hình ảnh và video đã lưu về máy.
-                  </Text>
-                  {onOpenDownloads && (
-                    <View style={styles.itemActionLine}>
-                      <TouchableOpacity
-                        style={styles.actionBtnOutline}
-                        onPress={() => {
-                          onClose();
-                          onOpenDownloads();
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.actionBtnText}>Quản lý tệp tải xuống</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              <View style={styles.horizontalDivider} />
-
-              {/* Row 4: Browsing Data & History */}
-              <View style={styles.itemRow}>
-                <View style={styles.itemIconContainer}>
-                  <Feather name="database" size={18} color={theme.colors.grayDark} />
-                </View>
-                <View style={styles.itemInfo}>
-                  <View style={styles.itemHeaderLine}>
-                    <Text style={styles.itemTitle}>Lịch sử duyệt & Cookie</Text>
-                    <Text style={styles.itemSize}>{formatBytes(historyAndStorageSize)}</Text>
-                  </View>
-                  <Text style={styles.itemDesc}>
-                    Nhật ký các trang web đã truy cập, cookie phiên và dữ liệu biểu mẫu.
-                  </Text>
-                  {onClearHistory && (
-                    <View style={styles.itemActionLine}>
-                      <TouchableOpacity
-                        style={styles.actionBtnOutline}
-                        onPress={handleClearHistoryConfirm}
-                        disabled={isCleaning}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.actionBtnText}>Xóa lịch sử duyệt web</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-
-            {/* 3. DUNG LƯỢNG THEO TRANG WEB (WEBSITE DATA) */}
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Dung lượng theo trang web</Text>
-              {siteStorageList.length > 0 && (
-                <Text style={styles.sectionBadgeText}>{siteStorageList.length} trang web</Text>
-              )}
-            </View>
-
-            <View style={styles.breakdownCard}>
-              {siteStorageList.length === 0 ? (
-                <View style={styles.emptySiteBox}>
-                  <Feather name="globe" size={24} color={theme.colors.textSecondary} style={{ marginBottom: 6 }} />
-                  <Text style={styles.emptySiteText}>Chưa có dữ liệu trang web nào được lưu trữ</Text>
-                </View>
-              ) : (
                 <>
-                  {(showAllSites ? siteStorageList : siteStorageList.slice(0, 4)).map((site, idx, arr) => {
-                    const faviconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=https://${site.domain}`;
-                    return (
-                      <React.Fragment key={site.domain}>
-                        <View style={styles.siteRow}>
-                          <Image
-                            source={{ uri: faviconUrl }}
-                            style={styles.siteFavicon}
-                          />
-                          <View style={styles.siteInfo}>
-                            <View style={styles.siteDomainRow}>
-                              <Text style={styles.siteDomain} numberOfLines={1}>
-                                {site.domain}
-                              </Text>
-                              {site.hasActiveTab && (
-                                <View style={styles.activeTabTag}>
-                                  <Text style={styles.activeTabTagText}>Đang mở</Text>
-                                </View>
-                              )}
-                            </View>
-                            <Text style={styles.siteMeta} numberOfLines={1}>
-                              {site.hasActiveTab ? '1 thẻ đang mở' : 'Đã lưu cache'} • {site.visitCount} lần xem
-                            </Text>
-                          </View>
-
-                          <Text style={styles.siteSize}>{formatBytes(site.sizeBytes)}</Text>
-
-                          <TouchableOpacity
-                            style={styles.siteDeleteBtn}
-                            onPress={() => handleDeleteSiteData(site)}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            activeOpacity={0.7}
-                          >
-                            <Feather name="trash-2" size={15} color="#ef4444" />
-                          </TouchableOpacity>
-                        </View>
-                        {idx < arr.length - 1 && <View style={styles.horizontalDivider} />}
-                      </React.Fragment>
-                    );
-                  })}
-
-                  {siteStorageList.length > 4 && (
-                    <>
-                      <View style={styles.horizontalDivider} />
-                      <TouchableOpacity
-                        style={styles.showMoreBtn}
-                        onPress={() => setShowAllSites((prev) => !prev)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.showMoreBtnText}>
-                          {showAllSites
-                            ? 'Thu gọn danh sách'
-                            : `Xem tất cả (${siteStorageList.length} trang web)`}
-                        </Text>
-                        <Feather
-                          name={showAllSites ? 'chevron-up' : 'chevron-down'}
-                          size={15}
-                          color="#007aff"
-                        />
-                      </TouchableOpacity>
-                    </>
-                  )}
+                  <View style={styles.divider} />
+                  <View style={styles.diskRow}>
+                    <Feather name="hard-drive" size={13} color="#71717a" />
+                    <Text style={styles.diskText}>
+                      Bộ nhớ máy còn trống {formatBytes(freeDiskSpace)}
+                    </Text>
+                  </View>
                 </>
               )}
-            </View>
-
-            {/* 4. MẸO TỐI ƯU HÓA */}
-            <View style={styles.infoBox}>
-              <Feather name="info" size={16} color={theme.colors.textSecondary} />
-              <Text style={styles.infoBoxText}>
-                Kite lưu trữ bộ nhớ đệm trang web thông minh giúp các trang quen thuộc tải gần như lập tức và tiết kiệm tối đa dữ liệu di động 4G/5G.
-              </Text>
             </View>
           </ScrollView>
         </TouchableOpacity>
@@ -785,21 +654,21 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
 const styles = StyleSheet.create({
   sheetBackdrop: {
     flex: 1,
-    backgroundColor: theme.colors.backdrop,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
-    backgroundColor: theme.colors.sheetBackground,
-    borderTopLeftRadius: theme.radius.sheet,
-    borderTopRightRadius: theme.radius.sheet,
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     maxHeight: '90%',
     minHeight: 460,
   },
   dragHandle: {
     width: 36,
     height: 4,
-    backgroundColor: theme.colors.dragHandle,
-    borderRadius: theme.radius.full,
+    backgroundColor: '#e4e4e7',
+    borderRadius: 2,
     alignSelf: 'center',
     marginTop: 10,
     marginBottom: 6,
@@ -816,13 +685,13 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   headerTitle: {
-    fontSize: theme.typography.fontSize.xl,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.textPrimary,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#09090b',
   },
   headerSubtitle: {
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textSecondary,
+    fontSize: 12,
+    color: '#71717a',
     marginTop: 2,
   },
   headerActions: {
@@ -831,10 +700,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radius.full,
-    backgroundColor: '#ffffff',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#f4f4f5',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -846,176 +715,106 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   summaryCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: theme.radius.xl,
-    padding: 18,
+    backgroundColor: '#f8fafc',
+    borderRadius: 16,
+    padding: 16,
     marginTop: 6,
-    marginBottom: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
-  summaryValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 6,
-    marginBottom: 2,
-  },
-  summaryLabel: {
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    fontWeight: theme.typography.fontWeight.semibold,
-  },
-  summaryValue: {
-    fontSize: 26,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.textPrimary,
-  },
-  optimizeBtn: {
-    backgroundColor: theme.colors.accentBlue,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: theme.radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-  optimizeBtnText: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
-    color: theme.colors.white,
-  },
-  diskSpaceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  diskSpaceText: {
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textSecondary,
-  },
-  sectionTitle: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.semibold,
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
-  },
-  breakdownCard: {
-    backgroundColor: theme.colors.sheetCard,
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    paddingVertical: 18,
-    paddingHorizontal: 18,
-    alignItems: 'flex-start',
-  },
-  itemIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.backgroundSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-    marginTop: 2,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemHeaderLine: {
+  summaryTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
   },
-  itemTitle: {
-    fontSize: 16,
-    fontWeight: '400',
-    color: theme.colors.textPrimary,
-    flexShrink: 1,
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#71717a',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  summaryValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#09090b',
+    marginTop: 2,
+  },
+  summarySubtext: {
+    fontSize: 12,
+    color: '#71717a',
+    marginTop: 4,
+  },
+  clearAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  clearAllBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#18181b',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f4f4f5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  searchIcon: {
     marginRight: 8,
   },
-  itemSize: {
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.bold,
-    color: theme.colors.textPrimary,
-  },
-  itemDesc: {
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textSecondary,
-    lineHeight: 17,
-  },
-  itemActionLine: {
-    marginTop: 10,
-    flexDirection: 'row',
-  },
-  actionBtnOutline: {
-    borderWidth: 1,
-    borderColor: '#cce3ff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.radius.sm,
-    backgroundColor: '#eff6ff',
-  },
-  actionBtnText: {
-    fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.medium,
-    color: theme.colors.accentBlue,
-  },
-  actionBtnTextDisabled: {
-    color: theme.colors.textMuted,
-  },
-  horizontalDivider: {
-    height: 1,
-    backgroundColor: theme.colors.divider,
-    marginHorizontal: 16,
-  },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: theme.colors.backgroundSecondary,
-    borderRadius: theme.radius.md,
-    padding: 14,
-    marginBottom: 10,
-  },
-  infoBoxText: {
+  searchInput: {
     flex: 1,
-    fontSize: theme.typography.fontSize.xs,
-    color: theme.colors.textSecondary,
-    lineHeight: 18,
+    fontSize: 13,
+    color: '#09090b',
+    padding: 0,
   },
-  sectionHeaderRow: {
+  sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#71717a',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   sectionBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.accentBlue,
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#71717a',
+  },
+  sitesCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    overflow: 'hidden',
+    marginBottom: 16,
   },
   siteRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
   },
   siteFavicon: {
-    width: 28,
-    height: 28,
+    width: 26,
+    height: 26,
     borderRadius: 6,
     backgroundColor: '#f4f4f5',
     marginRight: 12,
@@ -1032,60 +831,105 @@ const styles = StyleSheet.create({
   siteDomain: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.textPrimary,
+    color: '#09090b',
     flexShrink: 1,
   },
-  activeTabTag: {
-    backgroundColor: '#eff6ff',
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
+  activeBadge: {
+    backgroundColor: '#f4f4f5',
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
-  activeTabTagText: {
+  activeBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#007aff',
+    fontWeight: '600',
+    color: '#52525b',
   },
-  siteMeta: {
+  siteSubtext: {
     fontSize: 11,
-    color: theme.colors.textSecondary,
+    color: '#71717a',
     marginTop: 2,
   },
   siteSize: {
     fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.textPrimary,
+    fontWeight: '600',
+    color: '#18181b',
     marginRight: 10,
   },
-  siteDeleteBtn: {
+  deleteBtn: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    backgroundColor: '#f4f4f5',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
   },
-  emptySiteBox: {
-    padding: 24,
+  divider: {
+    height: 1,
+    backgroundColor: '#f4f4f5',
+  },
+  emptyContainer: {
+    padding: 28,
     alignItems: 'center',
   },
-  emptySiteText: {
+  emptyText: {
     fontSize: 13,
-    color: theme.colors.textSecondary,
+    color: '#71717a',
   },
-  showMoreBtn: {
+  otherStorageCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  otherRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 13,
-    backgroundColor: '#f8fafc',
+    justifyContent: 'space-between',
+    padding: 14,
   },
-  showMoreBtnText: {
+  otherInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  otherTitle: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#007aff',
+    color: '#09090b',
+  },
+  otherSubtext: {
+    fontSize: 11,
+    color: '#71717a',
+    marginTop: 2,
+  },
+  otherActionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+  },
+  otherActionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#18181b',
+  },
+  diskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    backgroundColor: '#fafafa',
+  },
+  diskText: {
+    fontSize: 11,
+    color: '#71717a',
   },
 });

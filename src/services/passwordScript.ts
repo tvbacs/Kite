@@ -15,6 +15,54 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
     var pendingPassword = '';
     var pendingUsername = '';
 
+    // Native Setter để tự điền thông tin tài khoản & mật khẩu bypass qua Virtual DOM của React/Vue/Angular
+    window.__kite_fill_credential = function(user, pass) {
+      try {
+        var setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        var passInputs = document.querySelectorAll('input[type="password"]');
+        var pInput = null;
+        for (var i = 0; i < passInputs.length; i++) {
+          var pi = passInputs[i];
+          if (pi.offsetParent !== null && !isOtpOrNonPasswordField(pi)) {
+            pInput = pi;
+            break;
+          }
+        }
+
+        var form = pInput && pInput.closest ? pInput.closest('form') : null;
+        var uInput = null;
+        if (form) {
+          uInput = form.querySelector('input[autocomplete="username"], input[autocomplete="email"], input[type="email"], input[type="text"], input[type="tel"], input[name*="user" i], input[name*="login" i]');
+        }
+        if (!uInput) {
+          uInput = document.querySelector('input[autocomplete="username"], input[autocomplete="email"], input[type="email"], input[type="text"], input[name*="user" i], input[name*="login" i]');
+        }
+
+        if (uInput && user) {
+          if (setter) {
+            setter.call(uInput, user);
+          } else {
+            uInput.value = user;
+          }
+          uInput.dispatchEvent(new Event('input', { bubbles: true }));
+          uInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        if (pInput && pass) {
+          if (setter) {
+            setter.call(pInput, pass);
+          } else {
+            pInput.value = pass;
+          }
+          pInput.dispatchEvent(new Event('input', { bubbles: true }));
+          pInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        return true;
+      } catch(e) {
+        return false;
+      }
+    };
+
     // Hàm nhận diện ô nhập liệu là OTP, 2FA, PIN, CVV, Captcha hay mã xác thực 1 lần
     function isOtpOrNonPasswordField(el) {
       if (!el) return false;
@@ -113,6 +161,37 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
       } catch (err) {}
     }, true);
 
+    // 1b. Lắng nghe sự kiện Focus vào ô nhập tài khoản hoặc mật khẩu để kích hoạt gợi ý Autofill
+    document.addEventListener('focusin', function(e) {
+      try {
+        var el = e.target;
+        if (!el || isOtpOrNonPasswordField(el) || isSearchOrIrrelevantField(el)) return;
+
+        var isPwd = el.type === 'password';
+        var isUser = el.type === 'email' || el.type === 'text' || el.type === 'tel';
+        var tag = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.getAttribute('autocomplete') || '')).toLowerCase();
+
+        var hasPasswordNearby = isPwd;
+        if (isUser && !hasPasswordNearby) {
+          var form = el.closest ? el.closest('form') : null;
+          if (form && form.querySelector('input[type="password"]')) {
+            hasPasswordNearby = true;
+          } else if (document.querySelector('input[type="password"]')) {
+            hasPasswordNearby = true;
+          }
+        }
+
+        if ((isPwd || tag.includes('user') || tag.includes('login') || tag.includes('email') || tag.includes('account')) && hasPasswordNearby) {
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'PASSWORD_FORM_FOCUSED',
+              website: location.hostname || location.host,
+            }));
+          }
+        }
+      } catch (err) {}
+    }, true);
+
     // 2. Hàm gửi thông tin tài khoản đã nhận diện về Kite Browser
     var triggerDetectedLogin = function(sourceEl) {
       try {
@@ -169,6 +248,11 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
           }
         }
 
+        var isNewPass = false;
+        if (pwdInput && (pwdInput.getAttribute('autocomplete') === 'new-password' || (form && form.querySelectorAll('input[type="password"]').length >= 2))) {
+          isNewPass = true;
+        }
+
         var domain = location.hostname || location.host;
         var key = domain + '|' + userVal + '|' + pwdVal;
 
@@ -180,6 +264,7 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
               website: domain,
               username: userVal,
               password: pwdVal,
+              isNewPass: isNewPass,
             }));
           }
         }

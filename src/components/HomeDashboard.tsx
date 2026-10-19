@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -28,7 +28,7 @@ import { Bookmark, UserProfile } from '../types/browser';
 import { SEARCH_ENGINES } from '../constants/searchEngines';
 import { theme } from '../constants/theme';
 import { VoiceSearchModal } from './VoiceSearchModal';
-import { getGoogleOAuthUrl } from '../services/supabase';
+import { getGoogleOAuthUrl, saveCloudSettings, syncUserCloudData } from '../services/supabase';
 import { preconnectTarget } from '../services/networkPreconnectService';
 
 const GoogleGIcon = ({ size = 20 }: { size?: number }) => (
@@ -129,61 +129,83 @@ const DEFAULT_BOOKMARKS: Bookmark[] = [
   },
 ];
 
-const ShortcutFaviconImage = ({ url, title }: { url: string; title: string }) => {
-  const [hasError, setHasError] = useState(false);
-  if (hasError) {
-    const letter = (title || url.replace(/^https?:\/\//, '')).charAt(0).toUpperCase();
+const getFaviconSources = (rawUrl: string, customIcon?: string): string[] => {
+  const sources: string[] = [];
+  if (customIcon) {
+    sources.push(customIcon);
+  }
+  let cleanUrl = (rawUrl || '').trim();
+  if (!cleanUrl) return sources;
+  if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+    cleanUrl = 'https://' + cleanUrl;
+  }
+
+  // 1. Google High-Res Favicon V2 (sz=128) - Rất nét trên màn hình Retina, tự động trả về logo/favicon chính thức từ website
+  sources.push(`https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=${encodeURIComponent(cleanUrl)}&size=128`);
+  sources.push(`https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(cleanUrl)}`);
+
+  // 2. DuckDuckGo Icon Service & Website origin favicon
+  const match = cleanUrl.match(/^https?:\/\/([^\/\?#]+)/i);
+  if (match) {
+    const host = match[1];
+    sources.push(`https://icons.duckduckgo.com/ip3/${host}.ico`);
+    const origin = cleanUrl.match(/^(https?:\/\/[^\/\?#]+)/i)?.[1];
+    if (origin) {
+      sources.push(`${origin}/favicon.ico`);
+      sources.push(`${origin}/apple-touch-icon.png`);
+    }
+  }
+
+  return sources;
+};
+
+interface ShortcutFaviconImageProps {
+  url: string;
+  title: string;
+  icon?: string;
+}
+
+const ShortcutFaviconImage: React.FC<ShortcutFaviconImageProps> = ({ url, title, icon }) => {
+  const sources = useMemo(() => getFaviconSources(url, icon), [url, icon]);
+  const [sourceIndex, setSourceIndex] = useState(0);
+
+  useEffect(() => {
+    setSourceIndex(0);
+  }, [url, icon]);
+
+  const handleError = () => {
+    setSourceIndex((prev) => prev + 1);
+  };
+
+  // Nếu tất cả các nguồn ảnh chính chủ đều lỗi (ví dụ khi hoàn toàn mất mạng)
+  if (sourceIndex >= sources.length) {
+    const letter = (title || url.replace(/^https?:\/\/(www\.)?/, '')).charAt(0).toUpperCase();
     return (
       <View style={styles.shortcutLetterFallback}>
         <Text style={styles.shortcutLetterText}>{letter}</Text>
       </View>
     );
   }
+
   return (
     <Image
-      source={{ uri: `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(url)}` }}
+      source={{ uri: sources[sourceIndex] }}
       style={styles.circleShortcutFavicon}
       resizeMode="contain"
-      onError={() => setHasError(true)}
+      onError={handleError}
     />
   );
 };
 
 const renderShortcutIcon = (item: Bookmark) => {
   const urlLower = item.url.toLowerCase();
-  if (urlLower.includes('google.com')) {
+  // Với Google search chính chủ, dùng vector SVG 4 màu sắc nét 0ms
+  if (urlLower.includes('google.com') && !urlLower.includes('play.google') && !urlLower.includes('drive.google')) {
     return <GoogleGIcon size={24} />;
   }
-  if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
-    return <MaterialCommunityIcons name="youtube" size={26} color="#FF0000" />;
-  }
-  if (urlLower.includes('facebook.com') || urlLower.includes('fb.com')) {
-    return <MaterialCommunityIcons name="facebook" size={26} color="#1877F2" />;
-  }
-  if (urlLower.includes('tiktok.com')) {
-    return <MaterialCommunityIcons name="music-note" size={24} color="#000000" />;
-  }
-  if (urlLower.includes('chatgpt.com') || urlLower.includes('openai.com')) {
-    return <MaterialCommunityIcons name="robot" size={22} color="#10a37f" />;
-  }
-  if (urlLower.includes('vnexpress.net')) {
-    return (
-      <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#900000', alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>V</Text>
-      </View>
-    );
-  }
-  if (urlLower.includes('dantri.com.vn')) {
-    return (
-      <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: '#006633', alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>D</Text>
-      </View>
-    );
-  }
-  if (urlLower.includes('shopee.vn')) {
-    return <MaterialCommunityIcons name="shopping" size={22} color="#EE4D2D" />;
-  }
-  return <ShortcutFaviconImage url={item.url} title={item.title} />;
+  // Mọi trang web khác (ChatGPT, TikTok, YouTube, Facebook, Shopee, VnExpress, Dân Trí...)
+  // đều tự động lấy trực tiếp icon/favicon chính chủ từ chính website đó, không dùng icon giả tự tạo!
+  return <ShortcutFaviconImage url={item.url} title={item.title} icon={item.icon} />;
 };
 
 interface DiscoverArticle {
@@ -1182,6 +1204,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     };
     setUserProfile(updated);
     await AsyncStorage.setItem(STORAGE_USER_KEY, JSON.stringify(updated));
+    syncUserCloudData(updated).catch(() => {});
 
     if (onSwitchAccount) {
       onSwitchAccount(updated, userProfile);
@@ -1531,6 +1554,13 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     const email = userProfile.email?.toLowerCase();
     const key = syncAllAccounts || !email ? STORAGE_THEME_KEY : `${STORAGE_THEME_KEY}_${email}`;
     await AsyncStorage.setItem(key, themeId);
+    if (userProfile.isLoggedIn && (userProfile.id || email)) {
+      saveCloudSettings(
+        userProfile.id || email!,
+        { themeId },
+        email
+      ).catch(() => {});
+    }
     if (onShowToast) {
       onShowToast(`Đã áp dụng chủ đề: ${THEME_PALETTES[themeId]?.name || themeId}`);
     }
@@ -1682,14 +1712,6 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </TouchableOpacity>
         </View>
 
-        {/* Logo App Kite ở màn hình chính */}
-        <View style={styles.homeAppLogoWrapper}>
-          <Image
-            source={require('../../assets/logokite.png')}
-            style={styles.homeAppLogoImage}
-            resizeMode="contain"
-          />
-        </View>
 
         {/* Giờ số to và Ngày tháng năm tiếng Việt căn giữa màn hình (có khoảng cách margin thoáng đãng với thời tiết) */}
         <View style={styles.simpleClockBlock}>
@@ -4093,22 +4115,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
     marginLeft: 2,
   },
-  homeAppLogoWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  homeAppLogoImage: {
-    width: 68,
-    height: 68,
-    borderRadius: 18,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    elevation: 3,
-  },
   simpleClockBlock: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -4208,8 +4214,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   circleShortcutFavicon: {
-    width: 26,
-    height: 26,
+    width: 28,
+    height: 28,
     borderRadius: 6,
   },
   shortcutLetterFallback: {

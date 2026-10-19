@@ -208,10 +208,14 @@ const TabCardItem: React.FC<TabCardItemProps> = React.memo(({
           </View>
         ) : (
           <View style={styles.cardPreviewBody}>
-            <View style={styles.cardEmptyIconCircle}>
-              <Feather name="globe" size={24} color="#007aff" />
+            <View style={[styles.cardEmptyIconCircle, tab.isIncognito && { backgroundColor: '#27272a' }]}>
+              <Feather
+                name={tab.isIncognito ? "eye-off" : "globe"}
+                size={24}
+                color={tab.isIncognito ? "#e4e4e7" : "#007aff"}
+              />
             </View>
-            <Text style={styles.previewDomainText} numberOfLines={2}>
+            <Text style={[styles.previewDomainText, tab.isIncognito && { color: '#a1a1aa' }]} numberOfLines={2}>
               {tab.url.replace('https://', '').replace('http://', '').split('/')[0]}
             </Text>
           </View>

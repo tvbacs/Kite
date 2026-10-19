@@ -214,7 +214,7 @@ export const HistorySheet: React.FC<HistorySheetProps> = ({
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             renderItem={({ item }) => {
-              const faviconUrl = `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(
+              const faviconUrl = `https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(
                 item.url
               )}`;
 

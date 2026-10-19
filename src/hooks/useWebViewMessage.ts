@@ -17,8 +17,12 @@ import {
 } from '../services/findInPageScript';
 import {
   saveCredentialSecurely,
+  getCredentialPassword,
   STORAGE_PASSWORD_SETTINGS_KEY,
+  STORAGE_PASSWORDS_KEY,
+  SavedCredential,
 } from '../components/PasswordManagerSheet';
+import { ImageContextData } from '../components/ImageContextMenuSheet';
 import {
   PermissionRequestPayload,
 } from '../components/PermissionPromptModal';
@@ -82,7 +86,11 @@ export function useWebViewMessage({
     website: string;
     username: string;
     passwordSecret: string;
+    isUpdate?: boolean;
   } | null>(null);
+
+  const [activeAutofillCredential, setActiveAutofillCredential] = useState<SavedCredential | null>(null);
+  const [imageContextMenuData, setImageContextMenuData] = useState<ImageContextData | null>(null);
 
   const [sitePermissionsSheetVisible, setSitePermissionsSheetVisible] = useState<boolean>(false);
   const [pendingPermissionRequest, setPendingPermissionRequest] = useState<PermissionRequestPayload | null>(null);
@@ -381,14 +389,86 @@ export function useWebViewMessage({
                   if (settings.autoPromptSave === false) return;
                 } catch (e) {}
               }
-              setPasswordSavePrompt({
-                visible: true,
-                website: currentDomain || data.website,
-                username: rawUser,
-                passwordSecret: rawPwd,
+
+              const targetDomain = currentDomain || data.website;
+              AsyncStorage.getItem(STORAGE_PASSWORDS_KEY).then((passRes) => {
+                let isUpdate = false;
+                if (passRes) {
+                  try {
+                    const list: SavedCredential[] = JSON.parse(passRes);
+                    if (Array.isArray(list)) {
+                      isUpdate = list.some((c) => {
+                        const sameWeb =
+                          c.website.toLowerCase() === targetDomain.toLowerCase() ||
+                          targetDomain.toLowerCase().includes(c.website.toLowerCase()) ||
+                          c.website.toLowerCase().includes(targetDomain.toLowerCase());
+                        const sameUser = c.username.toLowerCase() === rawUser.toLowerCase();
+                        return sameWeb && sameUser;
+                      });
+                    }
+                  } catch (e) {}
+                }
+
+                setPasswordSavePrompt({
+                  visible: true,
+                  website: targetDomain,
+                  username: rawUser,
+                  passwordSecret: rawPwd,
+                  isUpdate: isUpdate || Boolean(data.isNewPass),
+                });
               });
             });
           }
+        }
+      } else if (data.type === 'PASSWORD_FORM_FOCUSED') {
+        if (currentTab?.isIncognito || isIncognito) return;
+        const curUrl = currentTab?.url || '';
+        const currentDomain = (getDomain(curUrl) || data.website || '').toLowerCase().trim();
+        if (!currentDomain) return;
+
+        AsyncStorage.getItem(STORAGE_PASSWORD_SETTINGS_KEY).then((settingsRes) => {
+          let autoFillEnabled = true;
+          if (settingsRes) {
+            try {
+              const settings = JSON.parse(settingsRes);
+              if (settings.autoFill === false) autoFillEnabled = false;
+            } catch (e) {}
+          }
+          if (!autoFillEnabled) return;
+
+          AsyncStorage.getItem(STORAGE_PASSWORDS_KEY).then((passRes) => {
+            if (!passRes) return;
+            try {
+              const list: SavedCredential[] = JSON.parse(passRes);
+              if (!Array.isArray(list) || list.length === 0) return;
+
+              const matching = list.filter((c) => {
+                const credWeb = (c.website || '').toLowerCase().trim();
+                return (
+                  credWeb === currentDomain ||
+                  credWeb.includes(currentDomain) ||
+                  currentDomain.includes(credWeb) ||
+                  credWeb.endsWith('.' + currentDomain) ||
+                  currentDomain.endsWith('.' + credWeb)
+                );
+              });
+
+              if (matching.length > 0) {
+                matching.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                setActiveAutofillCredential(matching[0]);
+              }
+            } catch (e) {}
+          });
+        });
+      } else if (data.type === 'IMAGE_LONG_PRESS') {
+        if (data.src) {
+          try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch (e) {}
+          setImageContextMenuData({
+            src: data.src,
+            alt: data.alt || '',
+            width: Number(data.width) || 0,
+            height: Number(data.height) || 0,
+          });
         }
       } else if (data.type === 'KITE_SITE_PERMISSION_REQUEST') {
         const { permissionType, domain, requestId } = data;
@@ -472,6 +552,46 @@ export function useWebViewMessage({
     showToast(`Đã lưu tài khoản ${website} vào Keychain`);
   };
 
+  // Tự động điền mật khẩu với Face ID / Biometrics
+  const handlePerformAutofill = async (credential: SavedCredential) => {
+    try {
+      let requireBiometrics = true;
+      const settingsRes = await AsyncStorage.getItem(STORAGE_PASSWORD_SETTINGS_KEY);
+      if (settingsRes) {
+        try {
+          const settings = JSON.parse(settingsRes);
+          if (settings.requireBiometrics === false) {
+            requireBiometrics = false;
+          }
+        } catch (e) {}
+      }
+
+      const pass = await getCredentialPassword(credential.id, requireBiometrics);
+      if (!pass) return;
+
+      const activeWV = getActiveWebView();
+      if (activeWV) {
+        const fillScript = `
+          try {
+            if (typeof window.__kite_fill_credential === 'function') {
+              window.__kite_fill_credential(${JSON.stringify(credential.username)}, ${JSON.stringify(pass)});
+            }
+          } catch(e) {}
+          true;
+        `;
+        activeWV.injectJavaScript(fillScript);
+        setActiveAutofillCredential(null);
+        showToast(`Đã tự điền tài khoản: ${credential.username}`);
+      }
+    } catch (e) {
+      showToast('Không thể tự điền mật khẩu');
+    }
+  };
+
+  const handleDismissAutofill = () => {
+    setActiveAutofillCredential(null);
+  };
+
   // Tìm trong trang
   const handleFindInPageSearch = (query: string) => {
     const activeWV = getActiveWebView();
@@ -510,6 +630,12 @@ export function useWebViewMessage({
     passwordSavePrompt,
     setPasswordSavePrompt,
     handleConfirmSavePassword,
+    activeAutofillCredential,
+    setActiveAutofillCredential,
+    handlePerformAutofill,
+    handleDismissAutofill,
+    imageContextMenuData,
+    setImageContextMenuData,
     sitePermissionsSheetVisible,
     setSitePermissionsSheetVisible,
     pendingPermissionRequest,

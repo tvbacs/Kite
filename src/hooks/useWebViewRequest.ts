@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebViewNavigation } from 'react-native-webview';
 import { BrowserTab, ShieldStats, UserProfile } from '../types/browser';
@@ -7,6 +7,8 @@ import {
   BLOCKED_GAMBLING_KEYWORDS,
   COMMERCE_REDIRECT_DOMAINS,
   BLOCKED_SCHEMES,
+  isSuspiciousAdUrl,
+  isLegitimateAuthUrl,
 } from '../constants/blocklist';
 import { getDomain, getHostname, getDomainWithoutSuffix } from '../utils/tld';
 import {
@@ -14,7 +16,7 @@ import {
   getOriginalUrlFromTranslateUrl,
 } from '../services/translateService';
 import { isOAuthCallback, STORAGE_SAVED_ACCOUNTS_KEY, STORAGE_USER_PROFILE_KEY } from './useAuthProfile';
-import { handleAuthCallbackUrl, upsertCloudProfile } from '../services/supabase';
+import { handleAuthCallbackUrl, upsertCloudProfile, syncUserCloudData } from '../services/supabase';
 import { isJunkHistoryItem } from '../constants/searchEngines';
 import { isDownloadableUrl } from './useDownloads';
 
@@ -121,19 +123,17 @@ export function useWebViewRequest({
       return true;
     }
 
-    // 0. Cho phép các trang OAuth và server Supabase xử lý mã xác thực Google
+    // 0. Cho phép toàn bộ các trang OAuth, SSO, Authentication và cổng thanh toán chính thức (Google, Apple, Facebook, Microsoft, Zalo, MoMo, VNPay...)
     if (
+      isLegitimateAuthUrl(request.url) ||
       reqUrl.includes('accounts.google.com') ||
       reqUrl.includes('myaccount.google.com') ||
       reqUrl.includes('oauth2.googleapis.com') ||
       reqUrl.includes('supabase.co/auth/v1/callback') ||
       reqUrl.includes('supabase.co/auth/v1/authorize')
     ) {
-      return true;
-    }
-
-    // 1. Bắt Callback hoàn tất trả về App (chạy ngầm không block đồng bộ)
-    if (isOAuthCallback(request.url)) {
+      // 1. Nếu là Callback xác thực trả về App
+      if (isOAuthCallback(request.url)) {
       if (processedOAuthUrlsRef.current.has(request.url)) {
         return false;
       }
@@ -161,7 +161,7 @@ export function useWebViewRequest({
             setUserProfile(profile);
             userProfileRef.current = profile;
             AsyncStorage.setItem(STORAGE_USER_PROFILE_KEY, JSON.stringify(profile));
-            upsertCloudProfile(profile.email || 'user', profile);
+            syncUserCloudData(profile).catch(() => {});
             if (profile.email) {
               AsyncStorage.getItem(STORAGE_SAVED_ACCOUNTS_KEY).then((res) => {
                 let list: UserProfile[] = [];
@@ -189,15 +189,8 @@ export function useWebViewRequest({
       }, 0);
       return false;
     }
-
-    if (
-      reqUrl.includes('accounts.google.com') ||
-      reqUrl.includes('myaccount.google.com') ||
-      reqUrl.includes('oauth2.googleapis.com') ||
-      reqUrl.includes('utm_source=sign_in_no_continue')
-    ) {
-      return true;
-    }
+    return true;
+  }
 
     for (const scheme of BLOCKED_SCHEMES) {
       if (reqUrl.startsWith(scheme)) {
@@ -233,18 +226,28 @@ export function useWebViewRequest({
         }
       }
 
+      // Kiểm tra toàn diện bằng isSuspiciousAdUrl
+      if (isSuspiciousAdUrl(request.url, curHost)) {
+        blockedCountRef.current += 1;
+        showToast('Đã chặn quảng cáo nhảy trang');
+        return false;
+      }
+
       const currentDomain = getDomain(activeUrl || '') || '';
       const targetDomain = getDomain(request.url) || '';
 
       if (currentDomain && targetDomain && currentDomain !== targetDomain) {
+        // Chặn các trang thương mại điện tử cướp tab chuyển hướng
         if (COMMERCE_REDIRECT_SET.has(targetDomain)) {
           blockedCountRef.current += 1;
+          showToast('Đã chặn chuyển hướng mua sắm');
           return false;
         }
         for (let k = 0; k < COMMERCE_REDIRECT_DOMAINS.length; k++) {
           const c = COMMERCE_REDIRECT_DOMAINS[k];
           if (targetDomain === c || targetDomain.endsWith('.' + c)) {
             blockedCountRef.current += 1;
+            showToast('Đã chặn chuyển hướng mua sắm');
             return false;
           }
         }
@@ -274,9 +277,18 @@ export function useWebViewRequest({
   const pendingNavRef = useRef<Record<string, WebViewNavigation>>({});
   const navDebounceTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
+  // Luôn đồng bộ canGoBack/canGoForward ngay khi chuyển đổi tab
+  useEffect(() => {
+    setCanGoBack(canGoBackRef.current[activeTabId] ?? false);
+    setCanGoForward(canGoForwardRef.current[activeTabId] ?? false);
+  }, [activeTabId, setCanGoBack, setCanGoForward]);
+
   // Cập nhật trạng thái điều hướng cho từng tab riêng biệt
   const handleNavigationStateChangeForTab = (tabId: string, navState: WebViewNavigation) => {
+    const prevCanGoBack = canGoBackRef.current[tabId];
+    const prevCanGoForward = canGoForwardRef.current[tabId];
     canGoBackRef.current[tabId] = navState.canGoBack;
+    canGoForwardRef.current[tabId] = navState.canGoForward;
 
     if (navState.url && isOAuthCallback(navState.url)) {
       if (processedOAuthUrlsRef.current.has(navState.url)) {
@@ -304,7 +316,7 @@ export function useWebViewRequest({
           setUserProfile(profile);
           userProfileRef.current = profile;
           AsyncStorage.setItem(STORAGE_USER_PROFILE_KEY, JSON.stringify(profile));
-          upsertCloudProfile(profile.email || 'user', profile);
+          syncUserCloudData(profile).catch(() => {});
           if (profile.email) {
             AsyncStorage.getItem(STORAGE_SAVED_ACCOUNTS_KEY).then((res) => {
               let list: UserProfile[] = [];
@@ -332,12 +344,10 @@ export function useWebViewRequest({
     }
 
     if (tabId === activeTabIdRef.current) {
-      if (canGoBackRef.current[tabId] !== navState.canGoBack) {
-        canGoBackRef.current[tabId] = navState.canGoBack;
+      if (prevCanGoBack !== navState.canGoBack) {
         setCanGoBack(navState.canGoBack);
       }
-      if (canGoForwardRef.current[tabId] !== navState.canGoForward) {
-        canGoForwardRef.current[tabId] = navState.canGoForward;
+      if (prevCanGoForward !== navState.canGoForward) {
         setCanGoForward(navState.canGoForward);
       }
     }

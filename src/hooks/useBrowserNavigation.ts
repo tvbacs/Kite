@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 import { BrowserTab } from '../types/browser';
 import { SEARCH_ENGINES, isJunkHistoryItem } from '../constants/searchEngines';
 import { RegionSettings, wrapUrlWithProxyGateway } from '../services/regionService';
+import { stripTrackingParameters } from '../constants/blocklist';
 import { progressBus } from '../components/WebProgressBar';
 import { runWhenIdle } from '../utils/idle';
 
@@ -179,6 +180,38 @@ export function useBrowserNavigation({
       return;
     }
 
+    // Lối tắt Trình quản lý mật khẩu (chuẩn Chrome & Kite)
+    if (
+      lowerTrim === 'chrome://settings/passwords' ||
+      lowerTrim === 'chrome://passwords' ||
+      lowerTrim === 'kite://passwords' ||
+      lowerTrim === 'kite://settings/passwords' ||
+      lowerTrim === 'passwords'
+    ) {
+      if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+      setIsLoading(false);
+      setLoadProgress(0);
+      setInputUrl(activeUrl || '');
+      modalsState.setPasswordManagerVisible(true);
+      return;
+    }
+
+    // Lối tắt Quản lý bộ nhớ
+    if (
+      lowerTrim === 'chrome://settings/storage' ||
+      lowerTrim === 'chrome://storage' ||
+      lowerTrim === 'kite://storage' ||
+      lowerTrim === 'kite://settings/storage' ||
+      lowerTrim === 'storage'
+    ) {
+      if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+      setIsLoading(false);
+      setLoadProgress(0);
+      setInputUrl(activeUrl || '');
+      modalsState.setStorageManagerVisible(true);
+      return;
+    }
+
     userInitiatedRef.current = true;
     const engine = SEARCH_ENGINES[currentEngineId] || SEARCH_ENGINES.google;
 
@@ -193,6 +226,8 @@ export function useBrowserNavigation({
     if (regionSettings.enabled && regionSettings.useProxyGateway) {
       finalUrl = wrapUrlWithProxyGateway(finalUrl, regionSettings);
     }
+
+    finalUrl = stripTrackingParameters(finalUrl);
 
     setIsLoading(true);
     setLoadProgress(0);
@@ -339,73 +374,58 @@ export function useBrowserNavigation({
     setIsLoading(false);
     progressBus.set(1);
 
-    // Nếu tab vừa điều hướng từ Home hoặc không có lịch sử trang trước:
-    // Quay về Trang chủ ngay lập tức 0ms!
-    if (currentTab?.isNavigatingFromHome || !canGoBack) {
-      try {
-        activeWV?.stopLoading();
-      } catch (e) {}
-      if (activeUrl) {
-        lastBackedUrlRef.current[activeTabId] = activeUrl;
-      }
-      runWhenIdle(() => {
-        clearTabSnapshot(activeTabId);
-      });
-      setTabs((prev) => {
-        const updated = prev.map((t) =>
-          t.id === activeTabId
-            ? {
-                ...t,
-                url: '',
-                initialUrl: '',
-                title: 'Trang mới',
-                snapshotUri: undefined,
-                isLoading: false,
-                isNavigatingFromHome: false,
-              }
-            : t
-        );
-        return updated;
-      });
-      setInputUrl('');
-      return;
-    }
-
-    // 2. Điều hướng: Nếu có thể goBack trong lịch sử WebView
-    // QUAN TRỌNG: Tuyệt đối không gọi stopLoading() ở đây!
+    // ƯU TIÊN 1: Nếu WebView có thể lùi trong lịch sử duyệt web
     // activeWV.goBack() tận dụng Back-Forward Cache (BFCache) của Chromium/WebKit
     // để chuyển trang 0ms mượt mà, không giật màn hình trắng!
-    if (canGoBack && activeWV) {
-      try {
-        activeWV.goBack();
-      } catch (e) {}
-    } else if (activeUrl) {
-      // Quay về Trang chủ
-      try {
-        activeWV?.stopLoading();
-      } catch (e) {}
-      lastBackedUrlRef.current[activeTabId] = activeUrl;
-      runWhenIdle(() => {
-        clearTabSnapshot(activeTabId);
-      });
-      setTabs((prev) => {
-        const updated = prev.map((t) =>
-          t.id === activeTabId
-            ? {
-                ...t,
-                url: '',
-                initialUrl: '',
-                title: 'Trang mới',
-                snapshotUri: undefined,
-                isLoading: false,
-                isNavigatingFromHome: false,
-              }
-            : t
-        );
-        return updated;
-      });
-      setInputUrl('');
+    const initUrl = currentTab?.initialUrl;
+    if (activeWV) {
+      if (canGoBack) {
+        try {
+          activeWV.goBack();
+          return;
+        } catch (e) {}
+      }
+
+      // ƯU TIÊN 2: Nếu canGoBack trong React state chưa kịp cập nhật hoặc trang web dùng SPA pushState,
+      // NHƯNG URL hiện tại khác với initialUrl ban đầu (đang xem tập phim, bài viết con, trang tìm kiếm...):
+      // Ưu tiên lùi trang trong lịch sử (activeWV.goBack & window.history.back) thay vì đá thẳng người dùng về Trang chủ!
+      if (activeUrl && initUrl && activeUrl !== initUrl) {
+        try {
+          activeWV.goBack();
+          activeWV.injectJavaScript('if (window.history && window.history.length > 1) { window.history.back(); } true;');
+          return;
+        } catch (e) {}
+      }
     }
+
+    // ƯU TIÊN 3: Người dùng đang ở trang gốc ban đầu (không còn trang trước để lùi):
+    // Lúc này nhấn Back mới thực sự là ý định thoát trang quay về Trang chủ (Home)!
+    try {
+      activeWV?.stopLoading();
+    } catch (e) {}
+    if (activeUrl) {
+      lastBackedUrlRef.current[activeTabId] = activeUrl;
+    }
+    runWhenIdle(() => {
+      clearTabSnapshot(activeTabId);
+    });
+    setTabs((prev) => {
+      const updated = prev.map((t) =>
+        t.id === activeTabId
+          ? {
+              ...t,
+              url: '',
+              initialUrl: '',
+              title: 'Trang mới',
+              snapshotUri: undefined,
+              isLoading: false,
+              isNavigatingFromHome: false,
+            }
+          : t
+      );
+      return updated;
+    });
+    setInputUrl('');
   };
 
   const canGoForwardEffective = Boolean(

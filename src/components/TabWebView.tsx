@@ -1,8 +1,12 @@
 import React, { useMemo, useRef, useEffect, memo } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { BrowserTab } from '../types/browser';
-import { getRestoreTabStateScript } from '../services/antiAdScript';
+import {
+  getRestoreTabStateScript,
+  PAUSE_BACKGROUND_MEDIA_SCRIPT,
+  RESUME_ACTIVE_MEDIA_SCRIPT,
+} from '../services/antiAdScript';
 
 interface TabWebViewProps {
   tab: BrowserTab;
@@ -64,24 +68,14 @@ export const TabWebView = memo<TabWebViewProps>(
     const isDark = Boolean(tab.isIncognito);
     const bgColor = isDark ? '#202124' : '#ffffff';
 
-    // Tối ưu tab nền chuẩn Chrome: Tạm dừng video & âm thanh khi tab ở chế độ nền
+    // Tối ưu tab nền chuẩn Chrome: Tạm dừng và khóa âm thanh khi tab ở chế độ nền, phục hồi khi mở lại
     useEffect(() => {
       if (!localRef.current) return;
       try {
         if (!isTabActive) {
-          localRef.current.injectJavaScript(`
-            (function() {
-              try {
-                document.querySelectorAll('video, audio').forEach(function(m) {
-                  if (!m.paused) {
-                    m.__kite_auto_paused = true;
-                    m.pause();
-                  }
-                });
-              } catch(e) {}
-            })();
-            true;
-          `);
+          localRef.current.injectJavaScript(PAUSE_BACKGROUND_MEDIA_SCRIPT);
+        } else {
+          localRef.current.injectJavaScript(RESUME_ACTIVE_MEDIA_SCRIPT);
         }
       } catch (e) {}
     }, [isTabActive]);
@@ -139,7 +133,14 @@ export const TabWebView = memo<TabWebViewProps>(
           }}
           originWhitelist={['*']}
           source={webViewSource}
-          style={[styles.webView, { backgroundColor: bgColor }]}
+          style={[
+            styles.webView,
+            { backgroundColor: Platform.OS === 'ios' ? 'transparent' : bgColor },
+          ]}
+          containerStyle={{
+            backgroundColor: Platform.OS === 'ios' ? 'transparent' : bgColor,
+          }}
+          opaque={Platform.OS !== 'ios'}
           androidLayerType="hardware"
           incognito={Boolean(tab.isIncognito)}
           mediaCapturePermissionGrantType="grant"
@@ -180,6 +181,7 @@ export const TabWebView = memo<TabWebViewProps>(
           allowsFullscreenVideo
           fraudulentWebsiteWarningEnabled={false}
           mediaPlaybackRequiresUserAction={false}
+          javaScriptCanOpenWindowsAutomatically={false}
           setSupportMultipleWindows={false}
           sharedCookiesEnabled={true}
           thirdPartyCookiesEnabled={true}
@@ -222,6 +224,6 @@ const styles = StyleSheet.create({
   },
   webView: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: 'transparent',
   },
 });

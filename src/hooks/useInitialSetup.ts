@@ -2,10 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Appearance, Animated, Platform, Linking } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { File, Paths } from 'expo-file-system';
+import { File, Directory, Paths } from 'expo-file-system';
 import { BrowserTab, UserProfile, ShieldStats } from '../types/browser';
 import { SEARCH_ENGINES } from '../constants/searchEngines';
-import { supabase, upsertCloudProfile, handleAuthCallbackUrl } from '../services/supabase';
+import { supabase, upsertCloudProfile, handleAuthCallbackUrl, syncUserCloudData } from '../services/supabase';
 import {
   RegionSettings,
   loadRegionSettings,
@@ -205,6 +205,15 @@ export function useInitialSetup({
             setUserProfile(parsed);
             userProfileRef.current = parsed;
             currentEmail = parsed.email;
+            if (parsed.isLoggedIn) {
+              syncUserCloudData(parsed, {
+                onSettingsLoaded: (settings) => {
+                  if (settings.searchEngineId && (SEARCH_ENGINES as any)[settings.searchEngineId]) {
+                    setCurrentEngineId(settings.searchEngineId as any);
+                  }
+                },
+              }).catch(() => {});
+            }
           }
         } catch (e) {}
       }
@@ -264,15 +273,44 @@ export function useInitialSetup({
           }
 
           const targetId = targetTab.id;
+          const snapDir = new Directory(Paths.document, 'Kite_Snapshots');
+          if (!snapDir.exists) {
+            try { snapDir.create(); } catch {}
+          }
+
           const initializedTabs = allTabs.map((t, idx) => {
-            // Đảm bảo thumbnail luôn tồn tại từ Paths.document nếu có file snapshot
-            let effectiveSnapshotUri = t.snapshotUri;
-            try {
-              const snapFile = new File(Paths.document, `tab_snapshot_${t.id}.jpg`);
-              if (snapFile.exists) {
-                effectiveSnapshotUri = snapFile.uri;
-              }
-            } catch (e) {}
+            let effectiveSnapshotUri: string | undefined = undefined;
+
+            if (t.isIncognito) {
+              // Tab ẩn danh TUYỆT ĐỐI KHÔNG lưu snapshot và dọn sạch nếu còn sót lại file
+              try {
+                const snapInSub = new File(snapDir, `tab_snapshot_${t.id}.jpg`);
+                if (snapInSub.exists) snapInSub.delete();
+                const snapInRoot = new File(Paths.document, `tab_snapshot_${t.id}.jpg`);
+                if (snapInRoot.exists) snapInRoot.delete();
+              } catch (e) {}
+              effectiveSnapshotUri = undefined;
+            } else {
+              // Tab thường: Ưu tiên nạp từ thư mục Kite_Snapshots
+              try {
+                const snapInSub = new File(snapDir, `tab_snapshot_${t.id}.jpg`);
+                if (snapInSub.exists) {
+                  effectiveSnapshotUri = snapInSub.uri;
+                } else {
+                  // Di chuyển file snapshot cũ từ thư mục gốc vào Kite_Snapshots nếu có
+                  const snapInRoot = new File(Paths.document, `tab_snapshot_${t.id}.jpg`);
+                  if (snapInRoot.exists) {
+                    try {
+                      snapInRoot.copy(snapInSub);
+                      snapInRoot.delete();
+                      effectiveSnapshotUri = snapInSub.uri;
+                    } catch {
+                      effectiveSnapshotUri = snapInRoot.uri;
+                    }
+                  }
+                }
+              } catch (e) {}
+            }
 
             return {
               ...t,
@@ -312,6 +350,7 @@ export function useInitialSetup({
         const u = session.user;
         const meta = u.user_metadata || {};
         const profile: UserProfile = {
+          id: u.id,
           isLoggedIn: true,
           name: meta.full_name || meta.name || u.email?.split('@')[0] || 'Người dùng',
           email: u.email || '',
@@ -338,8 +377,6 @@ export function useInitialSetup({
           await AsyncStorage.setItem(STORAGE_SAVED_ACCOUNTS_KEY, JSON.stringify(list));
         }
 
-        await upsertCloudProfile(u.id, profile);
-
         let savedActiveEmail = userProfileRef.current?.email?.toLowerCase();
         if (!savedActiveEmail) {
           try {
@@ -359,6 +396,14 @@ export function useInitialSetup({
           userProfileRef.current = profile;
           await AsyncStorage.setItem(STORAGE_USER_PROFILE_KEY, JSON.stringify(profile));
         }
+
+        syncUserCloudData(profile, {
+          onSettingsLoaded: (settings) => {
+            if (settings.searchEngineId && (SEARCH_ENGINES as any)[settings.searchEngineId]) {
+              setCurrentEngineId(settings.searchEngineId as any);
+            }
+          },
+        }).catch(() => {});
       }
     });
 
@@ -370,6 +415,30 @@ export function useInitialSetup({
           'Trình duyệt Kite - Thư mục lưu trữ tải xuống.\nTất cả tài liệu và hình ảnh bạn tải về từ Kite sẽ được lưu trữ tự động tại đây.'
         );
       }
+
+      // Đảm bảo thư mục Kite_Snapshots tồn tại
+      const snapDir = new Directory(Paths.document, 'Kite_Snapshots');
+      if (!snapDir.exists) {
+        try { snapDir.create(); } catch {}
+      }
+
+      // Tự động quét và di chuyển toàn bộ file tab_snapshot_* còn nằm ngoài thư mục gốc vào Kite_Snapshots
+      try {
+        const rootItems = Paths.document.list();
+        for (const item of rootItems) {
+          if (item instanceof File && item.name.startsWith('tab_snapshot_')) {
+            try {
+              const dest = new File(snapDir, item.name);
+              if (!dest.exists) {
+                item.copy(dest);
+              }
+              item.delete();
+            } catch {
+              try { item.delete(); } catch {}
+            }
+          }
+        }
+      } catch {}
     } catch (e) {
       console.log('Init Kite Documents directory error:', e);
     }
@@ -443,7 +512,13 @@ export function useInitialSetup({
               setUserProfile(profile);
               userProfileRef.current = profile;
               AsyncStorage.setItem(STORAGE_USER_PROFILE_KEY, JSON.stringify(profile));
-              upsertCloudProfile(profile.email || 'user', profile);
+              syncUserCloudData(profile, {
+                onSettingsLoaded: (settings) => {
+                  if (settings.searchEngineId && (SEARCH_ENGINES as any)[settings.searchEngineId]) {
+                    setCurrentEngineId(settings.searchEngineId as any);
+                  }
+                },
+              }).catch(() => {});
               if (profile.email) {
                 AsyncStorage.getItem(STORAGE_SAVED_ACCOUNTS_KEY).then((res) => {
                   let list: UserProfile[] = [];

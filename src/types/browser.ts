@@ -56,6 +56,7 @@ export interface SearchEngine {
 }
 
 export interface UserProfile {
+  id?: string;
   isLoggedIn: boolean;
   name?: string;
   email?: string;
