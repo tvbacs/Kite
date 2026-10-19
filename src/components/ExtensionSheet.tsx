@@ -7,12 +7,16 @@ import {
   TouchableOpacity,
   ScrollView,
   Switch,
+  TextInput,
+  Alert,
   Platform,
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../constants/theme';
+import { UserProfile } from '../types/browser';
+import { fetchCloudExtensions, syncCloudExtensions, deleteCloudExtension } from '../services/supabase';
 
 export const STORAGE_EXTENSIONS_KEY = '@kite_user_extensions';
 
@@ -423,12 +427,135 @@ export const isUrlMatchingPattern = (url: string, pattern: string): boolean => {
   }
 };
 
+export interface PresetExtension {
+  id: string;
+  name: string;
+  description: string;
+  tag: string;
+  icon: keyof typeof Feather.glyphMap;
+  matchUrl: string;
+  runAt: 'document_start' | 'document_end';
+  code: string;
+}
+
+export const PRESET_STORE_EXTENSIONS: PresetExtension[] = [
+  {
+    id: 'store-translate',
+    name: 'Google Dịch Tự động (Translate)',
+    description: 'Tự động dịch nhanh toàn bộ trang web nước ngoài sang Tiếng Việt.',
+    tag: 'Phổ biến',
+    icon: 'globe',
+    matchUrl: '*',
+    runAt: 'document_end',
+    code: `(function() {
+  if (window.__kite_translate_injected) return;
+  window.__kite_translate_injected = true;
+  try {
+    var host = window.location.hostname.toLowerCase();
+    if (host.endsWith('.vn') || host.includes('vnexpress') || host.includes('dantri') || host.includes('tuoitre')) return;
+    var s = document.createElement('script');
+    s.src = '//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit';
+    document.body.appendChild(s);
+    window.googleTranslateElementInit = function() {
+      new google.translate.TranslateElement({ pageLanguage: 'auto', includedLanguages: 'vi,en', layout: google.translate.TranslateElement.InlineLayout.SIMPLE }, 'google_translate_element');
+    };
+  } catch(e) {}
+})();`,
+  },
+  {
+    id: 'store-cookie-blocker',
+    name: 'Chặn biểu ngữ Cookie & GDPR',
+    description: 'Tự động đóng và chấp nhận các hộp thoại thông báo Cookie che màn hình.',
+    tag: 'Bảo mật',
+    icon: 'shield',
+    matchUrl: '*',
+    runAt: 'document_end',
+    code: `(function() {
+  var dismissCookies = function() {
+    try {
+      var sel = '#onetrust-accept-btn-handler, #accept-recommended-btn-handler, .cc-dismiss, .cc-allow, [class*="cookie-accept"], [id*="cookie-accept"], button[class*="cookie"][class*="agree"], .cmp-intro_acceptAll, [aria-label*="cookie" i] button';
+      var btn = document.querySelector(sel);
+      if (btn) btn.click();
+      var overlay = document.querySelector('#onetrust-consent-sdk, .cc-window, .cookie-banner, #cookie-law-info-bar');
+      if (overlay) overlay.style.display = 'none';
+    } catch(e) {}
+  };
+  dismissCookies();
+  setTimeout(dismissCookies, 1000);
+  setTimeout(dismissCookies, 2500);
+})();`,
+  },
+  {
+    id: 'store-anti-deeplink',
+    name: 'Chống ép mở App ngoài (Stay in Web)',
+    description: 'Ngăn các trang Shopee, TikTok, Reddit ép chuyển hướng sang App Store.',
+    tag: 'Trải nghiệm',
+    icon: 'smartphone',
+    matchUrl: '*',
+    runAt: 'document_start',
+    code: `(function() {
+  try {
+    var blockedProtocols = ['intent:', 'shopeevn:', 'snssdk1180:', 'fb:', 'instagram:', 'tiktok:'];
+    var origOpen = window.open;
+    window.open = function(url, target, features) {
+      if (typeof url === 'string') {
+        for (var i = 0; i < blockedProtocols.length; i++) {
+          if (url.startsWith(blockedProtocols[i])) return null;
+        }
+      }
+      return origOpen.apply(this, arguments);
+    };
+  } catch(e) {}
+})();`,
+  },
+  {
+    id: 'store-video-pip',
+    name: 'Xem Video Nổi PiP & Tốc độ cao',
+    description: 'Kích hoạt Picture-in-Picture cho mọi video và mở khóa tốc độ phát.',
+    tag: 'Giải trí',
+    icon: 'video',
+    matchUrl: '*',
+    runAt: 'document_end',
+    code: `(function() {
+  setInterval(function() {
+    try {
+      document.querySelectorAll('video').forEach(function(v) {
+        v.setAttribute('playsinline', '');
+        v.setAttribute('webkit-playsinline', '');
+        if (v.disablePictureInPicture) v.disablePictureInPicture = false;
+      });
+    } catch(e) {}
+  }, 2000);
+})();`,
+  },
+  {
+    id: 'store-warm-reader',
+    name: 'Bảo vệ Mắt Đọc sách Đêm (Sepia Tint)',
+    description: 'Bộ lọc ánh sáng dịu mắt tông vàng ấm áp, chống mỏi mắt ban đêm.',
+    tag: 'Bảo vệ mắt',
+    icon: 'sun',
+    matchUrl: '*',
+    runAt: 'document_end',
+    code: `(function() {
+  var id = 'kite-warm-reader-style';
+  if (!document.getElementById(id)) {
+    var s = document.createElement('style');
+    s.id = id;
+    s.textContent = 'html { filter: sepia(35%) contrast(95%) brightness(95%) !important; background-color: #fbf0d9 !important; }';
+    (document.head || document.documentElement).appendChild(s);
+  }
+})();`,
+  },
+];
+
 interface ExtensionSheetProps {
   visible: boolean;
   onClose: () => void;
   onShowToast?: (message: string) => void;
   onExtensionsUpdated?: (extensions: ExtensionItem[]) => void;
   onOpenRegionSheet?: () => void;
+  userProfile?: UserProfile;
+  syncAllAccounts?: boolean;
 }
 
 export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
@@ -437,39 +564,93 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
   onShowToast,
   onExtensionsUpdated,
   onOpenRegionSheet,
+  userProfile,
+  syncAllAccounts,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 24 : 16);
 
   const [extensions, setExtensions] = useState<ExtensionItem[]>([]);
+  const [activeTab, setActiveTab] = useState<'installed' | 'store'>('installed');
+
+  // Modal thêm tiện ích tùy chỉnh
+  const [addModalVisible, setAddModalVisible] = useState<boolean>(false);
+  const [customName, setCustomName] = useState<string>('');
+  const [customDesc, setCustomDesc] = useState<string>('');
+  const [customMatchUrl, setCustomMatchUrl] = useState<string>('*');
+  const [customTiming, setCustomTiming] = useState<'document_start' | 'document_end'>('document_end');
+  const [customCode, setCustomCode] = useState<string>('');
+
+  const getStorageKey = () => {
+    const email = userProfile?.isLoggedIn ? userProfile?.email?.toLowerCase() : undefined;
+    return !syncAllAccounts && email
+      ? `${STORAGE_EXTENSIONS_KEY}_${email}`
+      : STORAGE_EXTENSIONS_KEY;
+  };
 
   useEffect(() => {
     if (visible) {
       loadExtensions();
     }
-  }, [visible]);
+  }, [visible, userProfile?.email, syncAllAccounts]);
 
   const loadExtensions = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_EXTENSIONS_KEY);
+      const key = getStorageKey();
+      const stored = await AsyncStorage.getItem(key);
+      let localList: ExtensionItem[] = [];
+
       if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const merged = DEFAULT_EXTENSIONS.map((builtin) => {
-            const found = parsed.find((p: any) => p.id === builtin.id);
-            return found ? { ...builtin, enabled: found.enabled } : builtin;
-          });
-          const custom = parsed.filter(
-            (p: any) => !DEFAULT_EXTENSIONS.some((b) => b.id === p.id)
-          );
-          const finalExts = [...merged, ...custom];
-          setExtensions(finalExts);
-          await AsyncStorage.setItem(STORAGE_EXTENSIONS_KEY, JSON.stringify(finalExts));
-          return;
-        }
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            localList = parsed;
+          }
+        } catch (e) {}
       }
-      setExtensions(DEFAULT_EXTENSIONS);
-      await AsyncStorage.setItem(STORAGE_EXTENSIONS_KEY, JSON.stringify(DEFAULT_EXTENSIONS));
+
+      if (localList.length === 0 && key !== STORAGE_EXTENSIONS_KEY) {
+        try {
+          const fallback = await AsyncStorage.getItem(STORAGE_EXTENSIONS_KEY);
+          if (fallback) {
+            const parsed = JSON.parse(fallback);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              localList = parsed;
+            }
+          }
+        } catch (eF) {}
+      }
+
+      // Tải từ Supabase Cloud nếu đã đăng nhập tài khoản
+      if (userProfile?.isLoggedIn && (userProfile?.id || userProfile?.email)) {
+        const userId = userProfile.id || userProfile.email!;
+        try {
+          const cloudExts = await fetchCloudExtensions(userId, userProfile.email);
+          if (cloudExts && cloudExts.length > 0) {
+            const mergedMap = new Map<string, ExtensionItem>();
+            cloudExts.forEach((e) => mergedMap.set(e.id, e));
+            localList.forEach((e) => {
+              if (!mergedMap.has(e.id)) {
+                mergedMap.set(e.id, e);
+              }
+            });
+            localList = Array.from(mergedMap.values());
+          }
+        } catch (eC) {}
+      }
+
+      // Hợp nhất với built-in mặc định
+      const merged = DEFAULT_EXTENSIONS.map((builtin) => {
+        const found = localList.find((p: any) => p.id === builtin.id);
+        return found ? { ...builtin, enabled: found.enabled } : builtin;
+      });
+      const custom = localList.filter(
+        (p: any) => !DEFAULT_EXTENSIONS.some((b) => b.id === p.id)
+      );
+      const finalExts = [...merged, ...custom];
+      setExtensions(finalExts);
+      await AsyncStorage.setItem(key, JSON.stringify(finalExts));
+      await AsyncStorage.setItem(STORAGE_EXTENSIONS_KEY, JSON.stringify(finalExts));
     } catch (e) {
       setExtensions(DEFAULT_EXTENSIONS);
     }
@@ -477,8 +658,18 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
 
   const saveExtensionsToStorage = async (updated: ExtensionItem[]) => {
     setExtensions(updated);
+    const key = getStorageKey();
+    await AsyncStorage.setItem(key, JSON.stringify(updated));
     await AsyncStorage.setItem(STORAGE_EXTENSIONS_KEY, JSON.stringify(updated));
     if (onExtensionsUpdated) onExtensionsUpdated(updated);
+
+    if (userProfile?.isLoggedIn) {
+      const email = userProfile.email;
+      const userId = userProfile.id || email;
+      if (userId) {
+        syncCloudExtensions(userId, updated, email).catch(() => {});
+      }
+    }
   };
 
   const handleToggleExtension = async (id: string) => {
@@ -492,6 +683,88 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
     }
   };
 
+  // Cài đặt từ Kho tiện ích
+  const handleInstallPreset = async (preset: PresetExtension) => {
+    if (extensions.some((e) => e.id === preset.id)) {
+      if (onShowToast) onShowToast(`Tiện ích "${preset.name}" đã được cài đặt`);
+      return;
+    }
+    const newExt: ExtensionItem = {
+      id: preset.id,
+      name: preset.name,
+      description: preset.description,
+      matchUrl: preset.matchUrl,
+      code: preset.code,
+      runAt: preset.runAt,
+      enabled: true,
+      isBuiltIn: false,
+      updatedAt: Date.now(),
+    };
+    const updated = [...extensions, newExt];
+    await saveExtensionsToStorage(updated);
+    if (onShowToast) onShowToast(`Đã tải và cài đặt: ${preset.name}`);
+    setActiveTab('installed');
+  };
+
+  // Gỡ cài đặt tiện ích
+  const handleUninstallExtension = (ext: ExtensionItem) => {
+    Alert.alert(
+      'Gỡ tiện ích?',
+      `Bạn có chắc chắn muốn gỡ bỏ tiện ích "${ext.name}"?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Gỡ cài đặt',
+          style: 'destructive',
+          onPress: async () => {
+            const updated = extensions.filter((e) => e.id !== ext.id);
+            await saveExtensionsToStorage(updated);
+            if (userProfile?.isLoggedIn) {
+              const email = userProfile.email;
+              const userId = userProfile.id || email;
+              if (userId) {
+                deleteCloudExtension(userId, ext.id, email).catch(() => {});
+              }
+            }
+            if (onShowToast) onShowToast(`Đã gỡ bỏ: ${ext.name}`);
+          },
+        },
+      ]
+    );
+  };
+
+  // Lưu tiện ích tùy chỉnh
+  const handleSaveCustomExtension = async () => {
+    if (!customName.trim()) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập tên cho tiện ích.');
+      return;
+    }
+    if (!customCode.trim()) {
+      Alert.alert('Thiếu thông tin', 'Vui lòng nhập mã JavaScript thực thi.');
+      return;
+    }
+    const id = `ext-user-${Date.now()}`;
+    const newExt: ExtensionItem = {
+      id,
+      name: customName.trim(),
+      description: customDesc.trim() || 'Tiện ích người dùng tùy biến',
+      matchUrl: customMatchUrl.trim() || '*',
+      code: customCode.trim(),
+      runAt: customTiming,
+      enabled: true,
+      isBuiltIn: false,
+      updatedAt: Date.now(),
+    };
+    const updated = [...extensions, newExt];
+    await saveExtensionsToStorage(updated);
+    setAddModalVisible(false);
+    setCustomName('');
+    setCustomDesc('');
+    setCustomMatchUrl('*');
+    setCustomCode('');
+    if (onShowToast) onShowToast(`Đã thêm tiện ích: ${newExt.name}`);
+    setActiveTab('installed');
+  };
 
   return (
     <Modal
@@ -513,65 +786,315 @@ export const ExtensionSheet: React.FC<ExtensionSheetProps> = ({
           {/* Thanh kéo Sheet */}
           <View style={styles.dragHandle} />
 
-          {/* Header thanh thoát: Tiêu đề bên trái, Nút đóng bên phải */}
+          {/* Header thanh thoát: Tiêu đề bên trái, Nút thêm & đóng bên phải */}
           <View style={styles.headerRow}>
             <View style={styles.titleGroup}>
               <Text style={styles.sheetTitle}>Tiện ích mở rộng</Text>
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{extensions.length}</Text>
+              </View>
             </View>
 
-            {/* Nút Đóng cố định góc phải */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Nút Thêm tiện ích tùy chỉnh (+) */}
+              <TouchableOpacity
+                style={styles.addHeaderBtn}
+                onPress={() => setAddModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <Feather name="plus" size={15} color="#ffffff" />
+                <Text style={styles.addHeaderBtnText}>Thêm</Text>
+              </TouchableOpacity>
+
+              {/* Nút Đóng cố định góc phải */}
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={onClose}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="x" size={19} color="#71717a" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Tab Selector: Đã cài đặt | Kho tiện ích (Tải về) */}
+          <View style={styles.tabContainer}>
             <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={onClose}
+              style={[styles.tabButton, activeTab === 'installed' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('installed')}
               activeOpacity={0.7}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Feather name="x" size={19} color="#71717a" />
+              <Text style={[styles.tabText, activeTab === 'installed' && styles.tabTextActive]}>
+                Đã cài đặt ({extensions.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'store' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('store')}
+              activeOpacity={0.7}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                <Feather
+                  name="download-cloud"
+                  size={14}
+                  color={activeTab === 'store' ? theme.colors.accentBlue : '#71717a'}
+                />
+                <Text style={[styles.tabText, activeTab === 'store' && styles.tabTextActive]}>
+                  Kho tiện ích (Tải về)
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
 
-          {/* Danh sách tiện ích tối giản */}
+          {/* Nội dung danh sách theo Tab */}
           <ScrollView style={styles.listScroll} showsVerticalScrollIndicator={false}>
-            {extensions.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Feather name="box" size={36} color="#a1a1aa" />
-                <Text style={styles.emptyTitle}>Chưa có tiện ích nào</Text>
-                <Text style={styles.emptySub}>
-                  Hiện tại chưa có tiện ích mở rộng nào được cài đặt.
-                </Text>
-              </View>
-            ) : (
-              extensions.map((item) => {
-                return (
-                  <View key={item.id} style={styles.extCard}>
-                    {/* Hàng trên: Tên + Mô tả và Công tắc */}
-                    <View style={styles.extCardTopRow}>
-                      <View style={{ flex: 1, marginRight: 12 }}>
-                        <Text style={styles.extName} numberOfLines={1}>
-                          {item.name}
-                        </Text>
-                        {item.description ? (
-                          <Text style={styles.extDesc} numberOfLines={2}>
-                            {item.description}
-                          </Text>
-                        ) : null}
+            {activeTab === 'installed' ? (
+              // TAB 1: Danh sách tiện ích đã cài đặt
+              extensions.length === 0 ? (
+                <View style={styles.emptyContainer}>
+                  <Feather name="box" size={36} color="#a1a1aa" />
+                  <Text style={styles.emptyTitle}>Chưa có tiện ích nào</Text>
+                  <Text style={styles.emptySub}>
+                    Bạn có thể tải thêm các tiện ích hữu ích từ Kho tiện ích.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.emptyAddBtn}
+                    onPress={() => setActiveTab('store')}
+                  >
+                    <Feather name="download-cloud" size={16} color="#ffffff" style={{ marginRight: 6 }} />
+                    <Text style={styles.emptyAddBtnText}>Ghé thăm Kho tiện ích</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                extensions.map((item) => {
+                  return (
+                    <View key={item.id} style={styles.extCard}>
+                      {/* Hàng trên: Tên + Mô tả và Công tắc */}
+                      <View style={styles.extCardTopRow}>
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.extName} numberOfLines={1}>
+                              {item.name}
+                            </Text>
+                            {item.isBuiltIn && (
+                              <View style={styles.builtInBadge}>
+                                <Text style={styles.builtInBadgeText}>Hệ thống</Text>
+                              </View>
+                            )}
+                          </View>
+                          {item.description ? (
+                            <Text style={styles.extDesc} numberOfLines={2}>
+                              {item.description}
+                            </Text>
+                          ) : null}
+                          {item.matchUrl && item.matchUrl !== '*' && (
+                            <Text style={styles.extMatchText}>
+                              URL: {item.matchUrl}
+                            </Text>
+                          )}
+                        </View>
+
+                        {/* Công tắc Bật/Tắt */}
+                        <Switch
+                          value={item.enabled}
+                          onValueChange={() => handleToggleExtension(item.id)}
+                          trackColor={{ false: theme.colors.switchTrackFalse, true: theme.colors.switchTrackTrue }}
+                          ios_backgroundColor={theme.colors.switchTrackFalse}
+                          thumbColor={theme.colors.switchThumb}
+                        />
                       </View>
 
-                      {/* Công tắc Bật/Tắt - Blue khi Bật */}
-                      <Switch
-                        value={item.enabled}
-                        onValueChange={() => handleToggleExtension(item.id)}
-                        trackColor={{ false: theme.colors.switchTrackFalse, true: theme.colors.switchTrackTrue }}
-                        ios_backgroundColor={theme.colors.switchTrackFalse}
-                        thumbColor={theme.colors.switchThumb}
-                      />
+                      {/* Hàng dưới: Nút gỡ cài đặt đối với tiện ích người dùng cài thêm */}
+                      {!item.isBuiltIn && (
+                        <View style={styles.extCardBottomRow}>
+                          <TouchableOpacity
+                            style={styles.extActionBtn}
+                            onPress={() => handleUninstallExtension(item)}
+                            activeOpacity={0.6}
+                          >
+                            <Feather name="trash-2" size={13} color="#ef4444" />
+                            <Text style={[styles.extActionText, { color: '#ef4444' }]}>Gỡ cài đặt</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
+                  );
+                })
+              )
+            ) : (
+              // TAB 2: Kho tiện ích sẵn sàng tải về (Extension Store)
+              <View>
+                <View style={styles.storeHeaderBanner}>
+                  <Feather name="layers" size={18} color={theme.colors.accentBlue} />
+                  <Text style={styles.storeHeaderText}>
+                    Bộ sưu tập tiện ích được tuyển chọn, cài đặt và đồng bộ tức thì với tài khoản của bạn.
+                  </Text>
+                </View>
 
-                  </View>
-                );
-              })
+                {PRESET_STORE_EXTENSIONS.map((preset) => {
+                  const isInstalled = extensions.some((e) => e.id === preset.id);
+                  return (
+                    <View key={preset.id} style={styles.storeCard}>
+                      <View style={styles.storeCardLeft}>
+                        <View style={styles.storeIconBox}>
+                          <Feather name={preset.icon} size={20} color={theme.colors.accentBlue} />
+                        </View>
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.storeName}>{preset.name}</Text>
+                          </View>
+                          <Text style={styles.storeDesc} numberOfLines={2}>
+                            {preset.description}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.storeCardBottom}>
+                        <View style={styles.storeTagBadge}>
+                          <Text style={styles.storeTagText}>{preset.tag}</Text>
+                        </View>
+
+                        {isInstalled ? (
+                          <View style={styles.installedBadge}>
+                            <Feather name="check" size={13} color="#16a34a" />
+                            <Text style={styles.installedBadgeText}>Đã cài đặt</Text>
+                          </View>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.installBtn}
+                            onPress={() => handleInstallPreset(preset)}
+                            activeOpacity={0.7}
+                          >
+                            <Feather name="download" size={13} color="#ffffff" />
+                            <Text style={styles.installBtnText}>Cài đặt</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             )}
           </ScrollView>
+
+          {/* Modal Thêm Tiện ích Tùy chỉnh (Userscript) */}
+          <Modal
+            visible={addModalVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setAddModalVisible(false)}
+          >
+            <View style={styles.innerBackdrop}>
+              <View style={styles.innerModalBox}>
+                <View style={styles.innerHeader}>
+                  <Text style={styles.innerTitle}>Thêm tiện ích / Userscript</Text>
+                  <TouchableOpacity
+                    style={styles.innerCloseBtn}
+                    onPress={() => setAddModalVisible(false)}
+                  >
+                    <Feather name="x" size={18} color="#71717a" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                  <Text style={styles.label}>Tên tiện ích</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ví dụ: Tự động nhấn Bỏ qua quảng cáo"
+                    placeholderTextColor="#a1a1aa"
+                    value={customName}
+                    onChangeText={setCustomName}
+                  />
+
+                  <Text style={styles.label}>Mô tả (tùy chọn)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Mô tả chức năng của tiện ích..."
+                    placeholderTextColor="#a1a1aa"
+                    value={customDesc}
+                    onChangeText={setCustomDesc}
+                  />
+
+                  <Text style={styles.label}>URL áp dụng (* hoặc tên miền)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="* hoặc youtube.com"
+                    placeholderTextColor="#a1a1aa"
+                    value={customMatchUrl}
+                    onChangeText={setCustomMatchUrl}
+                    autoCapitalize="none"
+                  />
+
+                  <Text style={styles.label}>Thời điểm thực thi</Text>
+                  <View style={styles.timingSelectRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.timingOption,
+                        customTiming === 'document_end' && styles.timingOptionActive,
+                      ]}
+                      onPress={() => setCustomTiming('document_end')}
+                    >
+                      <Text
+                        style={[
+                          styles.timingOptionText,
+                          customTiming === 'document_end' && styles.timingOptionTextActive,
+                        ]}
+                      >
+                        Sau khi tải xong trang (Khuyên dùng)
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.timingOption,
+                        customTiming === 'document_start' && styles.timingOptionActive,
+                      ]}
+                      onPress={() => setCustomTiming('document_start')}
+                    >
+                      <Text
+                        style={[
+                          styles.timingOptionText,
+                          customTiming === 'document_start' && styles.timingOptionTextActive,
+                        ]}
+                      >
+                        Ngay khi bắt đầu tải trang
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <Text style={styles.label}>Mã JavaScript (Code)</Text>
+                  <TextInput
+                    style={styles.codeInput}
+                    placeholder="// Nhập mã JavaScript cần thực thi..."
+                    placeholderTextColor="#71717a"
+                    value={customCode}
+                    onChangeText={setCustomCode}
+                    multiline
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </ScrollView>
+
+                <View style={styles.modalActionButtons}>
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    onPress={() => setAddModalVisible(false)}
+                  >
+                    <Text style={styles.cancelBtnText}>Hủy</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.saveBtn}
+                    onPress={handleSaveCustomExtension}
+                  >
+                    <Text style={styles.saveBtnText}>Lưu & Cài đặt</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -927,5 +1450,162 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: '#3b82f6',
     marginTop: 2,
+  },
+  addHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: theme.colors.accentBlue,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  addHeaderBtnText: {
+    color: '#ffffff',
+    fontSize: 12.5,
+    fontWeight: '600',
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#e4e4e7',
+    borderRadius: 12,
+    padding: 3,
+    marginBottom: 12,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+  },
+  tabButtonActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#71717a',
+  },
+  tabTextActive: {
+    fontWeight: '600',
+    color: '#18181b',
+  },
+  builtInBadge: {
+    backgroundColor: '#f4f4f5',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e4e4e7',
+  },
+  builtInBadgeText: {
+    fontSize: 10.5,
+    color: '#71717a',
+    fontWeight: '500',
+  },
+  extMatchText: {
+    fontSize: 11,
+    color: '#a1a1aa',
+    marginTop: 2,
+  },
+  storeHeaderBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#eff6ff',
+    padding: 10,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  storeHeaderText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#1e40af',
+    lineHeight: 16,
+  },
+  storeCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#f4f4f5',
+  },
+  storeCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  storeIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#18181b',
+    marginBottom: 2,
+  },
+  storeDesc: {
+    fontSize: 12,
+    color: '#71717a',
+    lineHeight: 16,
+  },
+  storeCardBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#f4f4f5',
+  },
+  storeTagBadge: {
+    backgroundColor: '#f4f4f5',
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+  },
+  storeTagText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#71717a',
+  },
+  installedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  installedBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#16a34a',
+  },
+  installBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: theme.colors.accentBlue,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  installBtnText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#ffffff',
   },
 });

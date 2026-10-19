@@ -31,7 +31,7 @@ import { theme } from '../constants/theme';
 import { VoiceSearchModal } from './VoiceSearchModal';
 import { GoogleAccountSheet } from './GoogleAccountSheet';
 import { GoogleAuthSheet } from './GoogleAuthSheet';
-import { getGoogleOAuthUrl, saveCloudSettings, syncUserCloudData, syncCloudBookmarks } from '../services/supabase';
+import { getGoogleOAuthUrl, saveCloudSettings, syncUserCloudData, syncCloudBookmarks, fetchCloudBookmarks } from '../services/supabase';
 import { preconnectTarget } from '../services/networkPreconnectService';
 
 const GoogleGIcon = ({ size = 20 }: { size?: number }) => (
@@ -1215,11 +1215,21 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           cachedShortcutsMap.set(newEmail, DEFAULT_BOOKMARKS);
         }
       } else {
-        // Tài khoản mới chưa có lối tắt riêng -> Khởi tạo danh sách mặc định sạch sẽ (DEFAULT_BOOKMARKS)
-        // Tuyệt đối KHÔNG sao chép hay kế thừa từ tài khoản cũ!
-        setShortcuts(DEFAULT_BOOKMARKS);
-        cachedShortcutsMap.set(newEmail, DEFAULT_BOOKMARKS);
-        AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
+        // Tài khoản chưa có lối tắt riêng trên bộ nhớ máy -> Kiểm tra Supabase Cloud trước khi dùng mặc định
+        let cloudList: Bookmark[] | null = null;
+        try {
+          cloudList = await fetchCloudBookmarks(newEmail, newEmail);
+        } catch (eC) {}
+
+        if (cloudList && cloudList.length > 0) {
+          setShortcuts(cloudList);
+          cachedShortcutsMap.set(newEmail, cloudList);
+          AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(cloudList)).catch(() => {});
+        } else {
+          setShortcuts(DEFAULT_BOOKMARKS);
+          cachedShortcutsMap.set(newEmail, DEFAULT_BOOKMARKS);
+          AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(DEFAULT_BOOKMARKS)).catch(() => {});
+        }
       }
 
       setBgImage(accBg || null);
@@ -1327,6 +1337,34 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         if (memCached && memCached.length > 0) {
           loadedShortcuts = memCached;
           await AsyncStorage.setItem(shortcutsKey, JSON.stringify(memCached)).catch(() => {});
+        }
+      }
+
+      // Nếu người dùng đã đăng nhập và máy chưa có lối tắt: Tải trực tiếp từ Supabase Cloud
+      if (!loadedShortcuts || loadedShortcuts.length === 0) {
+        if (activeEmail) {
+          try {
+            // Kiểm tra cache bookmarks
+            const bmKey = `@kite_user_bookmarks_${activeEmail}`;
+            const bmData = await AsyncStorage.getItem(bmKey);
+            if (bmData) {
+              const parsed = JSON.parse(bmData);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                loadedShortcuts = parsed;
+              }
+            }
+          } catch (eB) {}
+
+          if (!loadedShortcuts || loadedShortcuts.length === 0) {
+            try {
+              const cloudBm = await fetchCloudBookmarks(activeEmail, activeEmail);
+              if (cloudBm && cloudBm.length > 0) {
+                loadedShortcuts = cloudBm;
+                await AsyncStorage.setItem(shortcutsKey, JSON.stringify(cloudBm)).catch(() => {});
+                await AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(cloudBm)).catch(() => {});
+              }
+            } catch (eC) {}
+          }
         }
       }
 

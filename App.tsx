@@ -1652,6 +1652,8 @@ function BrowserMain() {
         onShowToast={showToast}
         onExtensionsUpdated={shield.handleExtensionsUpdated}
         onOpenRegionSheet={() => shield.setRegionSheetVisible(true)}
+        userProfile={auth.userProfile}
+        syncAllAccounts={auth.syncAllAccounts}
       />
 
       <RegionSheet

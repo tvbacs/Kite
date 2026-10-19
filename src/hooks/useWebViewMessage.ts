@@ -667,7 +667,7 @@ export function useWebViewMessage({
       const email = userProfileRef.current.email;
       const userId = userProfileRef.current.id || email;
       if (userId) {
-        syncCloudPasswords(userId, [saved], email).catch(() => {});
+        syncCloudPasswords(userId, [{ ...saved, password: passwordSecret }], email).catch(() => {});
       }
     }
     setPasswordSavePrompt(null);

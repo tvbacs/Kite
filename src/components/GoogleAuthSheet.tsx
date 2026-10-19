@@ -113,8 +113,10 @@ export const GoogleAuthSheet = memo<GoogleAuthSheetProps>(
             } catch (eAcc) {}
           }
 
-          // Kích hoạt đồng bộ đám mây ngầm
-          syncUserCloudData(profile).catch(() => {});
+          // Kích hoạt đồng bộ đám mây và đợi nạp đầy đủ dữ liệu trước khi chuyển giao diện
+          try {
+            await syncUserCloudData(profile);
+          } catch (eSync) {}
 
           showToast(`Đăng nhập Google thành công! (${profile.name || profile.email})`);
           onSuccess(profile);

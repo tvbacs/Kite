@@ -429,7 +429,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
           const email = userProfile.email;
           const userId = userProfile.id || email;
           if (userId) {
-            syncCloudPasswords(userId, updated, email).catch(() => {});
+            syncCloudPasswords(userId, updated.map((item) => item.id === editingId ? { ...item, password: inputPassword.trim() } : item), email).catch(() => {});
           }
         }
       } else {
@@ -443,7 +443,7 @@ export const PasswordManagerSheet: React.FC<PasswordManagerSheetProps> = ({
           const email = userProfile.email;
           const userId = userProfile.id || email;
           if (userId) {
-            syncCloudPasswords(userId, [saved], email).catch(() => {});
+            syncCloudPasswords(userId, [{ ...saved, password: inputPassword.trim() }], email).catch(() => {});
           }
         }
       }

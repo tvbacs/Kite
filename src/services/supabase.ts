@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { Bookmark, UserProfile, SavedCredential } from '../types/browser';
 import { HistoryItem } from '../components/HistorySheet';
 
@@ -185,23 +186,43 @@ export async function signOutSupabase() {
 
 export async function fetchCloudBookmarks(userId: string, userEmail?: string): Promise<Bookmark[] | null> {
   try {
-    let query = supabase.from('kite_bookmarks').select('*');
+    let query = supabase
+      .from('kite_bookmarks')
+      .select('*')
+      .not('id', 'like', 'pwd_%')
+      .not('id', 'like', 'ext_%');
+
     if (userEmail && userId && userId !== userEmail) {
       query = query.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
     } else {
-      query = query.eq('user_id', userId || userEmail);
+      query = query.eq('user_id', userEmail || userId);
     }
 
-    const { data, error } = await query.order('created_at', { ascending: false });
+    const { data, error } = await query.order('updated_at', { ascending: false });
 
-    if (error || !data) return null;
+    if (error || !data) {
+      console.warn('Lỗi khi tải bookmarks từ Supabase:', error?.message);
+      return null;
+    }
 
-    return data.map((row) => ({
-      id: row.id,
-      title: row.title,
-      url: row.url,
-      icon: row.icon || undefined,
-    }));
+    // Khử trùng lặp URL và giữ các dấu trang tùy chỉnh mới nhất của người dùng
+    const seenUrls = new Set<string>();
+    const uniqueList: Bookmark[] = [];
+    data.forEach((row) => {
+      if (!row.url) return;
+      const cleanUrl = row.url.trim().toLowerCase().replace(/\/$/, '');
+      if (!seenUrls.has(cleanUrl)) {
+        seenUrls.add(cleanUrl);
+        uniqueList.push({
+          id: row.id,
+          title: row.title,
+          url: row.url,
+          icon: row.icon || undefined,
+        });
+      }
+    });
+
+    return uniqueList;
   } catch (e) {
     console.warn('Lỗi khi tải bookmarks từ Supabase:', e);
     return null;
@@ -429,25 +450,62 @@ export async function upsertCloudProfile(userId: string, profile: UserProfile, u
 
 export async function fetchCloudPasswords(userId: string, userEmail?: string): Promise<SavedCredential[] | null> {
   try {
-    let query = supabase.from('kite_passwords').select('*');
-    if (userEmail && userId && userId !== userEmail) {
-      query = query.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
-    } else {
-      query = query.eq('user_id', userId || userEmail);
-    }
+    const effectiveUserId = userEmail || userId;
 
-    const { data, error } = await query.order('updated_at', { ascending: false });
+    // 1. Thử đọc từ bảng kite_passwords nếu có
+    try {
+      let query = supabase.from('kite_passwords').select('*');
+      if (userEmail && userId && userId !== userEmail) {
+        query = query.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
+      } else {
+        query = query.eq('user_id', effectiveUserId);
+      }
+      const { data, error } = await query.order('updated_at', { ascending: false });
+      if (!error && data && data.length > 0) {
+        return data.map((row) => ({
+          id: row.id,
+          website: row.website,
+          username: row.username,
+          password: row.password || undefined,
+          notes: row.notes || undefined,
+          updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+        }));
+      }
+    } catch (ePassTable) {}
 
-    if (error || !data) return null;
+    // 2. Fallback: Đọc mật khẩu đã lưu từ kite_bookmarks với tiền tố pwd_
+    try {
+      let bQuery = supabase
+        .from('kite_bookmarks')
+        .select('*')
+        .like('id', 'pwd_%');
 
-    return data.map((row) => ({
-      id: row.id,
-      website: row.website,
-      username: row.username,
-      password: row.password || undefined,
-      notes: row.notes || undefined,
-      updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
-    }));
+      if (userEmail && userId && userId !== userEmail) {
+        bQuery = bQuery.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
+      } else {
+        bQuery = bQuery.eq('user_id', effectiveUserId);
+      }
+
+      const { data: bData, error: bErr } = await bQuery.order('updated_at', { ascending: false });
+      if (!bErr && bData && bData.length > 0) {
+        return bData.map((row) => {
+          let meta: any = {};
+          try {
+            if (row.icon) meta = JSON.parse(row.icon);
+          } catch (eM) {}
+          return {
+            id: row.id.replace(/^pwd_/, ''),
+            website: row.title || meta.website || '',
+            username: row.url?.replace(/^user:\/\//, '') || meta.username || '',
+            password: meta.password || undefined,
+            notes: meta.notes || undefined,
+            updatedAt: meta.updatedAt || (row.updated_at ? new Date(row.updated_at).getTime() : Date.now()),
+          };
+        });
+      }
+    } catch (eFallback) {}
+
+    return null;
   } catch (e) {
     return null;
   }
@@ -455,28 +513,71 @@ export async function fetchCloudPasswords(userId: string, userEmail?: string): P
 
 export async function syncCloudPasswords(userId: string, localPasswords: any[], userEmail?: string): Promise<boolean> {
   try {
-    const effectiveUserId = userId || userEmail;
+    const effectiveUserId = userEmail || userId;
     if (!effectiveUserId) return false;
     if (!Array.isArray(localPasswords) || localPasswords.length === 0) return true;
 
-    const rows = localPasswords.map((p) => ({
-      id: p.id,
-      user_id: effectiveUserId,
-      website: p.website,
-      username: p.username,
-      password: p.password || '',
-      notes: p.notes || null,
-      updated_at: new Date(p.updatedAt || Date.now()).toISOString(),
-    }));
+    // Tự động khôi phục mật khẩu thật từ SecureStore (Keychain) nếu đối tượng chỉ có metadata
+    const populated = await Promise.all(
+      localPasswords.map(async (p) => {
+        let pass = p.password;
+        if (!pass) {
+          try {
+            const cleanId = (p.id || '').replace(/^pwd_/, '');
+            pass =
+              (await SecureStore.getItemAsync(`kite_pwd_${cleanId}`)) ||
+              (await SecureStore.getItemAsync(`kite_pwd_${p.id}`)) ||
+              '';
+          } catch (e) {}
+        }
+        return { ...p, password: pass || '' };
+      })
+    );
 
-    const { error } = await supabase
-      .from('kite_passwords')
-      .upsert(rows, { onConflict: 'id' });
+    // 1. Thử lưu vào kite_passwords
+    try {
+      const rows = populated.map((p) => ({
+        id: p.id,
+        user_id: effectiveUserId,
+        website: p.website,
+        username: p.username,
+        password: p.password || '',
+        notes: p.notes || null,
+        updated_at: new Date(p.updatedAt || Date.now()).toISOString(),
+      }));
 
-    if (error) {
+      const { error } = await supabase
+        .from('kite_passwords')
+        .upsert(rows, { onConflict: 'id' });
+
+      if (!error) return true;
+    } catch (ePassTable) {}
+
+    // 2. Fallback: Lưu vào kite_bookmarks với tiền tố pwd_
+    try {
+      const bRows = populated.map((p) => ({
+        id: p.id.startsWith('pwd_') ? p.id : `pwd_${p.id}`,
+        user_id: effectiveUserId,
+        title: p.website,
+        url: `user://${p.username}`,
+        icon: JSON.stringify({
+          website: p.website,
+          username: p.username,
+          password: p.password || '',
+          notes: p.notes || null,
+          updatedAt: p.updatedAt || Date.now(),
+        }),
+        updated_at: new Date(p.updatedAt || Date.now()).toISOString(),
+      }));
+
+      const { error: bErr } = await supabase
+        .from('kite_bookmarks')
+        .upsert(bRows, { onConflict: 'id' });
+
+      return !bErr;
+    } catch (eB) {
       return false;
     }
-    return true;
   } catch (e) {
     return false;
   }
@@ -484,14 +585,95 @@ export async function syncCloudPasswords(userId: string, localPasswords: any[], 
 
 export async function deleteCloudPassword(userId: string, passwordId: string, userEmail?: string): Promise<boolean> {
   try {
-    let query = supabase.from('kite_passwords').delete().eq('id', passwordId);
+    try {
+      await supabase.from('kite_passwords').delete().eq('id', passwordId);
+    } catch (e) {}
+    const cleanId = passwordId.startsWith('pwd_') ? passwordId : `pwd_${passwordId}`;
+    await supabase.from('kite_bookmarks').delete().eq('id', cleanId);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* =========================================================================
+ * 6. QUẢN LÝ TIỆN ÍCH MỞ RỘNG (EXTENSIONS) TRÊN CLOUD
+ * ========================================================================= */
+
+export async function fetchCloudExtensions(userId: string, userEmail?: string): Promise<any[] | null> {
+  try {
+    const effectiveUserId = userEmail || userId;
+    let bQuery = supabase
+      .from('kite_bookmarks')
+      .select('*')
+      .like('id', 'ext_%');
+
     if (userEmail && userId && userId !== userEmail) {
-      query = query.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
+      bQuery = bQuery.or(`user_id.eq.${userId},user_id.eq.${userEmail}`);
     } else {
-      query = query.eq('user_id', userId || userEmail);
+      bQuery = bQuery.eq('user_id', effectiveUserId);
     }
-    const { error } = await query;
+
+    const { data, error } = await bQuery.order('updated_at', { ascending: false });
+    if (error || !data || data.length === 0) return null;
+
+    return data.map((row) => {
+      let meta: any = {};
+      try {
+        if (row.icon) meta = JSON.parse(row.icon);
+      } catch (e) {}
+      return {
+        id: row.id.replace(/^ext_/, ''),
+        name: row.title || meta.name || '',
+        description: meta.description || '',
+        matchUrl: row.url || meta.matchUrl || '*',
+        code: meta.code || '',
+        runAt: meta.runAt || 'document_end',
+        enabled: meta.enabled !== false,
+        isBuiltIn: Boolean(meta.isBuiltIn),
+        updatedAt: meta.updatedAt || (row.updated_at ? new Date(row.updated_at).getTime() : Date.now()),
+      };
+    });
+  } catch (e) {
+    return null;
+  }
+}
+
+export async function syncCloudExtensions(userId: string, extensions: any[], userEmail?: string): Promise<boolean> {
+  try {
+    const effectiveUserId = userEmail || userId;
+    if (!effectiveUserId || !Array.isArray(extensions) || extensions.length === 0) return true;
+
+    const bRows = extensions.map((ext) => ({
+      id: ext.id.startsWith('ext_') ? ext.id : `ext_${ext.id}`,
+      user_id: effectiveUserId,
+      title: ext.name,
+      url: ext.matchUrl || '*',
+      icon: JSON.stringify({
+        name: ext.name,
+        description: ext.description || '',
+        matchUrl: ext.matchUrl || '*',
+        code: ext.code || '',
+        runAt: ext.runAt || 'document_end',
+        enabled: ext.enabled,
+        isBuiltIn: ext.isBuiltIn,
+        updatedAt: ext.updatedAt || Date.now(),
+      }),
+      updated_at: new Date(ext.updatedAt || Date.now()).toISOString(),
+    }));
+
+    const { error } = await supabase.from('kite_bookmarks').upsert(bRows, { onConflict: 'id' });
     return !error;
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function deleteCloudExtension(userId: string, extensionId: string, userEmail?: string): Promise<boolean> {
+  try {
+    const cleanId = extensionId.startsWith('ext_') ? extensionId : `ext_${extensionId}`;
+    await supabase.from('kite_bookmarks').delete().eq('id', cleanId);
+    return true;
   } catch (e) {
     return false;
   }
@@ -507,6 +689,7 @@ export async function syncUserCloudData(
     onBookmarksLoaded?: (bookmarks: any[]) => void;
     onSettingsLoaded?: (settings: CloudUserSettings) => void;
     onPasswordsLoaded?: (passwords: SavedCredential[]) => void;
+    onExtensionsLoaded?: (extensions: any[]) => void;
   }
 ) {
   if (!profile.isLoggedIn || (!profile.id && !profile.email)) return;
@@ -518,7 +701,7 @@ export async function syncUserCloudData(
     await upsertCloudProfile(userId, profile, email);
   } catch (e) {}
 
-  // 2. Đồng bộ Bookmarks hai chiều
+  // 2. Đồng bộ Dấu trang (Bookmarks) & Lối tắt (Shortcuts) hai chiều
   try {
     const bmKey = email ? `@kite_user_bookmarks_${email.toLowerCase()}` : '@kite_user_bookmarks';
     const localBmRaw = await AsyncStorage.getItem(bmKey);
@@ -551,7 +734,12 @@ export async function syncUserCloudData(
       const isSyncOn = syncAccountsVal ? JSON.parse(syncAccountsVal) : false;
 
       const mergedList = Array.from(mergedMap.values());
+      // Lưu vào cả Dấu trang VÀ Lối tắt Màn hình chính
       await AsyncStorage.setItem(bmKey, JSON.stringify(mergedList));
+      if (email) {
+        await AsyncStorage.setItem(`@kite_shortcuts_${email.toLowerCase()}`, JSON.stringify(mergedList));
+      }
+      await AsyncStorage.setItem('@kite_shortcuts', JSON.stringify(mergedList));
       if (isSyncOn) {
         await AsyncStorage.setItem('@kite_user_bookmarks', JSON.stringify(mergedList));
       }
@@ -566,7 +754,7 @@ export async function syncUserCloudData(
       syncCloudBookmarks(userId, localBm, email).catch(() => {});
     }
   } catch (e) {
-    console.warn('Lỗi đồng bộ bookmarks:', e);
+    console.warn('Lỗi đồng bộ bookmarks/shortcuts:', e);
   }
 
   // 3. Đồng bộ Lịch sử hai chiều
@@ -649,7 +837,7 @@ export async function syncUserCloudData(
     console.warn('Lỗi đồng bộ settings:', e);
   }
 
-  // 5. Đồng bộ Mật khẩu hai chiều (Two-way Passwords Sync)
+  // 5. Đồng bộ Mật khẩu hai chiều & Khôi phục vào SecureStore (Keychain)
   try {
     const pwdKey = email ? `@kite_saved_passwords_${email.toLowerCase()}` : '@kite_saved_passwords';
     const localPwdRaw = await AsyncStorage.getItem(pwdKey);
@@ -657,6 +845,21 @@ export async function syncUserCloudData(
 
     const cloudPwd = await fetchCloudPasswords(userId, email);
     if (cloudPwd && cloudPwd.length > 0) {
+      // Tự động giải nén và lưu mật khẩu bí mật vào Keychain / Keystore an toàn
+      for (const p of cloudPwd) {
+        if (p.password) {
+          try {
+            const cleanId = (p.id || '').replace(/^pwd_/, '');
+            await SecureStore.setItemAsync(`kite_pwd_${cleanId}`, p.password, {
+              keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+            });
+            await SecureStore.setItemAsync(`kite_pwd_${p.id}`, p.password, {
+              keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+            });
+          } catch (eSec) {}
+        }
+      }
+
       const mergedMap = new Map<string, any>();
       cloudPwd.forEach((p) => {
         const key = `${(p.website || '').toLowerCase().trim()}|${(p.username || '').toLowerCase().trim()}`;
@@ -686,6 +889,38 @@ export async function syncUserCloudData(
     }
   } catch (e) {
     console.warn('Lỗi đồng bộ passwords:', e);
+  }
+
+  // 6. Đồng bộ Tiện ích mở rộng hai chiều (Two-way Extensions Sync)
+  try {
+    const extKey = email ? `@kite_user_extensions_${email.toLowerCase()}` : '@kite_user_extensions';
+    const localExtRaw = await AsyncStorage.getItem(extKey);
+    let localExt: any[] = localExtRaw ? JSON.parse(localExtRaw) : [];
+
+    const cloudExt = await fetchCloudExtensions(userId, email);
+    if (cloudExt && cloudExt.length > 0) {
+      const mergedExtMap = new Map<string, any>();
+      cloudExt.forEach((e) => mergedExtMap.set(e.id, e));
+      if (Array.isArray(localExt)) {
+        localExt.forEach((e) => {
+          if (!mergedExtMap.has(e.id)) {
+            mergedExtMap.set(e.id, e);
+          }
+        });
+      }
+      const mergedExtList = Array.from(mergedExtMap.values());
+      await AsyncStorage.setItem(extKey, JSON.stringify(mergedExtList));
+      await AsyncStorage.setItem('@kite_user_extensions', JSON.stringify(mergedExtList));
+      callbacks?.onExtensionsLoaded?.(mergedExtList);
+
+      if (mergedExtList.length > cloudExt.length) {
+        syncCloudExtensions(userId, mergedExtList, email).catch(() => {});
+      }
+    } else if (Array.isArray(localExt) && localExt.length > 0) {
+      syncCloudExtensions(userId, localExt, email).catch(() => {});
+    }
+  } catch (e) {
+    console.warn('Lỗi đồng bộ extensions:', e);
   }
 }
 

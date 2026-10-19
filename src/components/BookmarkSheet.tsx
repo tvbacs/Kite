@@ -15,7 +15,7 @@ import Feather from '@expo/vector-icons/Feather';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../constants/theme';
-import { syncCloudBookmarks } from '../services/supabase';
+import { syncCloudBookmarks, fetchCloudBookmarks } from '../services/supabase';
 
 export interface BookmarkItem {
   id: string;
@@ -76,24 +76,43 @@ export const BookmarkSheet: React.FC<BookmarkSheetProps> = ({
       const key = getStorageKey();
       const data = await AsyncStorage.getItem(key);
       if (data) {
-        setBookmarks(JSON.parse(data));
-      } else {
-        // Luôn kiểm tra khóa dùng chung STORAGE_BOOKMARKS_KEY làm fallback để không mất dấu trang
-        const shared = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
-        if (shared) {
-          try {
-            const parsed = JSON.parse(shared);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setBookmarks(parsed);
-              await AsyncStorage.setItem(key, JSON.stringify(parsed));
-              return;
-            }
-          } catch (e) {}
-        }
-        setBookmarks(DEFAULT_BOOKMARKS);
-        await AsyncStorage.setItem(key, JSON.stringify(DEFAULT_BOOKMARKS));
-        await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(DEFAULT_BOOKMARKS));
+        try {
+          const parsed = JSON.parse(data);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setBookmarks(parsed);
+            return;
+          }
+        } catch (e) {}
       }
+
+      // Nếu có userEmail, ưu tiên tải từ Cloud Supabase
+      if (userEmail) {
+        try {
+          const cloudBm = await fetchCloudBookmarks(userEmail, userEmail);
+          if (cloudBm && cloudBm.length > 0) {
+            setBookmarks(cloudBm);
+            await AsyncStorage.setItem(key, JSON.stringify(cloudBm));
+            await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(cloudBm));
+            return;
+          }
+        } catch (eCloud) {}
+      }
+
+      // Luôn kiểm tra khóa dùng chung STORAGE_BOOKMARKS_KEY làm fallback để không mất dấu trang
+      const shared = await AsyncStorage.getItem(STORAGE_BOOKMARKS_KEY);
+      if (shared) {
+        try {
+          const parsed = JSON.parse(shared);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setBookmarks(parsed);
+            await AsyncStorage.setItem(key, JSON.stringify(parsed));
+            return;
+          }
+        } catch (e) {}
+      }
+      setBookmarks(DEFAULT_BOOKMARKS);
+      await AsyncStorage.setItem(key, JSON.stringify(DEFAULT_BOOKMARKS));
+      await AsyncStorage.setItem(STORAGE_BOOKMARKS_KEY, JSON.stringify(DEFAULT_BOOKMARKS));
     } catch (e) {
       console.log('Error loading bookmarks:', e);
     }
