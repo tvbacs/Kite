@@ -396,6 +396,7 @@ export function useWebViewRequest({
           next[idx] = {
             ...cur,
             url: nextUrl,
+            initialUrl: nextUrl,
             title: nextTitle,
             isLoading: nextLoading,
             isReaderMode: isUrlDifferent ? false : cur.isReaderMode,

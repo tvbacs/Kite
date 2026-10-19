@@ -28,7 +28,7 @@ interface ImageSearchModalProps {
   initialImageUri?: string | null;
 }
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLLAPSED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.58);
 const EXPANDED_HEIGHT = Math.round(SCREEN_HEIGHT * 0.90);
 
@@ -91,38 +91,40 @@ export const ImageSearchModal: React.FC<ImageSearchModalProps> = ({
     }).start();
 
     const mode = modeOverride || currentMode;
-    const modeParam = mode === 'translate' ? '&lns_mode=tr' : '&lns_mode=un';
+    const modeParam = mode === 'translate' ? 'tr' : 'un';
 
     try {
       const formData = new FormData();
-      formData.append('file', {
+      formData.append('encoded_image', {
         uri: imageUri,
         type: 'image/jpeg',
         name: 'lens_photo.jpg',
       } as any);
 
-      // Upload lên cloud trung gian để server Google Lens có thể nạp ảnh trực tiếp
-      const response = await fetch('https://tmpfiles.org/api/v1/upload', {
+      // Upload trực tiếp lên server Google Lens chính thức (phản hồi siêu nhanh < 1s và tự phân tích hình ảnh)
+      const response = await fetch(`https://lens.google.com/upload?lns_mode=${modeParam}`, {
         method: 'POST',
         body: formData,
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+        },
       });
 
-      const resJson = await response.json();
-      if (resJson?.status === 'success' && resJson?.data?.url) {
-        // Chuyển tmpfiles.org/xxx sang direct image link tmpfiles.org/dl/xxx
-        const directImageUrl = resJson.data.url.replace('tmpfiles.org/', 'tmpfiles.org/dl/');
-        const targetLensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(
-          directImageUrl
-        )}${modeParam}`;
-        setLensResultUrl(targetLensUrl);
+      if (
+        response.url &&
+        (response.url.includes('google.com/search') || response.url.includes('lens.google.com'))
+      ) {
+        setLensResultUrl(response.url);
         return;
       }
 
-      // Fallback nếu server trung gian chậm: mở Google Lens mobile web
-      const fallbackUrl = `https://www.google.com/search?q=Google+Lens&udm=26${modeParam}`;
+      // Dự phòng nếu không nhận được URL điều hướng
+      const fallbackUrl = `https://lens.google.com/search?p=${modeParam}`;
       setLensResultUrl(fallbackUrl);
     } catch (e) {
-      const fallbackUrl = `https://www.google.com/search?q=Google+Lens&udm=26${modeParam}`;
+      console.log('Google Lens upload error:', e);
+      const fallbackUrl = `https://images.google.com/searchbyimage/upload`;
       setLensResultUrl(fallbackUrl);
     } finally {
       setIsProcessing(false);
@@ -334,18 +336,31 @@ export const ImageSearchModal: React.FC<ImageSearchModalProps> = ({
           <View
             style={[
               styles.centerViewfinder,
-              capturedImage && styles.centerViewfinderCaptured,
+              capturedImage ? styles.centerViewfinderCaptured : null,
             ]}
-            pointerEvents="none"
+            pointerEvents="box-none"
           >
-            <View style={styles.focusFrame}>
+            <View style={[styles.focusFrame, capturedImage ? styles.focusFrameCaptured : null]}>
               <View style={[styles.corner, styles.cornerTL]} />
               <View style={[styles.corner, styles.cornerTR]} />
               <View style={[styles.corner, styles.cornerBL]} />
               <View style={[styles.corner, styles.cornerBR]} />
+
+              {/* Dấu chấm nhận diện vật thể trọng tâm */}
+              {capturedImage && (
+                <View style={styles.objectDot}>
+                  <View style={styles.objectDotPulse} />
+                  <View style={styles.objectDotCore} />
+                </View>
+              )}
             </View>
 
-            {!capturedImage && (
+            {capturedImage ? (
+              <View style={styles.detectedPill}>
+                <Feather name="crosshair" size={13} color="#ffffff" style={{ marginRight: 6 }} />
+                <Text style={styles.detectedPillText}>Đã khóa đối tượng tìm kiếm</Text>
+              </View>
+            ) : (
               <View style={styles.hintPill}>
                 <Text style={styles.hintText}>
                   {currentMode === 'translate'
@@ -623,8 +638,51 @@ const styles = StyleSheet.create({
   },
   centerViewfinderCaptured: {
     flex: 0,
-    height: '35%',
-    marginTop: 20,
+    height: Math.max(160, Math.min(220, SCREEN_HEIGHT - COLLAPSED_HEIGHT - 64)),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  focusFrameCaptured: {
+    width: Math.min(220, SCREEN_WIDTH - 60),
+    height: Math.min(160, SCREEN_HEIGHT - COLLAPSED_HEIGHT - 120),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  objectDot: {
+    width: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  objectDotPulse: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  objectDotCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+  },
+  detectedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.68)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  detectedPillText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   focusFrame: {
     width: 250,

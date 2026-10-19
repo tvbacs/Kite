@@ -1184,9 +1184,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           }
         } catch {}
       } else {
-        cachedShortcuts = DEFAULT_BOOKMARKS;
-        setShortcuts(DEFAULT_BOOKMARKS);
-        AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(DEFAULT_BOOKMARKS));
+        // Kế thừa toàn bộ lối tắt người dùng đã thêm trên máy thay vì ép về mặc định
+        const inherited = (shortcuts && shortcuts.length > 0) ? shortcuts : (cachedShortcuts && cachedShortcuts.length > 0) ? cachedShortcuts : DEFAULT_BOOKMARKS;
+        cachedShortcuts = inherited;
+        setShortcuts(inherited);
+        AsyncStorage.setItem(`${STORAGE_SHORTCUTS_KEY}_${newEmail}`, JSON.stringify(inherited)).catch(() => {});
+        AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(inherited)).catch(() => {});
       }
       setBgImage(accBg || null);
       if (accTheme && THEME_PALETTES[accTheme]) {
@@ -1217,6 +1220,14 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
     if (onShowToast) {
       onShowToast(`Đã chuyển sang: ${acc.name || acc.email}`);
     }
+  };
+
+  const isCustomShortcuts = (list: Bookmark[] | null | undefined): boolean => {
+    if (!Array.isArray(list) || list.length === 0) return false;
+    if (list.length !== DEFAULT_BOOKMARKS.length) return true;
+    return list.some(
+      (item) => !DEFAULT_BOOKMARKS.some((d) => d.url === item.url || d.title === item.title)
+    );
   };
 
   const loadSavedData = async () => {
@@ -1251,19 +1262,50 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         } catch {}
       }
 
-      if (!loadedShortcuts) {
+      if (!loadedShortcuts || !isCustomShortcuts(loadedShortcuts)) {
         try {
           const fallback = await AsyncStorage.getItem(STORAGE_SHORTCUTS_KEY);
           if (fallback) {
             const parsed = JSON.parse(fallback);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              loadedShortcuts = parsed;
+              if (isCustomShortcuts(parsed) || !loadedShortcuts) {
+                loadedShortcuts = parsed;
+              }
             }
           }
         } catch {}
       }
 
-      if (loadedShortcuts) {
+      // Quét phục hồi tự động: Nếu danh sách đang là mặc định nhưng người dùng đã từng lưu lối tắt ở key khác
+      if (!isCustomShortcuts(loadedShortcuts)) {
+        try {
+          const allKeys = await AsyncStorage.getAllKeys();
+          const candidateKeys = allKeys.filter(
+            (k) =>
+              (k.startsWith(STORAGE_SHORTCUTS_KEY) || k.startsWith('@kite_user_bookmarks')) &&
+              k !== shortcutsKey
+          );
+          for (const k of candidateKeys) {
+            const val = await AsyncStorage.getItem(k);
+            if (val) {
+              try {
+                const parsed = JSON.parse(val);
+                if (isCustomShortcuts(parsed)) {
+                  loadedShortcuts = parsed;
+                  // Đồng bộ cứu dữ liệu vào cả key hiện tại và key dùng chung
+                  await Promise.all([
+                    AsyncStorage.setItem(shortcutsKey, JSON.stringify(parsed)),
+                    AsyncStorage.setItem(STORAGE_SHORTCUTS_KEY, JSON.stringify(parsed)),
+                  ]);
+                  break;
+                }
+              } catch {}
+            }
+          }
+        } catch {}
+      }
+
+      if (loadedShortcuts && loadedShortcuts.length > 0) {
         cachedShortcuts = loadedShortcuts;
         setShortcuts(loadedShortcuts);
       } else {

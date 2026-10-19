@@ -588,7 +588,6 @@ function BrowserMain() {
       if (existingNormal) {
         setTabs((prev) =>
           prev.map((t) => {
-            if (t.isIncognito) return { ...t, isSleeping: true };
             if (t.id === existingNormal.id) return { ...t, isSleeping: false, lastActiveAt: Date.now() };
             return t;
           })
@@ -596,9 +595,6 @@ function BrowserMain() {
         setActiveTabId(existingNormal.id);
         setInputUrl(existingNormal.url);
       } else {
-        setTabs((prev) =>
-          prev.map((t) => (t.isIncognito ? { ...t, isSleeping: true } : t))
-        );
         browserTabs.executeNewTab(false);
       }
       showToast('Đã tắt chế độ ẩn danh');

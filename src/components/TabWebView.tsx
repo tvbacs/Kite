@@ -48,21 +48,21 @@ export const TabWebView = memo<TabWebViewProps>(
   }) => {
     const localRef = useRef<any>(null);
 
-    // Khởi tạo source ổn định từ URL ban đầu của tab để không bao giờ bị nạp lại trắng trang khi điều hướng trong trang
-    const initialSourceUrl = useRef(tab.initialUrl || tab.url);
-    if (!initialSourceUrl.current && (tab.initialUrl || tab.url)) {
-      initialSourceUrl.current = tab.initialUrl || tab.url;
+    // Khởi tạo source ổn định từ URL của tab để không bao giờ bị nạp lại trắng trang khi điều hướng trong trang
+    const initialSourceUrl = useRef(tab.url || tab.initialUrl);
+    if (!initialSourceUrl.current && (tab.url || tab.initialUrl)) {
+      initialSourceUrl.current = tab.url || tab.initialUrl;
     }
     useEffect(() => {
-      if (tab.initialUrl && tab.initialUrl !== initialSourceUrl.current) {
-        initialSourceUrl.current = tab.initialUrl;
+      if (tab.url && tab.url !== initialSourceUrl.current) {
+        initialSourceUrl.current = tab.url;
       }
-    }, [tab.initialUrl]);
+    }, [tab.url]);
 
-    const effectiveInitialUrl = tab.initialUrl || initialSourceUrl.current || tab.url;
+    const effectiveInitialUrl = tab.url || tab.initialUrl || initialSourceUrl.current || 'about:blank';
     const webViewSource = useMemo(
       () => ({ uri: effectiveInitialUrl }),
-      [tab.initialUrl]
+      [effectiveInitialUrl]
     );
 
     const isDark = Boolean(tab.isIncognito);

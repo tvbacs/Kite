@@ -800,12 +800,6 @@ export function useBrowserTabs({
             lastActiveAt: now,
           };
         }
-        if (previousTab?.isIncognito && !target?.isIncognito && t.id === previousId) {
-          return {
-            ...t,
-            isSleeping: true,
-          };
-        }
         return t;
       })
     );

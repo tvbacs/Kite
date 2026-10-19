@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Modal,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   ScrollView,
   TextInput,
   Platform,
@@ -453,12 +454,11 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity
-          style={[styles.sheetContainer, { paddingBottom: bottomInset }]}
-          activeOpacity={1}
-          onPress={(e) => e.stopPropagation()}
-        >
+      <View style={styles.sheetBackdrop}>
+        <TouchableWithoutFeedback onPress={onClose}>
+          <View style={StyleSheet.absoluteFillObject} />
+        </TouchableWithoutFeedback>
+        <View style={[styles.sheetContainer, { paddingBottom: bottomInset }]}>
           {/* Thanh gạt trên cùng */}
           <View style={styles.dragHandle} />
 
@@ -494,7 +494,10 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
+            showsVerticalScrollIndicator={true}
+            bounces={true}
+            nestedScrollEnabled={true}
+            keyboardShouldPersistTaps="handled"
           >
             {/* 1. TỔNG QUAN DUNG LƯỢNG TRANG WEB */}
             <View style={styles.summaryCard}>
@@ -636,8 +639,8 @@ export const StorageManagerSheet: React.FC<StorageManagerSheetProps> = ({
               )}
             </View>
           </ScrollView>
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
   );
 };
@@ -652,8 +655,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
-    height: '84%',
-    maxHeight: '92%',
+    height: '92%',
+    maxHeight: '94%',
   },
   dragHandle: {
     width: 36,
@@ -711,6 +714,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginTop: 6,
     marginBottom: 14,
+    borderWidth: 0,
   },
   summaryLabel: {
     fontSize: 11,
@@ -723,13 +727,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 2,
+    marginTop: 4,
     marginBottom: 4,
   },
   summaryValue: {
     fontSize: 24,
     fontWeight: '700',
     color: '#09090b',
+    lineHeight: 28,
   },
   summarySubtext: {
     fontSize: 12,
@@ -741,8 +746,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 10,
+    alignSelf: 'center',
   },
   clearAllBtnText: {
     fontSize: 12,
@@ -790,6 +796,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 16,
+    borderWidth: 0,
   },
   siteRow: {
     flexDirection: 'row',
@@ -819,19 +826,6 @@ const styles = StyleSheet.create({
     color: '#09090b',
     flexShrink: 1,
   },
-  activeBadge: {
-    backgroundColor: '#f4f4f5',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-  },
-  activeBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#52525b',
-  },
   siteSubtext: {
     fontSize: 11,
     color: '#71717a',
@@ -848,6 +842,7 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 8,
     backgroundColor: 'transparent',
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -866,8 +861,7 @@ const styles = StyleSheet.create({
   otherStorageCard: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
+    borderWidth: 0,
     overflow: 'hidden',
     marginBottom: 14,
   },
