@@ -32,6 +32,8 @@ import {
   PermissionType,
 } from '../services/sitePermissionsStorage';
 import { STORAGE_SAVED_ACCOUNTS_KEY, STORAGE_USER_PROFILE_KEY } from './useAuthProfile';
+import { syncUserCloudData } from '../services/supabase';
+import { STORAGE_HISTORY_KEY, HistoryItem } from '../components/HistorySheet';
 
 interface UseWebViewMessageProps {
   activeTabId: string;
@@ -303,45 +305,54 @@ export function useWebViewMessage({
             avatarUrl: isRealPhoto ? data.avatarUrl : '',
           };
 
-          const isAtMyAccount = currentTab?.url?.toLowerCase().includes('myaccount.google.com');
-          if (isAtMyAccount) {
+          const currentProfile = userProfileRef.current;
+          const wasLoggedIn = Boolean(currentProfile?.isLoggedIn && currentProfile?.email);
+          const currentEmail = (currentProfile?.email || '').toLowerCase();
+          const newEmail = (profile.email || '').toLowerCase();
+
+          const isNewLogin = !wasLoggedIn;
+          const isAccountSwitch = wasLoggedIn && currentEmail !== newEmail;
+          const isAccountDataUpdate =
+            wasLoggedIn &&
+            currentEmail === newEmail &&
+            ((!currentProfile?.avatarUrl && profile.avatarUrl) ||
+              (!currentProfile?.name && profile.name) ||
+              (profile.name && currentProfile?.name !== profile.name));
+
+          if (isNewLogin || isAccountSwitch || isAccountDataUpdate) {
+            userProfileRef.current = profile;
             setUserProfile(profile);
             AsyncStorage.setItem(STORAGE_USER_PROFILE_KEY, JSON.stringify(profile));
+
             AsyncStorage.getItem(STORAGE_SAVED_ACCOUNTS_KEY).then((res) => {
               let list: UserProfile[] = [];
-              if (res) { try { list = JSON.parse(res); } catch (e) {} }
+              if (res) {
+                try {
+                  list = JSON.parse(res);
+                } catch (e) {}
+              }
               if (!Array.isArray(list)) list = [];
               const existingIdx = list.findIndex(
                 (a) => a.email && profile.email && a.email.toLowerCase() === profile.email.toLowerCase()
               );
-              if (existingIdx !== -1) { list[existingIdx] = profile; } else { list.push(profile); }
+              if (existingIdx !== -1) {
+                list[existingIdx] = profile;
+              } else {
+                list.push(profile);
+              }
               AsyncStorage.setItem(STORAGE_SAVED_ACCOUNTS_KEY, JSON.stringify(list));
             });
-            return;
-          }
 
-          setUserProfile((prev) => {
-            if (!prev || !prev.isLoggedIn || !prev.email) {
-              return prev || { isLoggedIn: false, name: '', email: '', avatarUrl: '' };
+            syncUserCloudData(profile).catch(() => {});
+
+            if (isNewLogin) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              showToast(`Đăng nhập Google thành công! (${profile.name || profile.email})`);
+            } else if (isAccountSwitch) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              showToast(`Đã chuyển sang: ${profile.name || profile.email}`);
             }
-            const isDifferentEmail = Boolean(
-              prev?.email &&
-              profile.email &&
-              prev.email.toLowerCase() !== profile.email.toLowerCase()
-            );
-            if (
-              isDifferentEmail ||
-              (!prev.avatarUrl && profile.avatarUrl) ||
-              (!prev.name && profile.name)
-            ) {
-              AsyncStorage.setItem(STORAGE_USER_PROFILE_KEY, JSON.stringify(profile));
-              if (isDifferentEmail && profile.email) {
-                showToast(`Đã chuyển sang: ${profile.name || profile.email}`);
-              }
-              return profile;
-            }
-            return prev;
-          });
+          }
         }
       } else if (data.type === 'DETECTED_LOGIN') {
         if (currentTab?.isIncognito || isIncognito) return;
@@ -350,16 +361,8 @@ export function useWebViewMessage({
           const rawPwd = (data.password || '').trim();
           const lowerUser = rawUser.toLowerCase();
 
-          // 1. Lọc bỏ: Bắt buộc phải có tài khoản thực sự (không chấp nhận rỗng hay fallback "Tài khoản")
-          if (
-            !rawUser ||
-            rawUser.length < 3 ||
-            lowerUser === 'tài khoản' ||
-            lowerUser === 'tai khoan' ||
-            lowerUser === 'admin' ||
-            lowerUser === 'user' ||
-            lowerUser === 'undefined'
-          ) {
+          // 1. Lọc bỏ: Bắt buộc phải có tài khoản thực sự (độ dài >= 2 ký tự, không chấp nhận rỗng/undefined)
+          if (!rawUser || rawUser.length < 2 || lowerUser === 'undefined' || lowerUser === 'null') {
             return;
           }
 
@@ -493,6 +496,42 @@ export function useWebViewMessage({
             });
           }
         });
+      } else if (data.type === 'REQUEST_VISITED_URLS') {
+        const activeEmail = userProfileRef.current?.isLoggedIn ? userProfileRef.current.email : undefined;
+        const keys = [STORAGE_HISTORY_KEY];
+        if (activeEmail) {
+          keys.unshift(`${STORAGE_HISTORY_KEY}_${activeEmail.toLowerCase()}`);
+        }
+        AsyncStorage.multiGet(keys).then((stores) => {
+          const urlSet = new Set<string>();
+          stores.forEach(([_, val]) => {
+            if (val) {
+              try {
+                const arr = JSON.parse(val);
+                if (Array.isArray(arr)) {
+                  arr.slice(0, 500).forEach((item: HistoryItem) => {
+                    if (item && item.url) urlSet.add(item.url);
+                  });
+                }
+              } catch (e) {}
+            }
+          });
+          const urls = Array.from(urlSet);
+          if (urls.length > 0) {
+            const targetWV = webViewRefs.current[activeTabId] || getActiveWebView();
+            if (targetWV) {
+              const injectCode = `
+                try {
+                  if (typeof window.__kiteHighlightVisitedUrls === 'function') {
+                    window.__kiteHighlightVisitedUrls(${JSON.stringify(urls)});
+                  }
+                } catch(e) {}
+                true;
+              `;
+              targetWV.injectJavaScript(injectCode);
+            }
+          }
+        }).catch(() => {});
       }
     } catch (e) {}
   };

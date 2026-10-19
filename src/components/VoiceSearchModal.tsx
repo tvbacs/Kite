@@ -380,25 +380,25 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
                   <Animated.View
                     style={[
                       styles.soundDot,
-                      { backgroundColor: '#ffffff', transform: [{ translateY: dotAnim1 }] },
+                      { backgroundColor: '#38bdf8', transform: [{ translateY: dotAnim1 }] },
                     ]}
                   />
                   <Animated.View
                     style={[
                       styles.soundDot,
-                      { backgroundColor: '#e4e4e7', transform: [{ translateY: dotAnim2 }] },
+                      { backgroundColor: '#007aff', transform: [{ translateY: dotAnim2 }] },
                     ]}
                   />
                   <Animated.View
                     style={[
                       styles.soundDot,
-                      { backgroundColor: '#a1a1aa', transform: [{ translateY: dotAnim3 }] },
+                      { backgroundColor: '#2563eb', transform: [{ translateY: dotAnim3 }] },
                     ]}
                   />
                   <Animated.View
                     style={[
                       styles.soundDot,
-                      { backgroundColor: '#71717a', transform: [{ translateY: dotAnim4 }] },
+                      { backgroundColor: '#60a5fa', transform: [{ translateY: dotAnim4 }] },
                     ]}
                   />
                 </View>
@@ -433,7 +433,7 @@ export const VoiceSearchModal: React.FC<VoiceSearchModalProps> = ({
                     onPress={() => handleExecuteSearch(transcript)}
                     activeOpacity={0.8}
                   >
-                    <Feather name="search" size={17} color="#18181b" style={{ marginRight: 8 }} />
+                    <Feather name="search" size={17} color="#ffffff" style={{ marginRight: 8 }} />
                     <Text style={styles.searchNowBtnText}>Tìm "{transcript}" ngay</Text>
                   </TouchableOpacity>
                 ) : null}
@@ -591,38 +591,43 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(0, 122, 255, 0.28)',
   },
   micBigBtn: {
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: '#27272a',
+    backgroundColor: '#007aff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 8,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#007aff',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 2.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   micBigBtnActive: {
-    backgroundColor: '#3f3f46',
+    backgroundColor: '#0056b3',
     borderColor: '#ffffff',
   },
   searchNowBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#007aff',
     paddingHorizontal: 22,
     paddingVertical: 10,
     borderRadius: 22,
     marginBottom: 14,
+    shadowColor: '#007aff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
   },
   searchNowBtnText: {
-    color: '#18181b',
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
   },

@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { WebViewNavigation } from 'react-native-webview';
 import { BrowserTab, ShieldStats, UserProfile } from '../types/browser';
 import {
@@ -172,7 +173,8 @@ export function useWebViewRequest({
                 AsyncStorage.setItem(STORAGE_SAVED_ACCOUNTS_KEY, JSON.stringify(list));
               });
             }
-            showToast(`Đăng nhập Google thành công! (${profile.name})`);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            showToast(`Đăng nhập Google thành công! (${profile.name || profile.email})`);
           } else {
             showToast('Đăng nhập Google chưa hoàn tất, vui lòng thử lại.');
           }
@@ -327,7 +329,8 @@ export function useWebViewRequest({
               AsyncStorage.setItem(STORAGE_SAVED_ACCOUNTS_KEY, JSON.stringify(list));
             });
           }
-          showToast(`Đăng nhập Google thành công! (${profile.name})`);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          showToast(`Đăng nhập Google thành công! (${profile.name || profile.email})`);
         } else {
           showToast('Đăng nhập Google chưa hoàn tất, vui lòng thử lại.');
         }

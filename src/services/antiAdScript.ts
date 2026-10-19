@@ -939,6 +939,83 @@ export const INJECTED_AFTER_CONTENT = `
     }
   } catch(e) {}
 
+  // 3b. Đổi màu tím chuẩn (:visited #681da8) cho các trang đã vào trước đó trên kết quả tìm kiếm Google & các công cụ tìm kiếm
+  try {
+    var _host = (window.location.hostname || '').toLowerCase();
+    var _isSearchEngine =
+      (_host.includes('google.') && (window.location.pathname.includes('/search') || window.location.search.includes('q='))) ||
+      (_host.includes('bing.com') && window.location.pathname.includes('/search')) ||
+      (_host.includes('duckduckgo.com') && window.location.search.includes('q=')) ||
+      (_host.includes('search.yahoo.com'));
+
+    if (_isSearchEngine) {
+      // 1. Tiêm CSS rule :visited
+      var styleVisited = document.createElement('style');
+      styleVisited.id = '__kite_visited_css';
+      styleVisited.textContent = 'a:visited, a:visited h3, a:visited .DKV0Md, a:visited .LC20lb, a:visited [role="heading"], a:visited span, a:visited div { color: #681da8 !important; }';
+      (document.head || document.documentElement).appendChild(styleVisited);
+
+      // 2. Hàm tô màu các liên kết đã từng vào dựa trên Lịch sử thật của Kite Browser (chính xác 100% không phụ thuộc cache WebKit)
+      window.__kiteHighlightVisitedUrls = function(visitedList) {
+        if (!Array.isArray(visitedList) || visitedList.length === 0) return;
+        var visitedSet = new Set();
+        visitedList.forEach(function(u) {
+          if (!u || typeof u !== 'string') return;
+          try {
+            var norm = u.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '').toLowerCase();
+            visitedSet.add(norm);
+            var base = norm.split('?')[0].replace(/\/+$/, '');
+            if (base) visitedSet.add(base);
+          } catch(e) {}
+        });
+
+        var applyHighlight = function() {
+          var links = document.querySelectorAll('a[href]');
+          links.forEach(function(a) {
+            try {
+              var href = a.href || a.getAttribute('href') || '';
+              if (!href || href.startsWith('javascript:') || href.includes('google.com/search') || href.startsWith('#')) return;
+              // Xử lý các link chuyển hướng của Google /url?q=... hoặc /url?url=...
+              if (href.includes('/url?')) {
+                var m = href.match(/[?&](?:url|q)=([^&]+)/);
+                if (m) {
+                  try { href = decodeURIComponent(m[1]); } catch(e) {}
+                }
+              }
+              var norm = href.replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/+$/, '').toLowerCase();
+              var base = norm.split('?')[0].replace(/\/+$/, '');
+
+              if (visitedSet.has(norm) || visitedSet.has(base)) {
+                a.style.setProperty('color', '#681da8', 'important');
+                a.querySelectorAll('h3, [role="heading"], .DKV0Md, .LC20lb, .BNeawe, span').forEach(function(el) {
+                  el.style.setProperty('color', '#681da8', 'important');
+                });
+              }
+            } catch(e) {}
+          });
+        };
+
+        applyHighlight();
+        if (window.MutationObserver) {
+          var obs = new MutationObserver(function() {
+            applyHighlight();
+          });
+          obs.observe(document.body || document.documentElement, { childList: true, subtree: true });
+        }
+      };
+
+      // Yêu cầu app gửi danh sách lịch sử trình duyệt để tô màu
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_VISITED_URLS' }));
+      }
+      window.addEventListener('pageshow', function() {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'REQUEST_VISITED_URLS' }));
+        }
+      });
+    }
+  } catch(e) {}
+
   // 4. Hỗ trợ toàn màn hình, PiP & Giữ màn hình sáng cho Trình phát Video
   try {
     var setupVideoPlayer = function(v) {

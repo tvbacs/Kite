@@ -1781,22 +1781,22 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           Tìm kiếm hoặc nhập URL
         </Text>
 
-        {/* Cụm icon bên phải: icon mic cạnh icon search bên phải ngoài cùng */}
+        {/* Cụm icon bên phải: Tìm kiếm bằng giọng nói (Mic) & Quét ảnh Google Lens (Lens) */}
         <View style={styles.homeSearchRightGroup}>
           <TouchableOpacity
             onPress={() => setVoiceModalVisible(true)}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             activeOpacity={0.7}
           >
-            <Feather name="mic" size={20} color={isIncognito ? '#9aa0a6' : '#202124'} />
+            <Feather name="mic" size={20} color={isIncognito ? '#9aa0a6' : '#5f6368'} />
           </TouchableOpacity>
           <TouchableOpacity
-            onPress={onFocusSearch}
+            onPress={onSearchByImage}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={{ marginLeft: 14 }}
             activeOpacity={0.7}
           >
-            <Feather name="search" size={20} color={isIncognito ? '#9aa0a6' : '#202124'} />
+            <MaterialCommunityIcons name="google-lens" size={21} color={isIncognito ? '#9aa0a6' : '#5f6368'} />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -2190,12 +2190,12 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
               <Feather name="mic" size={19} color="#9aa0a6" />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={onFocusSearch}
+              onPress={onSearchByImage}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               style={{ marginLeft: 14 }}
               activeOpacity={0.7}
             >
-              <Feather name="search" size={19} color="#9aa0a6" />
+              <MaterialCommunityIcons name="google-lens" size={20} color="#9aa0a6" />
             </TouchableOpacity>
           </View>
         </TouchableOpacity>

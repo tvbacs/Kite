@@ -117,14 +117,16 @@ function BrowserMain() {
 
   // Refs
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userInitiatedRef = useRef<boolean>(false);
   const handleNavigateRef = useRef<(url: string) => void>(() => {});
 
   const showToast = (msg: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(msg);
-    setTimeout(() => {
+    toastTimerRef.current = setTimeout(() => {
       setToastMessage(null);
-    }, 2500);
+    }, 2800);
   };
 
   const triggerLoadingSafetyTimer = () => {
@@ -774,6 +776,45 @@ function BrowserMain() {
       return;
     }
 
+    const code = nativeEvent.code;
+    const description = (nativeEvent.description || '').toLowerCase();
+    const domain = (nativeEvent.domain || '');
+
+    // Bỏ qua các lỗi hủy điều hướng (Navigation Cancellation / Redirects):
+    // 1. iOS WKWebView: code -999 (NSURLErrorCancelled) phát sinh khi chuyển hướng hoặc hủy request cũ giữa chừng
+    // 2. iOS WKWebView: code 102 (WebKitErrorDomain - Frame load interrupted)
+    // 3. Android: code -1 (ERR_ABORTED)
+    if (
+      code === -999 ||
+      code === 102 ||
+      code === -1 ||
+      description.includes('cancelled') ||
+      description.includes('-999') ||
+      description.includes('err_aborted') ||
+      description.includes('frame load interrupted') ||
+      (domain === 'NSURLErrorDomain' && code === -999)
+    ) {
+      return;
+    }
+
+    // Không chuyển sang màn hình Offline đối với các URL trung gian xác thực (Google OAuth 2FA, CheckCookie, Token Handshake)
+    const isAuthHandshake =
+      isLegitimateAuthUrl(failUrl) ||
+      failUrl.includes('/CheckCookie') ||
+      failUrl.includes('accounts.google.com') ||
+      failUrl.includes('myaccount.google.com') ||
+      failUrl.includes('oauth');
+    if (isAuthHandshake) {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === tabId ? { ...t, isLoading: false } : t))
+      );
+      if (tabId === activeTabIdRef.current) {
+        setIsLoading(false);
+        progressBus.set(1);
+      }
+      return;
+    }
+
     const targetOfflineUrl = tab?.url || (failUrl !== 'about:blank' ? failUrl : '');
     if (targetOfflineUrl) {
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
@@ -1181,11 +1222,6 @@ function BrowserMain() {
         )}
 
 
-        {toastMessage && (
-          <View style={styles.toastContainer}>
-            <Text style={styles.toastText}>{toastMessage}</Text>
-          </View>
-        )}
       </View>
 
       {/* 3. THANH ĐIỀU HƯỚNG BOTTOM BAR */}
@@ -1209,6 +1245,13 @@ function BrowserMain() {
           onToggleTranslate={shield.handleToggleTranslate}
           onOpenSitePermissions={handleOpenSitePermissionsFromBottomBar}
         />
+      )}
+
+      {/* Toast thông báo nổi phía trên Bottom Bar (luôn hiển thị rõ, không bị che khuất) */}
+      {toastMessage && (
+        <View style={styles.toastContainer} pointerEvents="none">
+          <Text style={styles.toastText}>{toastMessage}</Text>
+        </View>
       )}
 
       {/* 4. MODALS & SHEETS */}

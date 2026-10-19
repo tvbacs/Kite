@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { View, TouchableOpacity, StyleSheet, Text, Platform } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface BottomBarProps {
@@ -173,6 +174,25 @@ export const BottomBar = memo<BottomBarProps>(({
             ? displayDomain
             : placeholder || 'Tìm hoặc nhập tên trang web...'}
         </Text>
+
+        {/* Nút Quét ảnh Google Lens khi ở Trang chủ */}
+        {!isBrowsing && onSearchByImage && (
+          <TouchableOpacity
+            style={styles.pillActionBtn}
+            onPress={(e) => {
+              e.stopPropagation();
+              onSearchByImage();
+            }}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="google-lens"
+              size={19}
+              color={isIncognito ? '#9aa0a6' : subIconColor}
+            />
+          </TouchableOpacity>
+        )}
 
         {/* Nút Dịch nhanh trang web (1 chạm để dịch sang tiếng Việt) */}
         {isBrowsing && onToggleTranslate && (

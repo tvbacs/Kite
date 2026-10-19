@@ -529,7 +529,7 @@ export function useInitialSetup({
                   AsyncStorage.setItem(STORAGE_SAVED_ACCOUNTS_KEY, JSON.stringify(list));
                 });
               }
-              showToast(`Đăng nhập Google thành công! (${profile.name})`);
+              showToast(`Đăng nhập Google thành công! (${profile.name || profile.email})`);
             }
             clearTabSnapshot(activeTabId);
             setTabs((prev) => {

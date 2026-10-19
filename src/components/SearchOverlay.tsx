@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { STORAGE_HISTORY_KEY, HistoryItem } from './HistorySheet';
@@ -754,6 +755,26 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = ({
                 activeOpacity={0.6}
               >
                 <Feather name="x" size={17} color={subColor} />
+              </TouchableOpacity>
+            )}
+
+            {/* Quét ảnh Google Lens khi chưa nhập */}
+            {!text && onSearchByImage && (
+              <TouchableOpacity
+                style={styles.pillActionBtn}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  onCancel();
+                  onSearchByImage();
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="google-lens"
+                  size={19}
+                  color={subColor}
+                />
               </TouchableOpacity>
             )}
 

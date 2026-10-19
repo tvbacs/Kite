@@ -15,8 +15,11 @@ export const isOAuthCallback = (url: string | null | undefined): boolean => {
   if (!url) return false;
   const lower = url.trim().toLowerCase();
 
-  // 1. Cho phép các trang xác thực Google và API hoạt động bình thường
+  // 0. TUYỆT ĐỐI KHÔNG coi trang khởi tạo / yêu cầu đăng nhập là Callback!
+  // URL khởi tạo đăng nhập (/auth/v1/authorize) luôn có redirect_to chứa chuỗi "auth-callback" trong query param!
   if (
+    lower.includes('/auth/v1/authorize') ||
+    lower.includes('prompt=select_account') ||
     lower.includes('accounts.google.com') ||
     lower.includes('myaccount.google.com') ||
     lower.includes('oauth2.googleapis.com')
@@ -24,11 +27,12 @@ export const isOAuthCallback = (url: string | null | undefined): boolean => {
     return false;
   }
 
-  // 2. CHỈ bắt các callback dành riêng cho App Kite:
+  // 1. Callback trả về Custom Scheme của Kite:
   if (lower.startsWith('kite://')) {
     return true;
   }
 
+  // 2. Callback trả về localhost dev:
   if (
     lower.startsWith('http://localhost:3000') ||
     lower.startsWith('http://127.0.0.1:3000') ||
@@ -37,9 +41,11 @@ export const isOAuthCallback = (url: string | null | undefined): boolean => {
     return true;
   }
 
+  // 3. Callback trả về Supabase sau khi Google xác thực xong (phải là endpoint callback hoặc chứa token/code):
   if (
-    lower.includes('ivwnjrugslrvsxssufco.supabase.co') &&
-    (lower.includes('auth-callback') || lower.includes('#access_token=') || lower.includes('&access_token='))
+    lower.includes('ivwnjrugslrvsxssufco.supabase.co/auth/v1/callback') ||
+    (lower.includes('ivwnjrugslrvsxssufco.supabase.co') &&
+      (lower.includes('#access_token=') || lower.includes('&access_token=') || lower.includes('?code=') || lower.includes('&code=')))
   ) {
     return true;
   }
