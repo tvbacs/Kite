@@ -475,6 +475,9 @@ export async function syncUserCloudData(
       const mergedList = Array.from(mergedMap.values());
       await AsyncStorage.setItem(bmKey, JSON.stringify(mergedList));
       await AsyncStorage.setItem('@kite_user_bookmarks', JSON.stringify(mergedList));
+      const scKey = email ? `@kite_shortcuts_${email.toLowerCase()}` : '@kite_shortcuts';
+      await AsyncStorage.setItem(scKey, JSON.stringify(mergedList));
+      await AsyncStorage.setItem('@kite_shortcuts', JSON.stringify(mergedList));
       callbacks?.onBookmarksLoaded?.(mergedList);
 
       // Nếu máy có thêm bookmark chưa có trên cloud -> Đẩy lên cloud
