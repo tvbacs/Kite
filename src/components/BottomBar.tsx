@@ -26,6 +26,8 @@ interface BottomBarProps {
   onOpenSitePermissions?: () => void;
   isTranslated?: boolean;
   onToggleTranslate?: () => void;
+  isLoading?: boolean;
+  onReload?: () => void;
 }
 
 export const BottomBar = memo<BottomBarProps>(({
@@ -49,6 +51,8 @@ export const BottomBar = memo<BottomBarProps>(({
   onOpenSitePermissions,
   isTranslated = false,
   onToggleTranslate,
+  isLoading = false,
+  onReload,
 }) => {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 16 : 8);
@@ -194,22 +198,30 @@ export const BottomBar = memo<BottomBarProps>(({
           </TouchableOpacity>
         )}
 
-        {/* Nút Dịch nhanh trang web (1 chạm để dịch sang tiếng Việt) */}
-        {isBrowsing && onToggleTranslate && (
+        {/* Nút Tải lại trang (Reload / Dừng tải) ở thanh search nav */}
+        {isBrowsing && onReload && (
           <TouchableOpacity
             style={styles.pillActionBtn}
             onPress={(e) => {
               e.stopPropagation();
-              onToggleTranslate();
+              onReload();
             }}
             hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
             activeOpacity={0.7}
           >
-            <Ionicons
-              name="language"
-              size={18}
-              color={isTranslated ? '#007aff' : isIncognito ? '#bdc1c6' : subIconColor}
-            />
+            {isLoading ? (
+              <Feather
+                name="x"
+                size={17}
+                color={isIncognito ? '#f87171' : '#ef4444'}
+              />
+            ) : (
+              <Feather
+                name="rotate-cw"
+                size={16}
+                color={isIncognito ? '#bdc1c6' : subIconColor}
+              />
+            )}
           </TouchableOpacity>
         )}
 

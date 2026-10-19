@@ -605,6 +605,31 @@ function BrowserMain() {
     }
   };
 
+  const handleReloadOrStop = useCallback(() => {
+    const curTab = currentTab;
+    if (curTab?.isOffline) {
+      if (curTab.offlineUrl) {
+        nav.handleNavigate(curTab.offlineUrl);
+      }
+      showToast('Đang thử kết nối lại...');
+      return;
+    }
+    const activeWV = getActiveWebView();
+    if (!activeWV) return;
+    if (isLoading) {
+      activeWV.stopLoading();
+      setIsLoading(false);
+      setLoadProgress(0);
+      showToast('Đã dừng tải');
+    } else {
+      setIsLoading(true);
+      setLoadProgress(0.15);
+      triggerLoadingSafetyTimer();
+      activeWV.reload();
+      showToast('Đang tải lại trang...');
+    }
+  }, [currentTab, isLoading, nav, showToast, triggerLoadingSafetyTimer]);
+
   const handleSearchByImage = () => {
     setLensScreenShotUri(null);
     setLensModalVisible(true);
@@ -671,6 +696,7 @@ function BrowserMain() {
   const baseInjectedBefore = useMemo(() => {
     return (
       (shield.stats.isShieldActive ? INJECTED_BEFORE_CONTENT : '') +
+      PULL_GESTURE_SCRIPT +
       getRegionInjectedScript(shield.regionSettings) +
       (shield.extensions.some((e) => e.id === 'ext-dark-mode' && e.enabled)
         ? DARK_MODE_START_SCRIPT
@@ -1321,8 +1347,8 @@ function BrowserMain() {
           isBookmarked={bookmarksAndHistory.isCurrentBookmarked}
           onToggleBookmark={handleToggleBookmarkFromBottomBar}
           isIncognito={isCurrentIncognito}
-          isTranslated={shield.isCurrentTranslated}
-          onToggleTranslate={shield.handleToggleTranslate}
+          isLoading={isLoading}
+          onReload={handleReloadOrStop}
           onOpenSitePermissions={handleOpenSitePermissionsFromBottomBar}
         />
       )}

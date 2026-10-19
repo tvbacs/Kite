@@ -87,7 +87,12 @@ export const WebTopBar: React.FC<WebTopBarProps> = ({
       ]}
       pointerEvents="box-none"
     >
-      <View style={styles.webTopGreetingRow}>
+      <View
+        style={styles.webTopGreetingRow}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         {/* Nút Khiên chặn quảng cáo bên trái: Luân phiên 'On' (xanh blue) và 'VPN' (xanh green) */}
         <TouchableOpacity
           style={styles.webTopShieldBtn}
