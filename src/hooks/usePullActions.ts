@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
-import { PullActionType } from '../components/PullDownBar';
+import { PullActionType, PULL_TRIGGER_THRESHOLD } from '../components/PullDownBar';
 import { BrowserTab } from '../types/browser';
 
 interface UsePullActionsProps {
@@ -44,6 +44,8 @@ export function usePullActions({
   const pullDistanceRef = useRef<number>(0);
   const activePullActionRef = useRef<PullActionType>('reload');
   const isPullingRef = useRef<boolean>(false);
+  const isTriggerEngagedRef = useRef<boolean>(false);
+  const lastReloadTimeRef = useRef<number>(0);
   const [homeRefreshTrigger, setHomeRefreshTrigger] = useState<number>(0);
 
   const triggerHaptic = (style: 'light' | 'medium' | 'selection') => {
@@ -64,7 +66,8 @@ export function usePullActions({
   const handlePullMove = (dy: number, dx: number) => {
     if (isEditing) return;
 
-    if (!isPullingRef.current && (dy < 8 || (Math.abs(dx) > dy * 0.8 && dy < 28))) {
+    // Không kích hoạt nếu kéo quá ít (< 18px) hoặc vuốt ngang nhiều hơn vuốt dọc
+    if (!isPullingRef.current && (dy < 18 || (Math.abs(dx) > dy * 0.8 && dy < 40))) {
       return;
     }
 
@@ -72,6 +75,7 @@ export function usePullActions({
       pullDistanceRef.current = 0;
       lastReportedDistRef.current = 0;
       lastReportedOffsetRef.current = 0;
+      isTriggerEngagedRef.current = false;
       if (isPullingRef.current) {
         isPullingRef.current = false;
         setPullDistance(0);
@@ -81,7 +85,8 @@ export function usePullActions({
       return;
     }
 
-    const distance = Math.max(0, (dy - 4) * 0.75);
+    // Tính toán khoảng cách kéo mượt mà, có độ cản tự nhiên giống Safari/Chrome
+    const distance = Math.max(0, (dy - 12) * 0.72);
     pullDistanceRef.current = distance;
 
     if (!isPullingRef.current) {
@@ -100,24 +105,34 @@ export function usePullActions({
       setPullOffset(dx);
     }
 
+    // Ngưỡng chuyển hành động ngang (trái: Thẻ mới, giữa: Tải lại, phải: Đóng thẻ)
+    // Tăng lên 55px để tránh việc ngón tay hơi lệch góc vô tình chuyển sang đóng/mở thẻ
     let nextAction: PullActionType = 'reload';
-    if (dx < -30) {
+    if (dx < -55) {
       nextAction = 'new_tab';
-    } else if (dx > 30) {
+    } else if (dx > 55) {
       nextAction = 'close_tab';
     }
 
     activePullActionRef.current = nextAction;
 
-    if (distance >= 20) {
-      if (nextAction !== prevActionRef.current) {
-        prevActionRef.current = nextAction;
-        setActivePullAction(nextAction);
+    // Rung phản hồi haptic khi vừa vượt qua ngưỡng kích hoạt (70px) hoặc khi tụt xuống dưới ngưỡng
+    if (distance >= PULL_TRIGGER_THRESHOLD) {
+      if (!isTriggerEngagedRef.current) {
+        isTriggerEngagedRef.current = true;
+        triggerHaptic('medium');
+      }
+    } else {
+      if (isTriggerEngagedRef.current) {
+        isTriggerEngagedRef.current = false;
         triggerHaptic('selection');
       }
-    } else if (nextAction !== prevActionRef.current) {
+    }
+
+    if (nextAction !== prevActionRef.current) {
       prevActionRef.current = nextAction;
       setActivePullAction(nextAction);
+      triggerHaptic('selection');
     }
   };
 
@@ -126,6 +141,13 @@ export function usePullActions({
     const curTab = tabs.find((t) => t.id === curTabId);
 
     if (action === 'reload') {
+      const now = Date.now();
+      // Chống reload liên tục (debounce 1.5 giây)
+      if (now - lastReloadTimeRef.current < 1500) {
+        return;
+      }
+      lastReloadTimeRef.current = now;
+
       if (curTab?.isOffline) {
         handleRetryOfflineTab(curTabId);
         showToast('Đang thử kết nối lại...');
@@ -158,6 +180,7 @@ export function usePullActions({
 
     pullDistanceRef.current = 0;
     isPullingRef.current = false;
+    isTriggerEngagedRef.current = false;
     activePullActionRef.current = 'reload';
     prevActionRef.current = 'reload';
 
@@ -166,7 +189,8 @@ export function usePullActions({
     setPullOffset(0);
     setActivePullAction('reload');
 
-    const isActionTriggered = curDist >= 18 || (curAction !== 'reload' && curDist >= 12);
+    // Chỉ thực hiện khi người dùng cố ý kéo vượt qua ngưỡng kích hoạt 70px (chuẩn Chrome)
+    const isActionTriggered = curDist >= PULL_TRIGGER_THRESHOLD;
     if (wasPulling && isActionTriggered) {
       triggerHaptic('medium');
       executePullAction(curAction);
@@ -176,6 +200,7 @@ export function usePullActions({
   const handlePullCancel = () => {
     pullDistanceRef.current = 0;
     isPullingRef.current = false;
+    isTriggerEngagedRef.current = false;
     activePullActionRef.current = 'reload';
     prevActionRef.current = 'reload';
 
@@ -198,7 +223,7 @@ export function usePullActions({
   const handleHeaderTouchMove = (e: any) => {
     const dy = e.nativeEvent.pageY - headerTouchStartY.current;
     const dx = e.nativeEvent.pageX - headerTouchStartX.current;
-    if (dy > 8) {
+    if (dy > 18) {
       headerIsPulling.current = true;
       handlePullMove(dy, dx);
     }

@@ -34,9 +34,9 @@ export const PULL_GESTURE_SCRIPT = `
       swipeStartY = clientY;
       isSwipeTracking = true;
 
-      // Chỉ kích hoạt kéo khi trang đang ở đỉnh trên cùng (scrollY <= 20)
+      // Chỉ kích hoạt kéo khi trang đang ở đỉnh trên cùng (scrollY <= 1)
       var scrollY = getScrollTop();
-      if (scrollY <= 20) {
+      if (scrollY <= 1) {
         pullTouchStartY = clientY;
         pullTouchStartX = clientX;
         isPullTracking = true;
@@ -66,7 +66,18 @@ export const PULL_GESTURE_SCRIPT = `
     var dx = e.touches[0].clientX - pullTouchStartX;
 
     // Nếu vuốt ngược lên trên: Hủy cử chỉ kéo
-    if (dy < -10) {
+    if (dy < -5) {
+      isPullTracking = false;
+      if (pullActive) {
+        pullActive = false;
+        send('KITE_PULL_CANCEL');
+      }
+      return;
+    }
+
+    // Nếu trang bị cuộn xuống (scrollY > 1), người dùng đang cuộn nội dung web -> Hủy cử chỉ kéo
+    var currentScrollY = getScrollTop();
+    if (currentScrollY > 1) {
       isPullTracking = false;
       if (pullActive) {
         pullActive = false;
@@ -77,18 +88,13 @@ export const PULL_GESTURE_SCRIPT = `
 
     // Nếu chưa vào trạng thái kéo và chuyển động thuần ngang (như vuốt carousel/slider) thì bỏ qua
     if (!pullActive) {
-      if (Math.abs(dx) > 30 && Math.abs(dx) > dy * 1.5) {
+      if (Math.abs(dx) > 30 && Math.abs(dx) > dy * 1.2) {
         isPullTracking = false;
         return;
       }
-      // Cần kéo xuống tối thiểu 6px để kích hoạt
-      if (dy < 6) return;
+      // Cần kéo xuống tối thiểu 18px để bắt đầu kích hoạt giao diện kéo
+      if (dy < 18) return;
 
-      var currentScrollY = getScrollTop();
-      if (currentScrollY > 20) {
-        isPullTracking = false;
-        return;
-      }
       pullActive = true;
     }
 
