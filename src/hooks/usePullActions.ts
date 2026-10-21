@@ -66,8 +66,8 @@ export function usePullActions({
   const handlePullMove = (dy: number, dx: number) => {
     if (isEditing) return;
 
-    // Không kích hoạt nếu kéo quá ít (< 18px) hoặc vuốt ngang nhiều hơn vuốt dọc
-    if (!isPullingRef.current && (dy < 18 || (Math.abs(dx) > dy * 0.8 && dy < 40))) {
+    // Không kích hoạt nếu kéo quá ít (< 30px) hoặc vuốt ngang nhiều hơn vuốt dọc
+    if (!isPullingRef.current && (dy < 30 || (Math.abs(dx) > dy * 0.75 && dy < 60))) {
       return;
     }
 
@@ -85,8 +85,9 @@ export function usePullActions({
       return;
     }
 
-    // Tính toán khoảng cách kéo mượt mà, có độ cản tự nhiên giống Safari/Chrome
-    const distance = Math.max(0, (dy - 12) * 0.72);
+    // Độ cản tự nhiên: trừ 25px deadzone đầu tiên, hệ số cản 0.52
+    // Cần kéo thực tế khoảng ~215px mới đạt ngưỡng kích hoạt 100px (chuẩn Chrome, triệt tiêu 100% việc vô tình reload khi cuộn trang)
+    const distance = Math.max(0, (dy - 25) * 0.52);
     pullDistanceRef.current = distance;
 
     if (!isPullingRef.current) {
@@ -106,17 +107,17 @@ export function usePullActions({
     }
 
     // Ngưỡng chuyển hành động ngang (trái: Thẻ mới, giữa: Tải lại, phải: Đóng thẻ)
-    // Tăng lên 55px để tránh việc ngón tay hơi lệch góc vô tình chuyển sang đóng/mở thẻ
+    // Mở rộng vùng an toàn cho Tải lại lên 65px mỗi bên (vùng giữa an toàn 130px)
     let nextAction: PullActionType = 'reload';
-    if (dx < -55) {
+    if (dx < -65) {
       nextAction = 'new_tab';
-    } else if (dx > 55) {
+    } else if (dx > 65) {
       nextAction = 'close_tab';
     }
 
     activePullActionRef.current = nextAction;
 
-    // Rung phản hồi haptic khi vừa vượt qua ngưỡng kích hoạt (70px) hoặc khi tụt xuống dưới ngưỡng
+    // Rung phản hồi haptic khi vừa vượt qua ngưỡng kích hoạt (100px) hoặc khi tụt xuống dưới ngưỡng
     if (distance >= PULL_TRIGGER_THRESHOLD) {
       if (!isTriggerEngagedRef.current) {
         isTriggerEngagedRef.current = true;
@@ -223,7 +224,7 @@ export function usePullActions({
   const handleHeaderTouchMove = (e: any) => {
     const dy = e.nativeEvent.pageY - headerTouchStartY.current;
     const dx = e.nativeEvent.pageX - headerTouchStartX.current;
-    if (dy > 18) {
+    if (dy > 30) {
       headerIsPulling.current = true;
       handlePullMove(dy, dx);
     }

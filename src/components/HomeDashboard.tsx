@@ -1517,7 +1517,7 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
         isPullingRef.current = false;
         if (onPullCancel) onPullCancel();
       }
-    } else if (scrollYRef.current <= 2 && dy > 18) {
+    } else if (scrollYRef.current <= 2 && dy > 30) {
       if (dy > Math.abs(dx) * 0.8) {
         isPullingRef.current = true;
         if (onPullMove) onPullMove(dy, dx);

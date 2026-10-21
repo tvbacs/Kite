@@ -92,8 +92,8 @@ export const PULL_GESTURE_SCRIPT = `
         isPullTracking = false;
         return;
       }
-      // Cần kéo xuống tối thiểu 18px để bắt đầu kích hoạt giao diện kéo
-      if (dy < 18) return;
+      // Cần kéo xuống tối thiểu 30px để bắt đầu kích hoạt giao diện kéo (loại bỏ hoàn toàn các cú vuốt nhẹ khi cuộn trang)
+      if (dy < 30) return;
 
       pullActive = true;
     }

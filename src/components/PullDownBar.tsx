@@ -4,10 +4,10 @@ import { Feather } from '@expo/vector-icons';
 
 export type PullActionType = 'new_tab' | 'reload' | 'close_tab';
 
-export const PULL_TRIGGER_THRESHOLD = 70;
+export const PULL_TRIGGER_THRESHOLD = 100;
 
 interface PullDownBarProps {
-  pullDistance: number; // 0 to ~100
+  pullDistance: number; // 0 to ~120
   pullOffset: number; // horizontal dx: negative is left, positive is right
   isPulling: boolean;
   activeAction: PullActionType;
@@ -27,13 +27,13 @@ export const PullDownBar: React.FC<PullDownBarProps> = ({
     return null;
   }
 
-  // Bắt đầu hiện từ 15px, đạt 100% khi tới ngưỡng kích hoạt 70px (chuẩn Chrome, không bị nhạy khi cuộn trang)
-  const progress = Math.min(Math.max((pullDistance - 15) / 55, 0), 1);
+  // Bắt đầu hiện từ 20px, đạt 100% khi tới ngưỡng kích hoạt 100px (đòi hỏi thao tác kéo có chủ ý rõ ràng)
+  const progress = Math.min(Math.max((pullDistance - 20) / 75, 0), 1);
   const opacity = progress;
   const isTriggered = pullDistance >= PULL_TRIGGER_THRESHOLD;
 
   // Di chuyển thanh bar nhẹ nhàng từ trên xuống dưới
-  const translateY = (progress - 1) * 18 + Math.min(pullDistance * 0.42, 38);
+  const translateY = (progress - 1) * 20 + Math.min(pullDistance * 0.38, 42);
 
   const isDark = isIncognito;
   const getBubbleBg = (action: PullActionType) => {
