@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
 import { BrowserTab, ShieldStats, UserProfile, DetectedMedia, isPersistable } from '../types/browser';
 import { getDomain, getHostname } from '../utils/tld';
+import { isSuspiciousAdUrl } from '../constants/blocklist';
 import {
   translateItemsBatch,
 } from '../services/translateService';
@@ -57,6 +58,7 @@ interface UseWebViewMessageProps {
   handleGoBackRef: React.MutableRefObject<() => void>;
   showToast: (msg: string) => void;
   onSwitchAccount?: (newProfile: UserProfile, previousProfile: UserProfile) => void;
+  onNewTab?: (url?: string) => void;
 }
 
 export function useWebViewMessage({
@@ -81,6 +83,7 @@ export function useWebViewMessage({
   handleGoBackRef,
   showToast,
   onSwitchAccount,
+  onNewTab,
 }: UseWebViewMessageProps) {
   const isVideoPlayingRef = useRef<boolean>(false);
 
@@ -189,6 +192,18 @@ export function useWebViewMessage({
       } else if (data.type === 'BLOCKED_POPUP') {
         pendingShieldStatsRef.current.popups += 1;
         scheduleShieldFlush();
+      } else if (data.type === 'OPEN_NEW_TAB') {
+        const targetUrl = data.url;
+        if (targetUrl && typeof targetUrl === 'string') {
+          const curHost = getHostname(currentTab?.url || '') || '';
+          if (isSuspiciousAdUrl(targetUrl, curHost)) {
+            pendingShieldStatsRef.current.popups += 1;
+            scheduleShieldFlush();
+            showToast('Đã chặn cửa sổ quảng cáo');
+          } else if (onNewTab) {
+            onNewTab(targetUrl);
+          }
+        }
       } else if (data.type === 'BLOCKED_OVERLAYS') {
         pendingShieldStatsRef.current.overlays += (data.count || 1);
         scheduleShieldFlush();

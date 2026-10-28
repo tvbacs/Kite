@@ -289,6 +289,20 @@ export const INJECTED_BEFORE_CONTENT = `
         var g = BLOCKED_GAMBLING_KEYWORDS[j];
         if (h.includes(g)) return true;
       }
+
+      var lower = urlStr.toLowerCase();
+      if (
+        lower.indexOf('zoneid=') !== -1 ||
+        lower.indexOf('token=') !== -1 ||
+        lower.indexOf('wmn=') !== -1 ||
+        lower.indexOf('qiiteobhbk=') !== -1 ||
+        lower.indexOf('cpm=') !== -1 ||
+        lower.indexOf('ad_id=') !== -1 ||
+        lower.indexOf('popunder') !== -1 ||
+        lower.indexOf('direct-link') !== -1
+      ) {
+        return true;
+      }
     } catch(e) {}
     return false;
   }
@@ -380,12 +394,29 @@ export const INJECTED_BEFORE_CONTENT = `
     };
   } catch(e) {}
 
-  // 2. Khóa hoàn toàn window.open với đầy đủ thuộc tính giả lập (tránh lỗi script video player bị crash)
+  // 1d. Theo dõi tương tác chủ động của người dùng (User Gesture Tracking)
+  // Trình duyệt chỉ cho phép mở cửa sổ mới nếu có tương tác chủ động (click/touch) từ người dùng trong vòng 2.5 giây
+  var _lastUserGestureTime = 0;
+  function _recordUserGesture(e) {
+    if (e && (e.isTrusted || e.isTrusted === undefined)) {
+      _lastUserGestureTime = Date.now();
+    }
+  }
+  window.addEventListener('click', _recordUserGesture, true);
+  window.addEventListener('touchend', _recordUserGesture, true);
+  window.addEventListener('pointerup', _recordUserGesture, true);
+
+  function isUserGestureActive() {
+    return (Date.now() - _lastUserGestureTime) < 2500;
+  }
+
+  // 2. Khóa hoàn toàn window.open với đầy đủ thuộc tính giả lập (Pop-up Blocker chuẩn trình duyệt)
+  // Tuyệt đối KHÔNG BAO GIỜ điều hướng tab hiện tại (window.location.href) khi một script gọi window.open()!
   var fakeWin = {
-    closed: true,
+    closed: false,
     focus: function(){},
     blur: function(){},
-    close: function(){},
+    close: function(){ this.closed = true; },
     postMessage: function(){},
     addEventListener: function(){},
     removeEventListener: function(){},
@@ -398,23 +429,32 @@ export const INJECTED_BEFORE_CONTENT = `
       head: {}
     },
     location: {
-      get href() { return window.location.href; },
+      get href() { return ''; },
       set href(newUrl) {
-        if (newUrl && (isLegitimateAuth(newUrl) || !isKnownAdOrGambling(newUrl))) {
+        if (!newUrl || typeof newUrl !== 'string') return;
+        if (isLegitimateAuth(newUrl)) {
           try { window.location.href = newUrl; } catch(e) {}
+          return;
         }
-      },
-      replace: function(newUrl) {
-        if (newUrl && (isLegitimateAuth(newUrl) || !isKnownAdOrGambling(newUrl))) {
-          try { window.location.replace(newUrl); } catch(e) {}
+        // Nếu là quảng cáo hoặc không có tương tác người dùng -> Chặn đứng
+        if (isKnownAdOrGambling(newUrl) || !isUserGestureActive()) {
+          window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
+          return;
         }
+        // Nếu có tương tác người dùng hợp lệ -> MỞ TAB MỚI trong Kite (chuẩn trình duyệt)!
+        try {
+          var targetFull = new URL(newUrl, window.location.href).href;
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'OPEN_NEW_TAB',
+              url: targetFull
+            }));
+          }
+        } catch(e) {}
       },
-      assign: function(newUrl) {
-        if (newUrl && (isLegitimateAuth(newUrl) || !isKnownAdOrGambling(newUrl))) {
-          try { window.location.assign(newUrl); } catch(e) {}
-        }
-      },
-      reload: function(){ try { window.location.reload(); } catch(e) {} }
+      replace: function(newUrl) { this.href = newUrl; },
+      assign: function(newUrl) { this.href = newUrl; },
+      reload: function(){}
     }
   };
 
@@ -422,21 +462,37 @@ export const INJECTED_BEFORE_CONTENT = `
     if (!url || typeof url !== 'string' || url === '' || url === 'about:blank') {
       return fakeWin;
     }
-    // ƯU TIÊN TUYỆT ĐỐI CHO AUTH / ĐĂNG NHẬP / THANH TOÁN (Google, Apple, Facebook, Microsoft, Zalo...)
+    // 1. ƯU TIÊN TUYỆT ĐỐI CHO AUTH / ĐĂNG NHẬP / THANH TOÁN (Google, Apple, Facebook, Microsoft, Zalo...)
     if (isLegitimateAuth(url)) {
       try {
         window.location.href = url;
       } catch(e) {}
       return fakeWin;
     }
-    // Chặn nếu URL dẫn tới mạng quảng cáo hoặc nhà cái cá cược
+    // 2. Chặn nếu URL dẫn tới mạng quảng cáo hoặc nhà cái cá cược
     if (isKnownAdOrGambling(url)) {
       window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
       return fakeWin;
     }
-    // Đối với URL nội dung hợp lệ khác: Cho phép điều hướng trực tiếp trang hiện tại đến URL đích trong WebView di động
+    // 3. Cơ chế Pop-up Blocker: Chỉ cho phép mở nếu có User Gesture (tương tác chủ động của người dùng)
+    if (!isUserGestureActive()) {
+      window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
+      return fakeWin;
+    }
+    // 4. Khi có User Gesture hợp lệ: MỞ TAB MỚI trong Kite (giống Chrome)!
+    // TUYỆT ĐỐI KHÔNG cướp URL của tab hiện tại!
     try {
-      window.location.href = url;
+      var resolvedUrl = url;
+      try {
+        resolvedUrl = new URL(url, window.location.href).href;
+      } catch(eResolve) {}
+
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'OPEN_NEW_TAB',
+          url: resolvedUrl
+        }));
+      }
     } catch(e) {}
     return fakeWin;
   };
@@ -470,15 +526,34 @@ export const INJECTED_BEFORE_CONTENT = `
     var _origAnchorClick = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function() {
       var href = this.href || this.getAttribute('href') || '';
-      if (href && isKnownAdOrGambling(href)) {
-        window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
-        return;
+      if (href) {
+        if (isKnownAdOrGambling(href)) {
+          window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
+          return;
+        }
+        var target = (this.target || this.getAttribute('target') || '').toLowerCase();
+        if (target === '_blank' || target === '_new') {
+          if (!isUserGestureActive()) {
+            window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
+            return;
+          }
+          try {
+            var fullUrl = new URL(href, window.location.href).href;
+            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'OPEN_NEW_TAB',
+                url: fullUrl
+              }));
+              return;
+            }
+          } catch(eA) {}
+        }
       }
       return _origAnchorClick.apply(this, arguments);
     };
   } catch(e) {}
 
-  // 2d. Chặn lớp phủ quảng cáo video cụ thể (như #transparentLayer trên web phim)
+  // 2d. Chặn lớp phủ quảng cáo video cụ thể và bẫy clickjacking (như slooshsnarer, transparentLayer...)
   // TUYỆT ĐỐI KHÔNG can thiệp vào các thành phần UI hợp lệ: thanh menu 3 gạch, hộp thoại hỏi cookie, modal, dropdown
   try {
     document.addEventListener('click', function(e) {
@@ -489,27 +564,41 @@ export const INJECTED_BEFORE_CONTENT = `
       if (isLegitimateUIElement(target)) return;
 
       // Chỉ can thiệp nếu là các bẫy lớp phủ quảng cáo cụ thể đã biết
-      var isKnownTrap = target.matches && target.matches('#transparentLayer, .playover, .video-ad-layer, .popunder-link, .float-ck, .aanetwork-ads-box, .dhw-ad-notice, .ad-overlay, #ad-overlay');
+      var isKnownTrap = target.matches && target.matches('#transparentLayer, .playover, .video-ad-layer, .popunder-link, .float-ck, .aanetwork-ads-box, .dhw-ad-notice, .ad-overlay, #ad-overlay, [class*="sloosh"], [id*="sloosh"], [class*="aclib"], [id*="aclib"]');
+
+      // Bẫy clickjacking lớp phủ toàn màn hình với z-index cực đại
+      if (!isKnownTrap && target.style) {
+        var computedZ = window.getComputedStyle ? window.getComputedStyle(target).zIndex : '';
+        var numZ = parseInt(computedZ || target.style.zIndex || '0', 10);
+        if (numZ >= 2147483640) {
+          isKnownTrap = true;
+        }
+      }
+
       if (isKnownTrap) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
         target.style.setProperty('display', 'none', 'important');
         target.style.setProperty('pointer-events', 'none', 'important');
+        target.style.setProperty('opacity', '0', 'important');
+        try { target.remove(); } catch(eRem) {}
         window.__kite_blocked_overlays = (window.__kite_blocked_overlays || 0) + 1;
         return false;
       }
     }, true);
   } catch(e) {}
 
-  // 3. Khóa stub window.aclib (Adcash / InPagePush / PopCash) để không tạo in-page push quảng cáo VPN/người lớn
+  // 3. Khóa stub window.aclib (Adcash / InPagePush / PopCash) và các biến quảng cáo popunder
   var fakeAclib = {
     runPop: function(){},
     runInPagePush: function(){},
     runBanner: function(){},
     runNative: function(){},
     runVideo: function(){},
-    runInter: function(){}
+    runInter: function(){},
+    getScript: function(){},
+    zoneId: 0
   };
   try {
     window.aclib = fakeAclib;
@@ -518,6 +607,12 @@ export const INJECTED_BEFORE_CONTENT = `
       set: function() {},
       configurable: false
     });
+  } catch(e) {}
+
+  try {
+    window._pop = window._pop || [];
+    window.__pop = window.__pop || [];
+    window.popns = window.popns || {};
   } catch(e) {}
 
   // 4. Xử lý alert an toàn: không nuốt alert hợp lệ, chỉ chặn alert lừa đảo VPN/virus
@@ -769,6 +864,20 @@ export const INJECTED_AFTER_CONTENT = `
         var g = BLOCKED_GAMBLING_KEYWORDS[j];
         if (h.includes(g)) return true;
       }
+
+      var lower = urlStr.toLowerCase();
+      if (
+        lower.indexOf('zoneid=') !== -1 ||
+        lower.indexOf('token=') !== -1 ||
+        lower.indexOf('wmn=') !== -1 ||
+        lower.indexOf('qiiteobhbk=') !== -1 ||
+        lower.indexOf('cpm=') !== -1 ||
+        lower.indexOf('ad_id=') !== -1 ||
+        lower.indexOf('popunder') !== -1 ||
+        lower.indexOf('direct-link') !== -1
+      ) {
+        return true;
+      }
     } catch(e) {}
     return false;
   }
@@ -843,11 +952,17 @@ export const INJECTED_AFTER_CONTENT = `
     var trapElement = null;
 
     try {
-      // Chỉ nhận diện các lớp phủ bẫy quảng cáo video cụ thể đã biết
-      var isKnownAdClass = target.matches && target.matches('#transparentLayer, .playover, .video-ad-layer, .popunder-link, .float-ck, .aanetwork-ads-box, .dhw-ad-notice, .ad-overlay, #ad-overlay, .quangcao, .qc-container, .qc-banner, #qc-floating, [id*="aclib"], [class*="aclib"]');
+      var isKnownAdClass = target.matches && target.matches('#transparentLayer, .playover, .video-ad-layer, .popunder-link, .float-ck, .aanetwork-ads-box, .dhw-ad-notice, .ad-overlay, #ad-overlay, .quangcao, .qc-container, .qc-banner, #qc-floating, [id*="aclib"], [class*="aclib"], [class*="sloosh"], [id*="sloosh"]');
       if (isKnownAdClass) {
         isOverlayTrap = true;
         trapElement = target;
+      } else if (target.style) {
+        var computedZ = window.getComputedStyle ? window.getComputedStyle(target).zIndex : '';
+        var numZ = parseInt(computedZ || target.style.zIndex || '0', 10);
+        if (numZ >= 2147483640) {
+          isOverlayTrap = true;
+          trapElement = target;
+        }
       }
     } catch(err) {}
 

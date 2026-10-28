@@ -378,6 +378,7 @@ function BrowserMain() {
     handleGoBackRef,
     showToast,
     onSwitchAccount: (newP, oldP) => handleSwitchAccountRef.current?.(newP, oldP),
+    onNewTab: (url) => handleNewTab(isIncognito, url),
   });
 
   modalsState.passwordSavePrompt = webViewMessage.passwordSavePrompt;

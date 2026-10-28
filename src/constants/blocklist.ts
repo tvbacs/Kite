@@ -89,6 +89,16 @@ export const BLOCKED_DOMAINS = [
   'mngbtt.com',
   'ptads.net',
   'delivery.trafficjunky.net',
+  'slooshsnarer.com',
+  'nr.slooshsnarer.com',
+  'onclickgate.com',
+  'onclickcpm.com',
+  'cpmrevenuegate.com',
+  'vtrun.net',
+  'vdo9.com',
+  'adexc.net',
+  'adshost2.com',
+  'ad-delivery.net',
 ];
 
 // Danh sách từ khóa nhà cái cá cược cụ thể (so khớp theo domain label, không dùng chuỗi con chung chung)
@@ -243,6 +253,11 @@ export const AD_SELECTORS = [
   '.inpage_ad_container',
   '.mobile-catfish',
   '.catfish-ad-banner',
+  'div[style*="2147483647"]',
+  'div[style*="2147483648"]',
+  'div[style*="2147483646"]',
+  '[class*="sloosh"]',
+  '[id*="sloosh"]',
   '.floating-close-ad',
 ];
 
@@ -393,7 +408,7 @@ export function isSuspiciousAdUrl(targetUrl: string, currentHost?: string): bool
   }
 
   // 3. Kiểm tra các TLD chuyên dùng cho link rác/quảng cáo nhảy trang
-  const adTlds = ['.top', '.bid', '.click', '.buzz', '.cfd', '.rest', '.stream', '.live', '.xyz', '.link'];
+  const adTlds = ['.top', '.bid', '.click', '.buzz', '.cfd', '.rest', '.stream', '.live', '.xyz', '.link', '.wzrq', '.cv', '.fit', '.icu', '.website', '.monster', '.quest', '.online'];
   const hasAdTld = adTlds.some((tld) => host.endsWith(tld));
   if (hasAdTld) {
     if (
@@ -404,13 +419,30 @@ export function isSuspiciousAdUrl(targetUrl: string, currentHost?: string): bool
       lower.includes('traffic=') ||
       lower.includes('click') ||
       lower.includes('pop') ||
+      lower.includes('wmn=') ||
       lower.includes('redirect')
     ) {
       return true;
     }
   }
 
-  // 4. Các đường dẫn nhảy trang popunder đặc trưng
+  // 4. Kiểm tra tham số quảng cáo popunder khi cross-domain khác origin
+  if (currentHost && host !== currentHost && !host.endsWith('.' + currentHost)) {
+    if (
+      lower.includes('zoneid=') ||
+      lower.includes('token=') ||
+      lower.includes('wmn=') ||
+      lower.includes('qiiteobhbk=') ||
+      lower.includes('cpm=') ||
+      lower.includes('ad_id=') ||
+      lower.includes('pubid=') ||
+      lower.includes('popunder')
+    ) {
+      return true;
+    }
+  }
+
+  // 5. Các đường dẫn nhảy trang popunder đặc trưng
   if (
     lower.includes('/click') ||
     lower.includes('/redirect') ||
