@@ -371,7 +371,12 @@ function BrowserMain() {
   const handleTabOpenWindow = useCallback(
     (event: any, fromTabId: string) => {
       const targetUrl = event?.nativeEvent?.targetUrl;
-      if (!targetUrl || targetUrl === 'about:blank' || targetUrl.startsWith('javascript:')) {
+      if (
+        !targetUrl ||
+        targetUrl === 'about:blank' ||
+        targetUrl.startsWith('javascript:') ||
+        targetUrl.toLowerCase().includes('/gsi/transform')
+      ) {
         return;
       }
       const srcTab = tabsRef.current?.find((t) => t.id === fromTabId);
@@ -1828,7 +1833,7 @@ function BrowserMain() {
           <View style={styles.splashContent}>
             <Animated.View style={{ opacity: initialSetup.splashGlowAnim, alignItems: 'center' }}>
               <Image
-                source={require('./assets/icon.png')}
+                source={require('./assets/logokite.png')}
                 style={styles.splashLogo}
                 resizeMode="contain"
               />

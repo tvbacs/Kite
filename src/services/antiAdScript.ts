@@ -459,6 +459,47 @@ export const INJECTED_BEFORE_CONTENT = `
     };
   } catch(e) {}
 
+  // 2b. Bảo toàn phương thức và dữ liệu POST cho các form (như Google Sign-In /gsi/transform)
+  // Vì onOpenWindow của WebView chỉ nhận URL GET và làm mất body POST, gây lỗi 405 màn hình trắng trên /gsi/transform
+  try {
+    var _fixPostFormTarget = function(form) {
+      try {
+        if (!form || !form.tagName || form.tagName !== 'FORM') return;
+        var method = (form.getAttribute('method') || form.method || 'get').toLowerCase();
+        var target = (form.getAttribute('target') || form.target || '').trim();
+        var action = (form.getAttribute('action') || form.action || '').toLowerCase();
+        if (method === 'post' && target && target !== '_self' && target !== '_top' && target !== '_parent') {
+          var isIframeTarget = false;
+          try {
+            if (document.querySelector('iframe[name="' + target.replace(/"/g, '\\"') + '"]')) {
+              isIframeTarget = true;
+            }
+          } catch(eQ) {}
+          if (!isIframeTarget || action.indexOf('accounts.google.com/gsi/transform') !== -1) {
+            form.target = '_self';
+            form.setAttribute('target', '_self');
+          }
+        }
+      } catch(eF) {}
+    };
+
+    var _origFormSubmit = HTMLFormElement.prototype.submit;
+    HTMLFormElement.prototype.submit = function() {
+      _fixPostFormTarget(this);
+      return _origFormSubmit.apply(this, arguments);
+    };
+    if (HTMLFormElement.prototype.requestSubmit) {
+      var _origRequestSubmit = HTMLFormElement.prototype.requestSubmit;
+      HTMLFormElement.prototype.requestSubmit = function() {
+        _fixPostFormTarget(this);
+        return _origRequestSubmit.apply(this, arguments);
+      };
+    }
+    document.addEventListener('submit', function(e) {
+      _fixPostFormTarget(e.target);
+    }, true);
+  } catch(e) {}
+
   // 2d. Chặn lớp phủ quảng cáo video cụ thể và bẫy clickjacking (như slooshsnarer, transparentLayer...)
   // TUYỆT ĐỐI KHÔNG can thiệp vào các thành phần UI hợp lệ: thanh menu 3 gạch, hộp thoại hỏi cookie, modal, dropdown
   try {

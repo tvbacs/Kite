@@ -5,12 +5,12 @@
     "scheme": "kite",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logokite.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/logokite.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0c0d13"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true,
@@ -30,12 +30,12 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logokite.png",
-        "backgroundColor": "#0c0d13"
+        "backgroundColor": "#000000"
       },
       "package": "com.workspace.kite"
     },
     "web": {
-      "favicon": "./assets/icon.png"
+      "favicon": "./assets/logokite.png"
     },
     "plugins": [
       [
