@@ -25,6 +25,7 @@ interface TabWebViewProps {
   onError: (tabId: string, event: any) => void;
   onHttpError: (tabId: string, event?: any) => void;
   onFileDownload?: (event: any) => void;
+  onOpenWindow?: (event: any, tabId: string) => void;
 }
 
 export const TabWebView = memo<TabWebViewProps>(
@@ -45,6 +46,7 @@ export const TabWebView = memo<TabWebViewProps>(
     onError,
     onHttpError,
     onFileDownload,
+    onOpenWindow,
   }) => {
     const localRef = useRef<any>(null);
 
@@ -141,6 +143,12 @@ export const TabWebView = memo<TabWebViewProps>(
       onHttpError(tab.id, event);
     };
 
+    const handleOpenWindow = (event: any) => {
+      if (onOpenWindow) {
+        onOpenWindow(event, tab.id);
+      }
+    };
+
     return (
       <View
         ref={(ref) => onRegisterContainerRef(tab.id, ref)}
@@ -191,6 +199,7 @@ export const TabWebView = memo<TabWebViewProps>(
             />
           )}
           onFileDownload={onFileDownload}
+          onOpenWindow={handleOpenWindow}
           allowsBackForwardNavigationGestures={true}
           javaScriptEnabled
           domStorageEnabled
@@ -207,8 +216,8 @@ export const TabWebView = memo<TabWebViewProps>(
           allowsFullscreenVideo
           fraudulentWebsiteWarningEnabled={false}
           mediaPlaybackRequiresUserAction={!isTabActive}
-          javaScriptCanOpenWindowsAutomatically={false}
-          setSupportMultipleWindows={false}
+          javaScriptCanOpenWindowsAutomatically={true}
+          setSupportMultipleWindows={true}
           sharedCookiesEnabled={true}
           thirdPartyCookiesEnabled={true}
           userAgent={userAgent}

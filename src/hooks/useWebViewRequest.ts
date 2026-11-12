@@ -161,15 +161,19 @@ export function useWebViewRequest({
 
     // 0. Cho phép toàn bộ các trang OAuth, SSO, Authentication và cổng thanh toán chính thức (Google, YouTube, Apple, Facebook, Microsoft, Zalo, MoMo, VNPay...)
     if (
+      isOAuthCallback(request.url) ||
       isLegitimateAuthUrl(request.url) ||
       reqUrl.includes('accounts.google.') ||
       reqUrl.includes('accounts.youtube.com') ||
       reqUrl.includes('myaccount.google.com') ||
       reqUrl.includes('oauth2.googleapis.com') ||
       reqUrl.includes('supabase.co/auth/v1/callback') ||
-      reqUrl.includes('supabase.co/auth/v1/authorize')
+      reqUrl.includes('supabase.co/auth/v1/authorize') ||
+      reqUrl.includes('firebaseapp.com/__/auth') ||
+      reqUrl.includes('?code=') ||
+      reqUrl.includes('&code=')
     ) {
-      // 1. Nếu là Callback xác thực trả về App
+      // 1. Nếu là Callback xác thực trả về riêng cho App Kite (kite://)
       if (isOAuthCallback(request.url)) {
       if (processedOAuthUrlsRef.current.has(request.url)) {
         return false;
@@ -182,7 +186,7 @@ export function useWebViewRequest({
         clearTabSnapshot(activeTabId);
         setTabs((prev) => {
           const updated = prev.map((t) =>
-            t.id === activeTabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+            t.id === activeTabId ? { ...t, url: '', title: 'Trang mới', isOffline: false, offlineUrl: undefined, snapshotUri: undefined } : t
           );
           persistTabsState(updated);
           return updated;
@@ -375,7 +379,7 @@ export function useWebViewRequest({
         clearTabSnapshot(tabId);
         setTabs((prev) => {
           const updated = prev.map((t) =>
-            t.id === tabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+            t.id === tabId ? { ...t, url: '', title: 'Trang mới', isOffline: false, offlineUrl: undefined, snapshotUri: undefined } : t
           );
           return updated;
         });
@@ -408,7 +412,7 @@ export function useWebViewRequest({
         clearTabSnapshot(tabId);
         setTabs((prev) => {
           const updated = prev.map((t) =>
-            t.id === tabId ? { ...t, url: '', title: 'Trang mới', snapshotUri: undefined } : t
+            t.id === tabId ? { ...t, url: '', title: 'Trang mới', isOffline: false, offlineUrl: undefined, snapshotUri: undefined } : t
           );
           return updated;
         });

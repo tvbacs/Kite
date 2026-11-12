@@ -240,20 +240,27 @@ export const INJECTED_BEFORE_CONTENT = `
     var l = urlStr.toLowerCase();
     if (l.indexOf('accounts.google.') !== -1 || l.indexOf('myaccount.google.') !== -1 ||
         l.indexOf('oauth2.googleapis.com') !== -1 || l.indexOf('identity.google.com') !== -1 ||
+        l.indexOf('apis.google.com') !== -1 || l.indexOf('ssl.gstatic.com/accounts') !== -1 ||
         l.indexOf('appleid.apple.com') !== -1 || l.indexOf('facebook.com/dialog') !== -1 ||
         l.indexOf('facebook.com/login') !== -1 || l.indexOf('facebook.com/oauth') !== -1 ||
         l.indexOf('login.microsoftonline.com') !== -1 || l.indexOf('login.live.com') !== -1 ||
         l.indexOf('github.com/login') !== -1 || l.indexOf('twitter.com/oauth') !== -1 ||
-        l.indexOf('supabase.co/auth') !== -1 || l.indexOf('.auth0.com') !== -1 ||
+        l.indexOf('supabase.co/auth') !== -1 || l.indexOf('firebaseapp.com/__/auth') !== -1 ||
+        l.indexOf('.web.app/__/auth') !== -1 || l.indexOf('.auth0.com') !== -1 ||
+        l.indexOf('.clerk.accounts') !== -1 || l.indexOf('.kinde.com') !== -1 ||
         l.indexOf('oauth.zaloapp.com') !== -1 || l.indexOf('id.zalo.me') !== -1 ||
         l.indexOf('vnpay.vn') !== -1 || l.indexOf('momo.vn') !== -1 ||
         l.indexOf('/oauth2/') !== -1 || l.indexOf('/oauth/') !== -1 ||
-        l.indexOf('/auth/callback') !== -1 || l.indexOf('/login') !== -1 ||
-        l.indexOf('/signin') !== -1) {
+        l.indexOf('/auth/callback') !== -1 || l.indexOf('/api/auth/') !== -1 ||
+        l.indexOf('/login') !== -1 || l.indexOf('/signin') !== -1 ||
+        l.indexOf('access_token=') !== -1 || l.indexOf('id_token=') !== -1 ||
+        l.indexOf('refresh_token=') !== -1 || l.indexOf('client_id=') !== -1 ||
+        l.indexOf('redirect_uri=') !== -1) {
       return true;
     }
     return false;
   }
+  window.__kite_is_legit_auth = isLegitimateAuth;
 
   function isKnownAdOrGambling(urlStr) {
     if (!urlStr || typeof urlStr !== 'string') return false;
@@ -293,7 +300,6 @@ export const INJECTED_BEFORE_CONTENT = `
       var lower = urlStr.toLowerCase();
       if (
         lower.indexOf('zoneid=') !== -1 ||
-        lower.indexOf('token=') !== -1 ||
         lower.indexOf('wmn=') !== -1 ||
         lower.indexOf('qiiteobhbk=') !== -1 ||
         lower.indexOf('cpm=') !== -1 ||
@@ -394,162 +400,62 @@ export const INJECTED_BEFORE_CONTENT = `
     };
   } catch(e) {}
 
-  // 1d. Theo dõi tương tác chủ động của người dùng (User Gesture Tracking)
-  // Trình duyệt chỉ cho phép mở cửa sổ mới nếu có tương tác chủ động (click/touch) từ người dùng trong vòng 2.5 giây
-  var _lastUserGestureTime = 0;
-  function _recordUserGesture(e) {
-    if (e && (e.isTrusted || e.isTrusted === undefined)) {
-      _lastUserGestureTime = Date.now();
-    }
-  }
-  window.addEventListener('click', _recordUserGesture, true);
-  window.addEventListener('touchend', _recordUserGesture, true);
-  window.addEventListener('pointerup', _recordUserGesture, true);
-
-  function isUserGestureActive() {
-    return (Date.now() - _lastUserGestureTime) < 2500;
-  }
-
-  // 2. Khóa hoàn toàn window.open với đầy đủ thuộc tính giả lập (Pop-up Blocker chuẩn trình duyệt)
-  // Tuyệt đối KHÔNG BAO GIỜ điều hướng tab hiện tại (window.location.href) khi một script gọi window.open()!
-  var fakeWin = {
-    closed: false,
-    focus: function(){},
-    blur: function(){},
-    close: function(){ this.closed = true; },
-    postMessage: function(){},
-    addEventListener: function(){},
-    removeEventListener: function(){},
-    document: {
-      write: function(){},
-      writeln: function(){},
-      close: function(){},
-      open: function(){ return fakeWin.document; },
-      body: {},
-      head: {}
-    },
-    location: {
-      get href() { return ''; },
-      set href(newUrl) {
-        if (!newUrl || typeof newUrl !== 'string') return;
-        if (isLegitimateAuth(newUrl)) {
-          try { window.location.href = newUrl; } catch(e) {}
-          return;
+  // 2. Không chặn mở trang mới (window.open / target="_blank") để đảm bảo Đăng nhập Google & OAuth trên mọi web hoạt động 100%
+  // Khi WebView mở cửa sổ mới, onOpenWindow của React Native sẽ tự động mở sang Tab mới mà không làm mất trang hiện tại
+  try {
+    var _origWindowOpen = window.open;
+    window.open = function(url, target, features) {
+      var res = null;
+      try {
+        if (_origWindowOpen) {
+          res = _origWindowOpen.apply(window, arguments);
         }
-        // Nếu là quảng cáo hoặc không có tương tác người dùng -> Chặn đứng
-        if (isKnownAdOrGambling(newUrl) || !isUserGestureActive()) {
-          window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
-          return;
-        }
-        // Nếu có tương tác người dùng hợp lệ -> MỞ TAB MỚI trong Kite (chuẩn trình duyệt)!
+      } catch(e) {}
+
+      if (res) return res;
+
+      // Trả về proxy window an toàn nếu WKWebView trả về null, tránh làm lỗi script đăng nhập (Firebase/GSI/OAuth)
+      // và hỗ trợ kịch bản gọi window.open('') rồi mới gán win.location.href = url
+      var opened = false;
+      var openInNewTab = function(targetUrl) {
+        if (!targetUrl || typeof targetUrl !== 'string' || targetUrl === 'about:blank') return;
         try {
-          var targetFull = new URL(newUrl, window.location.href).href;
+          var resolved = new URL(targetUrl, window.location.href).href;
           if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            opened = true;
             window.ReactNativeWebView.postMessage(JSON.stringify({
               type: 'OPEN_NEW_TAB',
-              url: targetFull
+              url: resolved
             }));
           }
         } catch(e) {}
-      },
-      replace: function(newUrl) { this.href = newUrl; },
-      assign: function(newUrl) { this.href = newUrl; },
-      reload: function(){}
-    }
-  };
+      };
 
-  var safeWindowOpen = function(url) {
-    if (!url || typeof url !== 'string' || url === '' || url === 'about:blank') {
-      return fakeWin;
-    }
-    // 1. ƯU TIÊN TUYỆT ĐỐI CHO AUTH / ĐĂNG NHẬP / THANH TOÁN (Google, Apple, Facebook, Microsoft, Zalo...)
-    if (isLegitimateAuth(url)) {
-      try {
-        window.location.href = url;
-      } catch(e) {}
-      return fakeWin;
-    }
-    // 2. Chặn nếu URL dẫn tới mạng quảng cáo hoặc nhà cái cá cược
-    if (isKnownAdOrGambling(url)) {
-      window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
-      return fakeWin;
-    }
-    // 3. Cơ chế Pop-up Blocker: Chỉ cho phép mở nếu có User Gesture (tương tác chủ động của người dùng)
-    if (!isUserGestureActive()) {
-      window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
-      return fakeWin;
-    }
-    // 4. Khi có User Gesture hợp lệ: MỞ TAB MỚI trong Kite (giống Chrome)!
-    // TUYỆT ĐỐI KHÔNG cướp URL của tab hiện tại!
-    try {
-      var resolvedUrl = url;
-      try {
-        resolvedUrl = new URL(url, window.location.href).href;
-      } catch(eResolve) {}
-
-      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'OPEN_NEW_TAB',
-          url: resolvedUrl
-        }));
-      }
-    } catch(e) {}
-    return fakeWin;
-  };
-
-  try {
-    Object.defineProperty(window, 'open', {
-      get: function() { return safeWindowOpen; },
-      set: function() {},
-      configurable: false
-    });
-  } catch(e) {
-    window.open = safeWindowOpen;
-  }
-
-  // 2b. Chặn thủ thuật tạo iframe ngầm để gọi iframe.contentWindow.open
-  try {
-    var _origAppendChild = Node.prototype.appendChild;
-    Node.prototype.appendChild = function(el) {
-      var res = _origAppendChild.apply(this, arguments);
-      try {
-        if (el && el.tagName === 'IFRAME' && el.contentWindow) {
-          el.contentWindow.open = safeWindowOpen;
+      var bridgeWin = {
+        closed: false,
+        focus: function(){},
+        blur: function(){},
+        close: function(){ this.closed = true; },
+        postMessage: function(){},
+        addEventListener: function(){},
+        removeEventListener: function(){},
+        document: {
+          write: function(){},
+          writeln: function(){},
+          close: function(){},
+          open: function(){ return bridgeWin.document; },
+          body: {},
+          head: {}
+        },
+        location: {
+          get href() { return ''; },
+          set href(newUrl) { if (!opened) openInNewTab(newUrl); },
+          replace: function(newUrl) { this.href = newUrl; },
+          assign: function(newUrl) { this.href = newUrl; },
+          reload: function(){}
         }
-      } catch(e2) {}
-      return res;
-    };
-  } catch(e) {}
-
-  // 2c. Chặn thủ thuật tạo thẻ <a target="_blank"> ngầm và gọi a.click() từ JS (chỉ chặn nếu trỏ đến mạng quảng cáo/cá cược)
-  try {
-    var _origAnchorClick = HTMLAnchorElement.prototype.click;
-    HTMLAnchorElement.prototype.click = function() {
-      var href = this.href || this.getAttribute('href') || '';
-      if (href) {
-        if (isKnownAdOrGambling(href)) {
-          window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
-          return;
-        }
-        var target = (this.target || this.getAttribute('target') || '').toLowerCase();
-        if (target === '_blank' || target === '_new') {
-          if (!isUserGestureActive()) {
-            window.__kite_blocked_popups = (window.__kite_blocked_popups || 0) + 1;
-            return;
-          }
-          try {
-            var fullUrl = new URL(href, window.location.href).href;
-            if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'OPEN_NEW_TAB',
-                url: fullUrl
-              }));
-              return;
-            }
-          } catch(eA) {}
-        }
-      }
-      return _origAnchorClick.apply(this, arguments);
+      };
+      return bridgeWin;
     };
   } catch(e) {}
 
@@ -833,6 +739,7 @@ export const INJECTED_AFTER_CONTENT = `
 
   function isKnownAdOrGambling(urlStr) {
     if (!urlStr || typeof urlStr !== 'string') return false;
+    if (typeof window.__kite_is_legit_auth === 'function' && window.__kite_is_legit_auth(urlStr)) return false;
     try {
       var u = new URL(urlStr, window.location.href);
       var h = u.hostname.toLowerCase();
@@ -868,7 +775,6 @@ export const INJECTED_AFTER_CONTENT = `
       var lower = urlStr.toLowerCase();
       if (
         lower.indexOf('zoneid=') !== -1 ||
-        lower.indexOf('token=') !== -1 ||
         lower.indexOf('wmn=') !== -1 ||
         lower.indexOf('qiiteobhbk=') !== -1 ||
         lower.indexOf('cpm=') !== -1 ||
@@ -882,12 +788,13 @@ export const INJECTED_AFTER_CONTENT = `
     return false;
   }
 
-  // Chặn mã quảng cáo tự động tạo thẻ <a> ẩn rồi gọi a.click() cướp màn hình
+  // Chặn mã quảng cáo tự động tạo thẻ <a> ẩn tự chuyển hướng cùng tab (cho phép mở tab mới target="_blank" bình thường)
   try {
     var _origAnchorClick = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function() {
       var href = this.href || this.getAttribute('href') || '';
-      if (href) {
+      var target = (this.target || this.getAttribute('target') || '').toLowerCase();
+      if (href && target !== '_blank' && target !== '_new') {
         if (isKnownAdOrGambling(href)) {
           window.__kite_blocked_redirects = (window.__kite_blocked_redirects || 0) + 1;
           report('BLOCKED_REDIRECT', href);
@@ -934,7 +841,8 @@ export const INJECTED_AFTER_CONTENT = `
     var anchor = target.closest ? target.closest('a') : null;
 
     if (anchor && anchor.href) {
-      if (isKnownAdOrGambling(anchor.href)) {
+      var aTarget = (anchor.target || anchor.getAttribute('target') || '').toLowerCase();
+      if (aTarget !== '_blank' && aTarget !== '_new' && isKnownAdOrGambling(anchor.href)) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();

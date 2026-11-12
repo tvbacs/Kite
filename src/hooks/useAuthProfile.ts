@@ -33,16 +33,7 @@ export const isOAuthCallback = (url: string | null | undefined): boolean => {
     return true;
   }
 
-  // 2. Callback trả về localhost dev:
-  if (
-    lower.startsWith('http://localhost:3000') ||
-    lower.startsWith('http://127.0.0.1:3000') ||
-    lower.startsWith('https://localhost:3000')
-  ) {
-    return true;
-  }
-
-  // 3. Callback trả về Supabase sau khi Google xác thực xong (phải là endpoint callback hoặc chứa token/code):
+  // 2. Callback trả về Supabase của riêng Kite sau khi Google xác thực xong (phải là endpoint callback hoặc chứa token/code):
   if (
     lower.includes('ivwnjrugslrvsxssufco.supabase.co/auth/v1/callback') ||
     (lower.includes('ivwnjrugslrvsxssufco.supabase.co') &&

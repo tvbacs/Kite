@@ -6,7 +6,6 @@ import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
 import { BrowserTab, ShieldStats, UserProfile, DetectedMedia, isPersistable } from '../types/browser';
 import { getDomain, getHostname } from '../utils/tld';
-import { isSuspiciousAdUrl } from '../constants/blocklist';
 import {
   translateItemsBatch,
 } from '../services/translateService';
@@ -194,15 +193,8 @@ export function useWebViewMessage({
         scheduleShieldFlush();
       } else if (data.type === 'OPEN_NEW_TAB') {
         const targetUrl = data.url;
-        if (targetUrl && typeof targetUrl === 'string') {
-          const curHost = getHostname(currentTab?.url || '') || '';
-          if (isSuspiciousAdUrl(targetUrl, curHost)) {
-            pendingShieldStatsRef.current.popups += 1;
-            scheduleShieldFlush();
-            showToast('Đã chặn cửa sổ quảng cáo');
-          } else if (onNewTab) {
-            onNewTab(targetUrl);
-          }
+        if (targetUrl && typeof targetUrl === 'string' && targetUrl !== 'about:blank' && onNewTab) {
+          onNewTab(targetUrl);
         }
       } else if (data.type === 'BLOCKED_OVERLAYS') {
         pendingShieldStatsRef.current.overlays += (data.count || 1);

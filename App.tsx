@@ -354,6 +354,31 @@ function BrowserMain() {
   handleGoBackRef.current = nav.handleGoBack;
 
   const handleSwitchAccountRef = useRef<((newProfile: UserProfile, previousProfile: UserProfile) => Promise<void>) | null>(null);
+  const lastNewTabRef = useRef<{ url: string; time: number }>({ url: '', time: 0 });
+  const openNewTabSafely = useCallback(
+    (targetUrl?: string, incognitoMode?: boolean) => {
+      if (!targetUrl || targetUrl === 'about:blank' || targetUrl.startsWith('javascript:')) return;
+      const now = Date.now();
+      if (lastNewTabRef.current.url === targetUrl && now - lastNewTabRef.current.time < 600) {
+        return;
+      }
+      lastNewTabRef.current = { url: targetUrl, time: now };
+      handleNewTab(incognitoMode ?? isIncognito, targetUrl);
+    },
+    [handleNewTab, isIncognito]
+  );
+
+  const handleTabOpenWindow = useCallback(
+    (event: any, fromTabId: string) => {
+      const targetUrl = event?.nativeEvent?.targetUrl;
+      if (!targetUrl || targetUrl === 'about:blank' || targetUrl.startsWith('javascript:')) {
+        return;
+      }
+      const srcTab = tabsRef.current?.find((t) => t.id === fromTabId);
+      openNewTabSafely(targetUrl, Boolean(srcTab?.isIncognito));
+    },
+    [openNewTabSafely]
+  );
 
   // 8. Hook xử lý handleMessage từ webview
   const webViewMessage = useWebViewMessage({
@@ -378,7 +403,7 @@ function BrowserMain() {
     handleGoBackRef,
     showToast,
     onSwitchAccount: (newP, oldP) => handleSwitchAccountRef.current?.(newP, oldP),
-    onNewTab: (url) => handleNewTab(isIncognito, url),
+    onNewTab: (url) => openNewTabSafely(url, isIncognito),
   });
 
   modalsState.passwordSavePrompt = webViewMessage.passwordSavePrompt;
@@ -873,17 +898,6 @@ function BrowserMain() {
     if (failUrl.startsWith('kite://') || failUrl.startsWith('intent://')) {
       return;
     }
-    if (tab?.url?.includes('accounts.google.com') && failUrl.startsWith('http://localhost:3000')) {
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === tabId
-            ? { ...t, url: '', initialUrl: '', title: 'Trang mới', snapshotUri: undefined, isLoading: false }
-            : t
-        )
-      );
-      setInputUrl('');
-      return;
-    }
 
     const code = nativeEvent.code;
     const description = (nativeEvent.description || '').toLowerCase();
@@ -907,12 +921,17 @@ function BrowserMain() {
     }
 
     // Không chuyển sang màn hình Offline đối với các URL trung gian xác thực (Google OAuth 2FA, CheckCookie, Token Handshake)
+    const lowerFailUrl = failUrl.toLowerCase();
     const isAuthHandshake =
       isLegitimateAuthUrl(failUrl) ||
-      failUrl.includes('/CheckCookie') ||
-      failUrl.includes('accounts.google.com') ||
-      failUrl.includes('myaccount.google.com') ||
-      failUrl.includes('oauth');
+      lowerFailUrl.includes('/checkcookie') ||
+      lowerFailUrl.includes('accounts.google.') ||
+      lowerFailUrl.includes('myaccount.google.') ||
+      lowerFailUrl.includes('oauth') ||
+      lowerFailUrl.includes('supabase.co/auth') ||
+      lowerFailUrl.includes('firebaseapp.com/__/auth') ||
+      lowerFailUrl.includes('access_token=') ||
+      lowerFailUrl.includes('id_token=');
     if (isAuthHandshake) {
       setTabs((prev) =>
         prev.map((t) => (t.id === tabId ? { ...t, isLoading: false } : t))
@@ -1226,6 +1245,7 @@ function BrowserMain() {
                   onError={handleTabError}
                   onHttpError={handleTabHttpError}
                   onFileDownload={downloads.handleFileDownload}
+                  onOpenWindow={handleTabOpenWindow}
                 />
               );
             })}

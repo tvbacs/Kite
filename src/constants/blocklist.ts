@@ -319,12 +319,15 @@ export function isLegitimateAuthUrl(urlStr: string): boolean {
     return true;
   }
 
-  // 6. Supabase, Firebase, Auth0, Okta, AWS Cognito
+  // 6. Supabase, Firebase, Auth0, Okta, AWS Cognito, Clerk, Kinde
   if (
     lower.includes('supabase.co/auth') ||
     lower.includes('firebaseapp.com/__/auth') ||
+    lower.includes('.web.app/__/auth') ||
     lower.includes('.auth0.com') ||
     lower.includes('.okta.com') ||
+    lower.includes('.clerk.accounts') ||
+    lower.includes('.kinde.com') ||
     lower.includes('amazoncognito.com')
   ) {
     return true;
@@ -341,15 +344,21 @@ export function isLegitimateAuthUrl(urlStr: string): boolean {
     return true;
   }
 
-  // 8. Các endpoint đăng nhập / SSO chuẩn quốc tế
+  // 8. Các endpoint đăng nhập / SSO / OAuth callback chuẩn quốc tế
   if (
     lower.includes('/oauth2/v') ||
     lower.includes('/oauth/authorize') ||
     lower.includes('/oauth/callback') ||
     lower.includes('/auth/callback') ||
-    lower.includes('/api/auth/callback') ||
+    lower.includes('/api/auth/') ||
     lower.includes('/saml/sso') ||
-    lower.includes('/sso/saml')
+    lower.includes('/sso/saml') ||
+    lower.includes('access_token=') ||
+    lower.includes('id_token=') ||
+    lower.includes('refresh_token=') ||
+    lower.includes('provider_token=') ||
+    lower.includes('client_id=') ||
+    lower.includes('redirect_uri=')
   ) {
     return true;
   }
@@ -412,7 +421,6 @@ export function isSuspiciousAdUrl(targetUrl: string, currentHost?: string): bool
   const hasAdTld = adTlds.some((tld) => host.endsWith(tld));
   if (hasAdTld) {
     if (
-      lower.includes('token=') ||
       lower.includes('zoneid=') ||
       lower.includes('ad_id=') ||
       lower.includes('cpm=') ||
@@ -430,7 +438,6 @@ export function isSuspiciousAdUrl(targetUrl: string, currentHost?: string): bool
   if (currentHost && host !== currentHost && !host.endsWith('.' + currentHost)) {
     if (
       lower.includes('zoneid=') ||
-      lower.includes('token=') ||
       lower.includes('wmn=') ||
       lower.includes('qiiteobhbk=') ||
       lower.includes('cpm=') ||
