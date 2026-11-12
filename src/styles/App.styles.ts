@@ -7,7 +7,7 @@ export const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 999999,
@@ -27,7 +27,7 @@ export const styles = StyleSheet.create({
     shadowRadius: 12,
   },
   splashTitle: {
-    color: '#09090b',
+    color: '#ffffff',
     fontSize: 28,
     fontWeight: '700',
     letterSpacing: 0.8,

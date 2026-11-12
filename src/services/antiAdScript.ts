@@ -19,6 +19,46 @@ const serializedCommerceDomains = JSON.stringify(COMMERCE_REDIRECT_DOMAINS);
  */
 export const INJECTED_BEFORE_CONTENT = `
 (function() {
+  // 0. Nếu đang chạy trong iframe (như nút Đăng nhập Google accounts.google.com/gsi/button):
+  // Bảo toàn dữ liệu POST cho form gửi tới /gsi/transform bằng cách điều hướng trên _top thay vì bị onOpenWindow cắt mất POST body!
+  if (window !== window.top) {
+    try {
+      var _iframeHost = (window.location.hostname || '').toLowerCase();
+      if (_iframeHost.indexOf('accounts.google.') !== -1 || _iframeHost.indexOf('google.') !== -1) {
+        var _fixIframeForm = function(form) {
+          try {
+            if (!form || !form.tagName || form.tagName !== 'FORM') return;
+            var method = (form.getAttribute('method') || form.method || 'get').toLowerCase();
+            var target = (form.getAttribute('target') || form.target || '').trim();
+            var action = (form.getAttribute('action') || form.action || '').toLowerCase();
+            if (method === 'post' && (action.indexOf('/gsi/transform') !== -1 || action.indexOf('accounts.google.') !== -1)) {
+              if (target && target !== '_self' && target !== '_top' && target !== '_parent') {
+                form.target = '_top';
+                form.setAttribute('target', '_top');
+              }
+            }
+          } catch(eF) {}
+        };
+        var _origSub = HTMLFormElement.prototype.submit;
+        HTMLFormElement.prototype.submit = function() {
+          _fixIframeForm(this);
+          return _origSub.apply(this, arguments);
+        };
+        if (HTMLFormElement.prototype.requestSubmit) {
+          var _origReqSub = HTMLFormElement.prototype.requestSubmit;
+          HTMLFormElement.prototype.requestSubmit = function() {
+            _fixIframeForm(this);
+            return _origReqSub.apply(this, arguments);
+          };
+        }
+        document.addEventListener('submit', function(e) {
+          _fixIframeForm(e.target);
+        }, true);
+      }
+    } catch(eIframe) {}
+    return;
+  }
+
   window.__kite_blocked_popups = 0;
   window.__kite_blocked_overlays = 0;
   window.__kite_blocked_redirects = 0;

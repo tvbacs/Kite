@@ -1829,7 +1829,7 @@ function BrowserMain() {
           ]}
           pointerEvents={initialSetup.isAppReady ? 'none' : 'auto'}
         >
-          <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+          <StatusBar barStyle="light-content" backgroundColor="#000000" />
           <View style={styles.splashContent}>
             <Animated.View style={{ opacity: initialSetup.splashGlowAnim, alignItems: 'center' }}>
               <Image
