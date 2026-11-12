@@ -5,7 +5,7 @@
     "scheme": "kite",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logokite.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/logokite.png",
@@ -35,7 +35,7 @@
       "package": "com.workspace.kite"
     },
     "web": {
-      "favicon": "./assets/logokite.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       [

@@ -1828,7 +1828,7 @@ function BrowserMain() {
           <View style={styles.splashContent}>
             <Animated.View style={{ opacity: initialSetup.splashGlowAnim, alignItems: 'center' }}>
               <Image
-                source={require('./assets/logokite.png')}
+                source={require('./assets/icon.png')}
                 style={styles.splashLogo}
                 resizeMode="contain"
               />
