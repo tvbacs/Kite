@@ -409,7 +409,6 @@ export function useBrowserTabs({
     setIsEditing(false);
     setIsLoading(Boolean(initialUrl));
     resetShieldStatsForTab?.();
-    showToast(isIncognitoMode ? 'Đã tạo thẻ ẩn danh mới' : 'Đã tạo thẻ mới');
     scheduleProcessPooling(newId);
   };
 

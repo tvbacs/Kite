@@ -167,7 +167,6 @@ export function usePullActions({
       }
     } else if (action === 'new_tab') {
       handleNewTab(isIncognito);
-      showToast('Đã mở thẻ mới');
     } else if (action === 'close_tab') {
       handleCloseTab(curTabId);
       showToast('Đã đóng thẻ');

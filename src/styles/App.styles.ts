@@ -2,11 +2,7 @@ import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
   splashOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
@@ -19,12 +15,8 @@ export const styles = StyleSheet.create({
   splashLogo: {
     width: 104,
     height: 104,
-    borderRadius: 24,
+    borderRadius: 22,
     backgroundColor: '#000000',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
   },
   splashTitle: {
     color: '#ffffff',

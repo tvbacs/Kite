@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Appearance, Animated, Platform, Linking } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Directory, Paths } from 'expo-file-system';
 import { BrowserTab, UserProfile, ShieldStats } from '../types/browser';
@@ -89,28 +91,21 @@ export function useInitialSetup({
   const [isAppReady, setIsAppReady] = useState<boolean>(false);
   const [showSplashOverlay, setShowSplashOverlay] = useState<boolean>(true);
   const splashFadeAnim = useRef(new Animated.Value(1)).current;
-  const splashScaleAnim = useRef(new Animated.Value(0.92)).current;
-  const splashGlowAnim = useRef(new Animated.Value(0.75)).current;
+  const splashScaleAnim = useRef(new Animated.Value(1)).current;
+  const splashGlowAnim = useRef(new Animated.Value(1)).current;
 
-  // Splash Screen Animations
+  // Splash Screen Animations (Logo thở nhẹ nhàng, tuyệt đối không nhảy giật màn hình)
   useEffect(() => {
-    Animated.spring(splashScaleAnim, {
-      toValue: 1,
-      friction: 6,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
-
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(splashGlowAnim, {
-          toValue: 1,
-          duration: 800,
+          toValue: 0.85,
+          duration: 900,
           useNativeDriver: true,
         }),
         Animated.timing(splashGlowAnim, {
-          toValue: 0.75,
-          duration: 800,
+          toValue: 1,
+          duration: 900,
           useNativeDriver: true,
         }),
       ])
@@ -118,7 +113,7 @@ export function useInitialSetup({
     pulse.start();
 
     return () => pulse.stop();
-  }, []);
+  }, [splashGlowAnim]);
 
   useEffect(() => {
     if (isAppReady) {
@@ -126,19 +121,19 @@ export function useInitialSetup({
       Animated.parallel([
         Animated.timing(splashFadeAnim, {
           toValue: 0,
-          duration: 400,
+          duration: 350,
           useNativeDriver: true,
         }),
         Animated.timing(splashScaleAnim, {
-          toValue: 1.06,
-          duration: 400,
+          toValue: 1.05,
+          duration: 350,
           useNativeDriver: true,
         }),
       ]).start(() => {
         setShowSplashOverlay(false);
       });
     }
-  }, [isAppReady]);
+  }, [isAppReady, splashFadeAnim, splashScaleAnim]);
 
   // Khởi động toàn bộ cấu hình app
   useEffect(() => {

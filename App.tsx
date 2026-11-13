@@ -14,6 +14,9 @@ import {
 } from 'react-native';
 
 LogBox.ignoreLogs(['Cannot record touch move without a touch start.']);
+import * as SplashScreen from 'expo-splash-screen';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Paths } from 'expo-file-system';
@@ -1070,10 +1073,21 @@ function BrowserMain() {
   }, [isCurrentIncognito, lensModalVisible, qrModalVisible, tabSheetVisible, activeUrl]);
 
   return (
-    <View style={[styles.mainContainer, { backgroundColor: appBg }]}>
+    <View
+      style={[
+        styles.mainContainer,
+        { backgroundColor: initialSetup.showSplashOverlay ? '#000000' : appBg },
+      ]}
+    >
       <StatusBar
-        barStyle={isCurrentIncognito ? 'light-content' : 'dark-content'}
-        backgroundColor={appBg}
+        barStyle={
+          initialSetup.showSplashOverlay
+            ? 'light-content'
+            : isCurrentIncognito
+            ? 'light-content'
+            : 'dark-content'
+        }
+        backgroundColor={initialSetup.showSplashOverlay ? '#000000' : appBg}
       />
 
       {/* 1. THANH TOP BAR TIỆN ÍCH */}
@@ -1824,13 +1838,19 @@ function BrowserMain() {
             styles.splashOverlay,
             {
               opacity: initialSetup.splashFadeAnim,
-              transform: [{ scale: initialSetup.splashScaleAnim }],
             },
           ]}
           pointerEvents={initialSetup.isAppReady ? 'none' : 'auto'}
         >
           <StatusBar barStyle="light-content" backgroundColor="#000000" />
-          <View style={styles.splashContent}>
+          <Animated.View
+            style={[
+              styles.splashContent,
+              {
+                transform: [{ scale: initialSetup.splashScaleAnim }],
+              },
+            ]}
+          >
             <Animated.View style={{ opacity: initialSetup.splashGlowAnim, alignItems: 'center' }}>
               <Image
                 source={require('./assets/logokite.png')}
@@ -1839,7 +1859,7 @@ function BrowserMain() {
               />
             </Animated.View>
             <Text style={styles.splashTitle}>Kite</Text>
-          </View>
+          </Animated.View>
         </Animated.View>
       )}
     </View>
@@ -1848,7 +1868,7 @@ function BrowserMain() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#000000' }}>
       <BrowserMain />
     </SafeAreaProvider>
   );
